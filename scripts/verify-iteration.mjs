@@ -92,7 +92,7 @@ export async function verifyIteration({page,host,origin,server,processes,waitFor
  await writeSource('App.tsx',originalApp);
  await expect(page.locator('[data-seene-preview]')).toHaveCount(0);
  await expect(page.getByRole('heading',{name:'Existing revenue dashboard'})).toBeVisible();
- for(const directory of ['demo','examples','dist/tests']) {
+ for(const directory of ['demo','dist/tests']) {
    let present=true;try{await access(path.join(root,directory))}catch{present=false}
    assert.equal(present,false,`Retired fixtures must not be shipped: ${directory}`);
  }

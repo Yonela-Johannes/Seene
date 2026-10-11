@@ -46,7 +46,8 @@ try{
  await run(process.execPath,[cli,'validate']);
  try{browser=await chromium.launch({channel:'chromium',headless:true})}catch{browser=await chromium.launch({channel:'chrome',headless:true})}
  const page=await browser.newPage({viewport:{width:1280,height:900}});
- const errors=[];page.on('pageerror',e=>errors.push(e.message));
+ page.on('console', msg => console.log('PAGE LOG:', msg.text()));
+ const errors=[];page.on('pageerror',e=>{ console.log('PAGE ERROR:', e); errors.push(e.message); });
  let url;let dev;
  if(kind==='react'){
   await put('check.tsx','import React from "react"; import {Scene,Surface} from "@thatg33k/seene"; import {ProjectPreview} from "@thatg33k/seene/preview"; export const check=<ProjectPreview projectId="test" enabled active><Scene><Surface id="test">Host</Surface></Scene></ProjectPreview>;');
@@ -54,7 +55,7 @@ try{
   await put('entry.jsx' ,'import React from "react"; import {createRoot} from "react-dom/client"; import {SeeneProjectPreview} from "./src/seene/ProjectPreview"; import Counter,{Provider} from "./src/Counter"; createRoot(document.getElementById("root")).render(<Provider><SeeneProjectPreview enabled active><Counter/></SeeneProjectPreview></Provider>);');
   await run(path.join(root,'node_modules/.bin/esbuild'),['entry.jsx','--bundle','--outfile=bundle.js','--define:process.env.NODE_ENV="development"']);
   const staticServer=createServer(async(req,res)=>{res.setHeader('content-type',req.url==='/bundle.js'?'text/javascript':'text/html');res.end(req.url==='/bundle.js'?await readFile(path.join(host,'bundle.js')):'<div id="root"></div><script src="/bundle.js"></script>')});
-  await new Promise(r=>staticServer.listen(0,'127.0.0.1',r));children.push({kill:()=>staticServer.close()});url='http://127.0.0.1:'+staticServer.address().port;
+  await new Promise(r=>staticServer.listen(0,'127.0.0.1',r));children.push({kill:()=>staticServer.close()});url='http://127.0.0.1:'+staticServer.address().port+'/?seene-preview=1';
  }else{
   dev=await server(kind==='app'?['dev']:['dev','--webpack']);url=dev.url;
   const created=await fetch(new URL('/api/seene/create-scene',url),{method:'POST',headers:{origin:url,'content-type':'application/json'},body:JSON.stringify({id:'created-from-studio',recipe:{...recipe,id:'created-from-studio',title:'Created from Studio'}})});

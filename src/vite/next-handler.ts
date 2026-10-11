@@ -15,25 +15,10 @@ function json(response: ServerResponse, status: number, body: unknown): void {
 
 async function readWebBody(request: Request): Promise<ReadResult> {
   if (Number(request.headers.get("content-length") ?? 0) > maxBodyBytes) return { kind: "too-large" };
-  if (!request.body) return { kind: "ok", text: "" };
-  const reader = request.body.getReader();
-  const chunks: Uint8Array[] = [];
-  let size = 0;
   try {
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      size += value.byteLength;
-      if (size > maxBodyBytes) {
-        await reader.cancel();
-        return { kind: "too-large" };
-      }
-      chunks.push(value);
-    }
-    const bytes = new Uint8Array(size);
-    let offset = 0;
-    for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
-    return { kind: "ok", text: new TextDecoder().decode(bytes) };
+    const text = await request.text();
+    if (Buffer.byteLength(text, "utf8") > maxBodyBytes) return { kind: "too-large" };
+    return { kind: "ok", text };
   } catch {
     return { kind: "unreadable" };
   }
@@ -89,17 +74,34 @@ function parseJson(text: string): { ok: true; value: unknown } | { ok: false } {
   catch { return { ok: false }; }
 }
 
+function isSameOrigin(origin: string, targetHost: string, targetUrlOrigin: string): boolean {
+  try {
+    const originHost = new URL(origin).host;
+    if (originHost === targetHost) return true;
+    if (origin === targetUrlOrigin) return true;
+    const normalize = (h: string) => h.replace(/^localhost(?=:|$)/, "127.0.0.1");
+    return normalize(originHost) === normalize(targetHost);
+  } catch {
+    return false;
+  }
+}
+
 export async function handleNextScenePost(request: Request, root = process.cwd()): Promise<Response> {
-  if (request.method !== "POST") return Response.json({ error: "Use POST to create a scene." }, { status: 405, headers: { Allow: "POST" } });
-  const origin = request.headers.get("origin");
-  if (origin && origin !== new URL(request.url).origin) return Response.json({ error: "Cross-origin scene creation is not allowed." }, { status: 403 });
-  const read = await readWebBody(request);
-  if (read.kind === "too-large") return Response.json({ error: "Scene request is too large." }, { status: 413 });
-  if (read.kind === "unreadable") return Response.json({ error: "Scene request could not be read." }, { status: 400 });
-  const parsed = parseJson(read.text);
-  if (!parsed.ok) return Response.json({ error: "Scene request must contain valid JSON." }, { status: 400 });
-  const result = await createScene(parsed.value, root);
-  return Response.json(result.body, { status: result.status });
+  try {
+    if (request.method !== "POST") return Response.json({ error: "Use POST to create a scene." }, { status: 405, headers: { Allow: "POST" } });
+    const origin = request.headers.get("origin");
+    const host = request.headers.get("host") ?? new URL(request.url).host;
+    if (origin && !isSameOrigin(origin, host, new URL(request.url).origin)) return Response.json({ error: "Cross-origin scene creation is not allowed." }, { status: 403 });
+    const read = await readWebBody(request);
+    if (read.kind === "too-large") return Response.json({ error: "Scene request is too large." }, { status: 413 });
+    if (read.kind === "unreadable") return Response.json({ error: "Scene request could not be read." }, { status: 400 });
+    const parsed = parseJson(read.text);
+    if (!parsed.ok) return Response.json({ error: "Scene request must contain valid JSON." }, { status: 400 });
+    const result = await createScene(parsed.value, root);
+    return Response.json(result.body, { status: result.status });
+  } catch (err: any) {
+    return Response.json({ error: err?.message || String(err) }, { status: 500 });
+  }
 }
 
 export async function POST(request: Request): Promise<Response> {
@@ -110,7 +112,7 @@ export function createPagesHandler(request: IncomingMessage, response: ServerRes
   if (request.method !== "POST") { json(response, 405, { error: "Use POST to create a scene." }); return; }
   const origin = request.headers.origin;
   const host = request.headers.host;
-  if (origin && host && new URL(origin).host !== host) { json(response, 403, { error: "Cross-origin scene creation is not allowed." }); return; }
+  if (origin && host && !isSameOrigin(origin, host, origin)) { json(response, 403, { error: "Cross-origin scene creation is not allowed." }); return; }
   void (async () => {
     const read = await readNodeBody(request);
     if (read.kind === "too-large") { json(response, 413, { error: "Scene request is too large." }); return; }

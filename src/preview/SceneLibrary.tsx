@@ -244,21 +244,25 @@ export function SceneLibrary({
     }
 
     const measure = () => {
+      const viewportHeight = typeof window !== "undefined" ? window.innerHeight : 1000;
+      const viewportWidth = typeof window !== "undefined" ? window.innerWidth : 1200;
       setSize({
-        width: element.clientWidth,
-        height: element.clientHeight,
+        width: Math.min(element.clientWidth || viewportWidth, viewportWidth),
+        height: Math.min(element.clientHeight || viewportHeight, viewportHeight),
       });
     };
 
     const observer = new ResizeObserver(measure);
 
     observer.observe(element);
+    window.addEventListener("resize", measure);
     measure();
 
     element.scrollTop = savedScrollRef.current;
 
     return () => {
       observer.disconnect();
+      window.removeEventListener("resize", measure);
     };
   }, [selectedScene?.id, SelectedComponent, documentRoute]);
 

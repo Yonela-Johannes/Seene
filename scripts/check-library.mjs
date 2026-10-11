@@ -7,7 +7,7 @@ let server,browser;
 function run(args,cwd=host){return new Promise((resolve,reject)=>{const p=spawn(args[0],args.slice(1),{cwd,stdio:['ignore','pipe','pipe']});let out='';p.stdout.on('data',v=>out+=v);p.stderr.on('data',v=>out+=v);p.on('error',reject);p.on('exit',code=>code===0?resolve(out):reject(Error(out)));})}
 async function port(){const s=createServer();await new Promise(r=>s.listen(0,'127.0.0.1',r));const n=s.address().port;await new Promise(r=>s.close(r));return n}
 try{
- await cp(path.join(root,'local-project'),host,{recursive:true,filter:source=>!source.includes('node_modules')&&!source.includes('/dist')});
+ await cp(path.join(root,'examples/basic-react'),host,{recursive:true,filter:source=>!source.includes('node_modules')&&!source.includes('/dist')&&!source.endsWith('SEENE.md')});
  await mkdir(path.join(scratch,'.local-package'));const packOut=await run(['npm','pack','--json',...(process.env.SEENE_VERIFY_PREBUILT==='1'?['--ignore-scripts']:[]),'--pack-destination',path.join(scratch,'.local-package')],root);
  const packJson=JSON.parse(packOut.slice(Math.min(...[packOut.indexOf('{'),packOut.indexOf('[')].filter(i=>i>=0))));
  const packed=Array.isArray(packJson)?packJson[0]:Object.values(packJson)[0];
@@ -111,4 +111,4 @@ try{
  await page.goto(origin+'/?seene-preview=1&seene-scene=deleted');await expect(page.getByRole('alert')).toContainText('cannot be opened');
  await page.goto(origin);await expect(page.getByRole('link',{name:'Open scene library ↗'})).toBeVisible();
  console.log('Installed catalog passed.');
-}finally{await browser?.close();server?.kill('SIGTERM');await rm(scratch,{recursive:true,force:true})}
+}finally{await browser?.close();if(server){server.kill('SIGTERM');await new Promise(r=>server.once('exit',r));}await rm(scratch,{recursive:true,force:true})}

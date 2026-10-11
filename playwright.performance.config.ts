@@ -9,7 +9,7 @@ export default defineConfig({
       name: "hardware-chromium",
       use: {
         browserName: "chromium",
-        channel: "chromium",
+        channel: process.env.PLAYWRIGHT_CHROMIUM_CHANNEL ?? "chrome",
         viewport: { width: 1440, height: 1100 },
       },
     },
