@@ -13,11 +13,14 @@ const definition: PreviewDefinitionInput = {
     {target: {kind: "camera"}, property: "x", keyframes: [{timeMs: 0, value: 0}, {timeMs: 4000, value: 100}]},
   ]},
 };
+import { installLayoutStubs } from "../helpers/layout";
+
 const bridge = () => (window as typeof window & {__SEENE_CAPTURE__: CaptureBridge}).__SEENE_CAPTURE__;
 const controls = () => screen.getByRole("contentinfo", {name: "Scene controls"});
 beforeEach(() => {
   vi.restoreAllMocks();
   cleanup();
+  installLayoutStubs();
 });
 afterEach(() => {
   cleanup();
@@ -51,7 +54,10 @@ it("keeps every preview action in the bottom region and preserves host context, 
   expect(within(c).getByRole("button", {name: "Play"})).toBeTruthy();
   expect(within(c).getByRole("button", {name: "Restart"})).toBeTruthy();
   expect(within(c).getByRole("slider", {name: "Scene time"})).toBeTruthy();
-  expect(within(c).getByRole("button", {name: "Export"})).toBeTruthy();
+  const exportDetails = c.querySelector("details.seene-export");
+  expect(exportDetails).toBeTruthy();
+  expect(exportDetails?.querySelector("summary")?.textContent).toContain("Export");
+  expect(within(c).queryByRole("button", {name: "Export"})).toBeNull();
   expect(bridge()).toBeDefined();
   rerender(
     <TestContext.Provider value="tenant-c">
@@ -63,6 +69,15 @@ it("keeps every preview action in the bottom region and preserves host context, 
   expect(screen.getByText("Tenant: tenant-c")).toBeTruthy();
   expect(screen.getByRole("button", {name: "Increment 1"})).toBeTruthy();
   expect(bridge()).toBeDefined();
+});
+
+it("shows quality selector in the export panel", async () => {
+  render(<ScenePreview definition={definition} title="Test app"><Surface id="host" style={{width:800,height:400}}><button>Host</button></Surface></ScenePreview>);
+  const summary = screen.getByText("Export", {exact: false}).closest("details")!;
+  fireEvent.click(summary.querySelector("summary")!);
+  await waitFor(() => expect(document.querySelector(".seene-export-panel")).toBeTruthy());
+  expect(document.querySelector<HTMLElement>("select[aria-label='Export quality (CRF)']")).toBeTruthy();
+  expect(document.querySelector<HTMLElement>(".seene-export-panel code")?.textContent).toContain("--quality");
 });
 
 it("reports duplicate rendered surface IDs in an accessible diagnostic", () => {

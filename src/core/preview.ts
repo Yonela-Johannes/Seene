@@ -2,6 +2,37 @@ import { z } from "zod";
 import { SceneSchema, type SceneIssue } from "./scene";
 import { MotionSchema } from "./motion";
 import { reviewAuthoring } from "./authoring";
+import { cameraFromPose, type CameraPose } from "./spatial";
+
+export const SCENE_TRANSITION_DURATION = 300;
+export const TransitionTypeSchema = z.enum(["crossfade", "camera", "focus"]);
+export type TransitionType = z.infer<typeof TransitionTypeSchema>;
+export const SceneTransitionSchema = z.strictObject({
+  type: TransitionTypeSchema.default("crossfade"),
+  durationMs: z.number().int().nonnegative().max(5000).default(SCENE_TRANSITION_DURATION),
+});
+export type SceneTransition = z.output<typeof SceneTransitionSchema>;
+export const TRANSITION_PRESETS = {
+  crossfade: {
+    name: "Crossfade",
+    description: "Smooth opacity dissolve between scenes",
+    type: "crossfade" as const,
+    durationMs: 300,
+  },
+  camera: {
+    name: "Camera Move",
+    description: "Continuity of camera position across scenes",
+    type: "camera" as const,
+    durationMs: 600,
+  },
+  focus: {
+    name: "Focus Pull",
+    description: "Smooth focus transition between scenes",
+    type: "focus" as const,
+    durationMs: 400,
+  },
+} as const;
+export type TransitionPresetName = keyof typeof TRANSITION_PRESETS;
 
 export const PreviewDefinitionSchema = z.strictObject({
   scene: SceneSchema.refine(scene => scene.nodes.length > 0, {

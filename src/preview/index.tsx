@@ -16,15 +16,15 @@ export type {SceneLibraryProps} from "./SceneLibrary";
 export {SceneModuleLibrary} from "./modules";
 export type {SceneModules} from "./modules";
 import { usePreviewConnection, useSeeneClientBridge, type PreviewHot } from "./connection";
+import { TRANSITION_PRESETS, type TransitionPresetName } from "../core/preview";
 export { ScenePreview } from "./ScenePreview";
 export type { ScenePreviewProps } from "./ScenePreview";
 export type { PreviewHot } from "./connection";
 export { ApplicationPreview, applicationDocumentUrl, containsDocumentContent } from "./application";
 export type { ApplicationIssue, ApplicationPreviewProps } from "./application";
 
-export type ProjectPreviewProps = {children?: ReactNode; projectId: string; enabled: boolean; active?: boolean; hot?: PreviewHot; sceneModules?: SceneModules; applicationRoute?: string; createSceneEndpoint?: string};
-const applicationDefinition = defaultSceneDefinition();
-export function ProjectPreview({children, projectId, enabled, active, hot, sceneModules, applicationRoute, createSceneEndpoint}: ProjectPreviewProps): ReactNode {
+export type ProjectPreviewProps = {children?: ReactNode; projectId: string; enabled: boolean; active?: boolean; hot?: PreviewHot; sceneModules?: SceneModules; applicationRoute?: string; createSceneEndpoint?: string; transition?: TransitionPresetName; onTransitionChange?: (value: TransitionPresetName | undefined) => void;};
+export function ProjectPreview({children, projectId, enabled, active, hot, sceneModules, applicationRoute, createSceneEndpoint, transition, onTransitionChange}: ProjectPreviewProps): ReactNode {
   const { reportApplicationIssue } = useSeeneClientBridge(projectId);
   const [locationAtMount] = useState(() => typeof window === "undefined" ? "" : window.location.href);
   const location = useSyncExternalStore(() => () => {}, () => locationAtMount, () => "");
@@ -50,7 +50,7 @@ export function ProjectPreview({children, projectId, enabled, active, hot, scene
   }, [documentChildren, children, reportApplicationIssue]);
   const content = useMemo(() => <Surface id={SCENE_PRESENTATION_SURFACE} style={{width:"100%",minHeight:980}}>{children}</Surface>, [children]);
   if (!enabled || !(active ?? entry?.requested)) return children;
-  if(sceneModules) return <div data-seene-project={projectId}><SceneModuleLibrary modules={sceneModules} hot={hot} backHref={entry?.back} hostContent={documentChildren ? undefined : children} applicationRoute={entry?.route} createSceneEndpoint={createSceneEndpoint} onApplicationIssue={reportApplicationIssue}/></div>;
+  if(sceneModules) return <div data-seene-project={projectId}><SceneModuleLibrary modules={sceneModules} hot={hot} backHref={entry?.back} applicationRoute={entry?.route} createSceneEndpoint={createSceneEndpoint} onApplicationIssue={reportApplicationIssue}/></div>;
   return <div data-seene-project={projectId}><ScenePreview title="Your application" definition={applicationDefinition} backHref={entry?.back} hot={hot}>
     {route
       ? <Surface id={SCENE_PRESENTATION_SURFACE} style={{width:"100%",minHeight:980}}>

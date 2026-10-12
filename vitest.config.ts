@@ -7,6 +7,10 @@ import viteConfig from "./vite.config";
 // under two paths. Setting exclude replaces the stock defaults, so those entries stay listed.
 export default mergeConfig(viteConfig as UserConfig, defineConfig({
   test: {
+    include: [
+      "**/*.{test,spec}.?(c|m)[jt]s?(x)",
+      "tests/migration/test-manifest-migration.ts",
+    ],
     exclude: [
       "**/node_modules/**",
       "**/dist/**",

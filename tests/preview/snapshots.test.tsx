@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, expect, it, vi } from "vitest";
 import { ProjectPreview, SceneLibrary, SceneModuleLibrary } from "../../src/preview";
@@ -9,15 +9,18 @@ const recipe = (id: string, title: string, snapshot?: { image: string; timeMs: n
   version: 1,
   id,
   title,
-  definition: { scene: { version: 3, nodes: [{ id: "seene-application" }] } },
+  definition: { scene: { version: 3, nodes: [{ id: "host" }] } },
   ...(snapshot ? { snapshot } : {}),
 });
+
+import { installLayoutStubs } from "../helpers/layout";
 
 function enterLibrary(query = "?seene-preview=1") {
   window.history.replaceState({}, "", "/" + query);
   vi.stubGlobal("ResizeObserver", function () {
     return { observe() {}, disconnect() {} };
   });
+  installLayoutStubs();
 }
 
 afterEach(() => {
@@ -72,8 +75,9 @@ it("uses inert cached images without mounting host scenes and recovers a failed 
 
 it("opens a scene with the real host application as its rendered child", async () => {
   enterLibrary("?seene-preview=1&seene-scene=demo");
-  function Scene({ children }: { children?: ReactNode }) {
-    return <div data-testid="scene-content">{children}</div>;
+  const { Surface } = await import("../../src/react");
+  function Scene() {
+    return <Surface id="host"><main>Existing React application</main></Surface>;
   }
   const modules = {
     "/src/seene/scenes/demo.scene.json": async () => ({ default: recipe("demo", "Actual scene") }),
@@ -82,11 +86,9 @@ it("opens a scene with the real host application as its rendered child", async (
   render(
     <SceneModuleLibrary
       modules={modules}
-      hostContent={<main>Existing React application</main>}
     />,
   );
   expect(await screen.findByText("Existing React application")).toBeTruthy();
-  expect(screen.getByTestId("scene-content").textContent).toBe("Existing React application");
   fireEvent.click(screen.getByRole("link", { name: "Back to scenes" }));
   await waitFor(() => expect(screen.getByRole("link", { name: /Actual scene/ })).toBeTruthy());
 });
@@ -114,4 +116,115 @@ it("keeps three valid scenes available while reporting the path of one broken co
   expect(await screen.findByText("src/seene/scenes/broken.tsx")).toBeTruthy();
   await waitFor(() => expect(document.querySelector("details li")?.textContent).toContain("Broken component import failed"));
   expect(document.querySelectorAll("[data-seene-id^='scene-row-']").length).toBe(3);
+});
+
+it("renders a dedicated 'Scene not found' view listing available slugs when deep-linking to an unknown slug", async () => {
+  enterLibrary("?seene-preview=1&seene-scene=unknown-slug");
+  const modules = {
+    "/src/seene/scenes/alpha.scene.json": async () => ({ default: recipe("alpha", "Alpha scene") }),
+    "/src/seene/scenes/alpha.tsx": async () => ({ default: () => null }),
+    "/src/seene/scenes/beta.scene.json": async () => ({ default: recipe("beta", "Beta scene") }),
+    "/src/seene/scenes/beta.tsx": async () => ({ default: () => null }),
+  };
+  render(<SceneModuleLibrary modules={modules} />);
+  expect(await screen.findByRole("heading", { name: "Scene not found" })).toBeTruthy();
+  const alert = screen.getByRole("alert");
+  expect(alert.textContent).toContain("unknown-slug");
+  expect(alert.textContent).toContain("Alpha scene");
+  expect(alert.textContent).toContain("Beta scene");
+  expect(screen.queryByText(/Some scene files have problems/)).toBeNull();
+  expect(screen.queryByRole("region", { name: "Scene library" })).toBeNull();
+});
+
+it("shows an explicit error banner naming the broken file and reason when deep-linking to an existing scene with a broken component", async () => {
+  enterLibrary("?seene-preview=1&seene-scene=broken");
+  const modules = {
+    "/src/seene/scenes/alpha.scene.json": async () => ({ default: recipe("alpha", "Alpha scene") }),
+    "/src/seene/scenes/alpha.tsx": async () => ({ default: () => null }),
+    "/src/seene/scenes/broken.scene.json": async () => ({ default: recipe("broken", "Broken scene") }),
+    "/src/seene/scenes/broken.tsx": async () => {
+      throw new Error("Component module evaluation failed");
+    },
+  };
+  render(<SceneModuleLibrary modules={modules} />);
+  expect(await screen.findByRole("heading", { name: "Scene cannot be opened" })).toBeTruthy();
+  const alert = screen.getByRole("alert");
+  expect(alert.textContent).toContain("src/seene/scenes/broken.tsx");
+  expect(alert.textContent).toContain("Component module evaluation failed");
+  expect(screen.queryByRole("region", { name: "Scene library" })).toBeNull();
+});
+
+it("shows explicit error banner for broken JSX component", async () => {
+  enterLibrary("?seene-preview=1&seene-scene=broken-jsx");
+  const modules = {
+    "/src/seene/scenes/broken-jsx.scene.json": async () => ({ default: recipe("broken-jsx", "Broken JSX") }),
+    "/src/seene/scenes/broken-jsx.jsx": async () => {
+      throw new Error("JSX module execution failed");
+    },
+  };
+  render(<SceneModuleLibrary modules={modules} />);
+  expect(await screen.findByRole("heading", { name: "Scene cannot be opened" })).toBeTruthy();
+  const alert = screen.getByRole("alert");
+  expect(alert.textContent).toContain("src/seene/scenes/broken-jsx.jsx");
+  expect(alert.textContent).toContain("JSX module execution failed");
+});
+
+it("diagnoses recipe node missing from component and surface missing from recipe nodes", async () => {
+  enterLibrary("?seene-preview=1&seene-scene=mismatch");
+  const { ScenePreview } = await import("../../src/preview");
+  const { Surface } = await import("../../src/react");
+  const mismatchDefinition = {
+    width: 1000, height: 600,
+    scene: { version: 3 as const, camera: {}, focus: {}, nodes: [{ id: "a" }, { id: "b" }] },
+    motion: { durationMs: 1000, tracks: [] },
+  };
+  render(
+    <ScenePreview definition={mismatchDefinition} title="Mismatch test">
+      <Surface id="a">A</Surface>
+      <Surface id="c">C</Surface>
+    </ScenePreview>,
+  );
+  const alert = screen.getByRole("alert");
+  expect(alert.textContent).toContain("Recipe node 'b' has no mounted Surface component");
+  expect(alert.textContent).toContain("Mounted Surface 'c' has no recipe node declaration");
+});
+
+it("route based scene recipe omitting application surface produces no false mismatch", async () => {
+  const { ScenePreview } = await import("../../src/preview");
+  const { Surface } = await import("../../src/react");
+  const { SCENE_PRESENTATION_SURFACE } = await import("../../src/core/platform");
+  const routeDefinition = {
+    width: 1000, height: 600,
+    scene: { version: 3 as const, camera: {}, focus: {}, nodes: [{ id: "hero" }] },
+    motion: { durationMs: 1000, tracks: [] },
+  };
+  render(
+    <ScenePreview definition={routeDefinition} title="Route test">
+      <Surface id={SCENE_PRESENTATION_SURFACE}>
+        <Surface id="hero">Hero</Surface>
+      </Surface>
+    </ScenePreview>,
+  );
+  expect(screen.queryByRole("alert")).toBeNull();
+});
+
+it("shows loading state without flashing not found during lazy module resolution", async () => {
+  enterLibrary("?seene-preview=1&seene-scene=deferred");
+  let resolvePromise!: (val: unknown) => void;
+  const deferredPromise = new Promise(resolve => {
+    resolvePromise = resolve;
+  });
+  const modules = {
+    "/src/seene/scenes/deferred.scene.json": () => deferredPromise,
+    "/src/seene/scenes/deferred.tsx": async () => ({ default: () => null }),
+  };
+  render(<SceneModuleLibrary modules={modules} />);
+  expect(screen.getByText("Loading your scenes…")).toBeTruthy();
+  expect(screen.queryByRole("heading", { name: "Scene not found" })).toBeNull();
+  act(() => {
+    resolvePromise({ default: recipe("deferred", "Deferred scene") });
+  });
+  await waitFor(() => {
+    expect(screen.queryByText("Loading your scenes…")).toBeNull();
+  });
 });

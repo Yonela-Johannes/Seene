@@ -90,14 +90,24 @@ export function createRegistry() {
     }
     const zeroArea = Array.from(entries.entries())
       .filter(([token, b]) => measuredTokens.has(token) && (b.element.offsetWidth === 0 || b.element.offsetHeight === 0))
-      .map(([_, b]) => ({ path: b.id, message: "no measurable area" }));
+      .map(([_, b]) => ({ path: "surface." + b.id, message: "no measurable area" }));
+
+    const emptyNodes = Array.from(entries.values())
+      .filter(b => {
+        const text = b.element.textContent?.trim() ?? "";
+        const hasMedia = b.element.querySelector("img,svg,canvas,video,iframe,input,textarea,select") !== null;
+        const contentEl = b.element.querySelector("[data-seene-content]");
+        const hasContentChildren = contentEl ? contentEl.childElementCount > 0 : b.element.childElementCount > 0;
+        return !text && !hasMedia && !hasContentChildren;
+      })
+      .map(b => ({ path: "surface." + b.id, message: `Surface node '${b.id}' has no mounted content.` }));
 
     const groups = new Set(Array.from(entries.values()).map(b => b.parent));
     const next: SceneIssue[] = Array.from(entries.values())
       .filter(b => groups.has(b.token) && uncoveredContent(b.element))
       .map(b => ({ path: b.id, message: "Unfiltered content in spatial group. Wrap each visible text/media region in a Surface, or put its paint in content. Group filters would flatten nested 3D." }));
     if (uncoveredContent(stage)) next.push({ path: "scene", message: "Unfiltered scene content. Wrap visible text/media in a Surface so camera depth of field can apply." });
-    next.push(...zeroArea);
+    next.push(...zeroArea, ...emptyNodes);
 
     if (JSON.stringify(next) !== JSON.stringify(coverageIssues)) {
       coverageIssues = next;

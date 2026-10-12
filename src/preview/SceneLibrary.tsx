@@ -1,4 +1,5 @@
 import { useCallback, createElement, useEffect, useMemo, useRef, useState, type ComponentType, type FormEvent, type MouseEvent, type ReactNode } from "react";
+import { SCENE_TRANSITION_DURATION } from "../core";
 
 import {
   AUTHORED_PRESENTATION,
@@ -23,6 +24,7 @@ import { ApplicationPreview, containsDocumentContent, type ApplicationIssue } fr
 import { ScenePreview } from "./ScenePreview";
 import type { PreviewHot } from "./connection";
 import { GettingStarted } from "./GettingStarted";
+import { TRANSITION_PRESETS, type TransitionPresetName } from "../core/preview";
 
 export type SceneLibraryProps = {
   sources?: Record<string, unknown>;
@@ -34,6 +36,8 @@ export type SceneLibraryProps = {
   applicationRoute?: string;
   createSceneEndpoint?: string;
   onApplicationIssue?: (issue: ApplicationIssue) => void;
+  transition?: TransitionPresetName;
+  onTransitionChange?: (value: TransitionPresetName | undefined) => void;
 };
 
 const EMPTY_SOURCES: Record<string, unknown> = {};
@@ -62,6 +66,7 @@ const view = matrixFor(
 
 const SCENE_QUERY_PARAM = "seene-scene";
 const PRESENTATION_QUERY_PARAM = "seene-preset";
+
 
 function isPreviewQuery(): boolean {
   if (typeof window === "undefined") return false;
@@ -146,6 +151,8 @@ export function SceneLibrary({
   applicationRoute,
   createSceneEndpoint = "/__seene/create-scene",
   onApplicationIssue,
+  transition,
+  onTransitionChange,
 }: SceneLibraryProps) {
   const [entered, setEntered] = useState(() => {
     if (typeof window === "undefined") return false;
@@ -163,6 +170,7 @@ export function SceneLibrary({
   const [isCreating, setIsCreating] = useState(false);
   const [createTitle, setCreateTitle] = useState("");
   const [createDescription, setCreateDescription] = useState("");
+  const [createHostPath, setCreateHostPath] = useState("");
   const [createError, setCreateError] = useState("");
   const [createSubmitting, setCreateSubmitting] = useState(false);
 
@@ -216,7 +224,7 @@ export function SceneLibrary({
   const documentRoute = applicationRouteFor(selectedScene);
 
   const selectedIsDocument = SelectedComponent
-    ? containsDocumentContent(createElement(SelectedComponent, { children: hostContent }))
+    ? containsDocumentContent(createElement(SelectedComponent))
     : false;
   const effectiveRoute = documentRoute ?? (selectedIsDocument ? (requestedApplicationRoute ?? "/") : undefined);
 
@@ -333,6 +341,7 @@ export function SceneLibrary({
   const openCreateDialog = () => {
     setCreateTitle("");
     setCreateDescription("");
+    setCreateHostPath("");
     setCreateError("");
     setCreateSubmitting(false);
     setIsCreating(true);
@@ -381,7 +390,7 @@ export function SceneLibrary({
       const res = await fetch(createSceneEndpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id, recipe })
+        body: JSON.stringify({ id, recipe, hostPath: createHostPath.trim() || undefined })
       });
       const contentType = res.headers.get("content-type") || "";
       if (!contentType.includes("application/json")) {
@@ -421,7 +430,6 @@ export function SceneLibrary({
   if (selectedScene && (effectiveRoute || SelectedComponent)) {
     return (
       <ScenePreview
-        key={selectedScene.id}
         definition={selectedScene.definition}
         title={selectedScene.title}
         backHref={buildDestination()}
@@ -429,6 +437,8 @@ export function SceneLibrary({
         hot={hot}
         presentation={presentation}
         onPresentationChange={changePresentation}
+        transition={transition}
+        onTransitionChange={onTransitionChange}
       >
         {effectiveRoute ? (
           <Surface
@@ -445,9 +455,88 @@ export function SceneLibrary({
             />
           </Surface>
         ) : SelectedComponent ? (
-          <SelectedComponent>{hostContent}</SelectedComponent>
+          <SelectedComponent />
         ) : null}
       </ScenePreview>
+    );
+  }
+
+  const requestedRecipePath = sceneId
+    ? Object.keys(sources).find(p => p.endsWith(`/${sceneId}.scene.json`))
+    : undefined;
+
+  if (sceneId && !selectedScene && !requestedRecipePath) {
+    return (
+      <main data-seene-library="" className="fixed inset-0 isolate overflow-hidden bg-[var(--seene-bg)] text-[var(--seene-text)]">
+        <div className="absolute inset-0 flex flex-col items-center justify-center p-8 text-center z-50 bg-[var(--seene-bg)]" role="alert">
+          <div className="max-w-md space-y-4 rounded-2xl border border-[var(--seene-border-text)] bg-[var(--seene-surface-2)] p-6 shadow-2xl">
+            <h1 className="text-xl font-semibold text-[var(--seene-text)]">Scene not found</h1>
+            <p className="text-xs text-[var(--seene-text-muted)] font-mono">
+              The requested scene slug &quot;<span className="text-white">{sceneId}</span>&quot; could not be found.
+            </p>
+            {catalog.scenes.length > 0 ? (
+              <div className="pt-2 text-left space-y-2">
+                <span className="text-[11px] uppercase tracking-wider font-semibold text-[var(--seene-text-muted)] block">
+                  Available scenes ({catalog.scenes.length}):
+                </span>
+                <div className="flex flex-wrap gap-2 max-h-48 overflow-y-auto">
+                  {catalog.scenes.map(s => (
+                    <a
+                      key={s.id}
+                      href={buildDestination(s.id)}
+                      onClick={(event) => navigate(event, s.id)}
+                      className="rounded-lg border border-[var(--seene-border-text)] bg-[var(--seene-surface)] px-3 py-1.5 text-xs text-[var(--seene-text)] hover:text-white hover:border-white transition-colors"
+                    >
+                      {s.title} <span className="font-mono opacity-60">({s.id})</span>
+                    </a>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <p className="text-xs text-[var(--seene-text-muted)]">No valid scenes are currently available in this project.</p>
+            )}
+            <div className="pt-3">
+              <a
+                href={buildDestination()}
+                onClick={(event) => navigate(event)}
+                className="inline-block rounded-full border border-white/20 bg-white/10 px-5 py-2 text-xs font-medium text-white hover:bg-white/20 transition-colors"
+              >
+                Go back to all scenes
+              </a>
+            </div>
+          </div>
+        </div>
+      </main>
+    );
+  }
+
+  if (sceneId && (requestedRecipePath || selectedScene) && (!SelectedComponent || !effectiveRoute)) {
+    const brokenIssue = catalog.issues.find(issue => (selectedScene && issue.path.includes(selectedScene.binding)) || issue.path.includes(sceneId));
+    const bindingPath = selectedScene?.binding || brokenIssue?.path || `src/seene/scenes/${sceneId}.tsx`;
+    const brokenReason = brokenIssue?.message || "Component module evaluation failed or component binding is missing.";
+    return (
+      <main data-seene-library="" className="fixed inset-0 isolate overflow-hidden bg-[var(--seene-bg)] text-[var(--seene-text)]">
+        <div className="absolute inset-0 flex flex-col items-center justify-center p-8 text-center z-50 bg-[var(--seene-bg)]" role="alert">
+          <div className="max-w-md space-y-4 rounded-2xl border border-[var(--seene-border-text)] bg-[var(--seene-surface-2)] p-6 shadow-2xl">
+            <h1 className="text-xl font-semibold text-[var(--seene-text)]">Scene cannot be opened</h1>
+            <p className="text-xs text-[var(--seene-text-muted)] font-mono">
+              File: <span className="text-white">{bindingPath}</span>
+            </p>
+            <p className="text-xs text-red-400 bg-red-950/40 p-3 rounded-lg border border-red-900/50 font-mono text-left">
+              {brokenReason}
+            </p>
+            <div className="pt-3">
+              <a
+                href={buildDestination()}
+                onClick={(event) => navigate(event)}
+                className="inline-block rounded-full border border-white/20 bg-white/10 px-5 py-2 text-xs font-medium text-white hover:bg-white/20 transition-colors"
+              >
+                Back to all scenes
+              </a>
+            </div>
+          </div>
+        </div>
+      </main>
     );
   }
 
@@ -460,16 +549,6 @@ export function SceneLibrary({
 
   return (
     <main data-seene-library="" className="fixed inset-0 isolate overflow-hidden bg-[var(--seene-bg)] text-[var(--seene-text)]">
-      {sceneId && (
-        <div className="absolute top-4 left-1/2 z-50 -translate-x-1/2 rounded-xl border border-[var(--seene-border)] bg-[var(--seene-surface-2)] px-5 py-3 text-xs text-[var(--seene-text-muted)] shadow-lg" role="alert">
-          <span className="text-[var(--seene-text)]">This scene can&apos;t be opened.</span> Fix its source file or{" "}
-          <a href={buildDestination()} onClick={(event) => navigate(event)} className="text-[var(--seene-text)] underline hover:text-white">
-            go back to all scenes
-          </a>
-          .
-        </div>
-      )}
-
       {catalog.issues.length > 0 && (
         <details className="absolute top-16 left-1/2 z-50 -translate-x-1/2 max-w-lg rounded-xl border border-[var(--seene-border-text)] bg-[var(--seene-surface-2)] p-4 text-xs text-[var(--seene-text-muted)]">
           <summary className="cursor-pointer font-medium text-[var(--seene-text)]">
@@ -694,6 +773,20 @@ export function SceneLibrary({
                    value={createDescription}
                    onChange={(e) => setCreateDescription(e.target.value)}
                    className="w-full rounded-lg border border-[var(--seene-border-text)] bg-[var(--seene-surface-2)] px-4 py-2.5 text-sm text-[var(--seene-text)] placeholder-[var(--seene-text-muted)] focus:border-[var(--seene-accent)] focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label htmlFor="seene-create-host" className="block text-xs font-medium text-[var(--seene-text-muted)] uppercase tracking-wider mb-2">
+                  Component to present <span className="text-[var(--seene-text-muted)] font-normal">(optional)</span>
+                </label>
+                <input
+                  id="seene-create-host"
+                  type="text"
+                  placeholder="e.g. src/components/Hero.tsx"
+                  value={createHostPath}
+                  onChange={(e) => setCreateHostPath(e.target.value)}
+                  className="w-full rounded-lg border border-[var(--seene-border-text)] bg-[var(--seene-surface-2)] px-4 py-2.5 text-sm text-[var(--seene-text)] placeholder-[var(--seene-text-muted)] focus:border-[var(--seene-accent)] focus:outline-none"
                 />
               </div>
 

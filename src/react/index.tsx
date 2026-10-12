@@ -5,7 +5,6 @@ import {
   useEffect,
   useLayoutEffect,
   useMemo,
-  useId,
   useRef,
   useState,
   useSyncExternalStore,
@@ -17,7 +16,6 @@ import {
   SCENE_BACKGROUND,
   cameraToCss,
   transformToCss,
-  uniformFocusBlur,
   motionTime,
   type CameraInput,
   type EvaluatedNode,
@@ -28,7 +26,7 @@ import {
   type TransformInput,
 } from "../core";
 import { type MotionInput } from "../core/motion";
-import { FocusFilter } from "./FocusFilter";
+import { SCENE_PRESENTATION_SURFACE } from "../core/platform";
 import { createRegistry, type Registry } from "./registry";
 
 type SceneContextValue = {
@@ -47,6 +45,7 @@ export type SceneProps = {
   children?: ReactNode;
   camera?: CameraInput;
   focus?: FocusInput;
+  recipeNodes?: { id: string; parentId?: string }[];
   className?: string;
   style?: CSSProperties;
   onDiagnostics?: (issues: SceneIssue[]) => void;
@@ -65,6 +64,7 @@ export function Scene({
   camera,
   focus,
   motion,
+  recipeNodes,
   timeMs = 0,
   className,
   style,
@@ -113,9 +113,36 @@ export function Scene({
     );
     const evaluation = RESOURCES["evaluate-spatial"](input, measurements);
     const ids = new Set(bindings.map((b) => b.id));
+    const declaredNodes = recipeNodes ?? (validated.success ? validated.data.nodes : []);
+    const declaredIds = new Set(declaredNodes.map((n) => n.id));
+
+    // Mismatch diagnostics: Recipe nodes missing mounted Surfaces, or mounted Surfaces missing from Recipe
+    const nodeMismatchIssues: SceneIssue[] = [];
+    if (recipeNodes || validated.success) {
+      for (const node of declaredNodes) {
+        if (node.id === SCENE_PRESENTATION_SURFACE) continue;
+        if (!ids.has(node.id)) {
+          nodeMismatchIssues.push({
+            path: "nodes." + node.id,
+            message: `Recipe node '${node.id}' has no mounted Surface component in scene.`,
+          });
+        }
+      }
+      for (const b of bindings) {
+        if (b.id === SCENE_PRESENTATION_SURFACE) continue;
+        if (!declaredIds.has(b.id)) {
+          nodeMismatchIssues.push({
+            path: "surface." + b.id,
+            message: `Mounted Surface '${b.id}' has no recipe node declaration in definition.scene.nodes.`,
+          });
+        }
+      }
+    }
+
     evaluation.issues.push(
       ...state.issues,
-      ...(validated.success && validated.data.focus.maxBlur>0 ? registry.coverageIssues : []),
+      ...nodeMismatchIssues,
+      ...registry.coverageIssues,
       ...Object.keys(state.surfaces)
         .filter((id) => !ids.has(id))
         .map((id) => ({
@@ -227,7 +254,6 @@ export function Surface({
   className,
   style,
 }: SurfaceProps) {
-  const filterId = "seene-focus-" + useId().replace(/[^a-zA-Z0-9_-]/g, "");
   const context = useContext(SceneContext);
   const parent = useContext(ParentContext);
   const [token] = useState(() => Symbol("seene-binding"));
@@ -252,25 +278,17 @@ export function Surface({
     (binding) => binding.parent === token,
   );
   const blur = node?.blur ?? 0;
-  const filtering =
-    node &&
-    node.width > 0 &&
-    node.height > 0 &&
-    node.focus.maxBlur > 0 &&
-    (content !== undefined || !grouped);
-  const uniformBlur = filtering ? uniformFocusBlur(node.focus, Math.max(node.width, node.height)) : 0;
+  const hasDepth = node && node.width > 0 && node.height > 0 && node.focus.maxBlur > 0;
+  const contentLeaf = content !== undefined || !grouped;
+  const clampedBlur = Math.min(blur, 60);
+  const applyBlur = hasDepth && contentLeaf && clampedBlur > 0;
   const leafStyle: CSSProperties = {
     pointerEvents: style?.pointerEvents ?? "auto",
     opacity: context.opacities.get(id) ?? 1,
-    ...(filtering && uniformBlur !== 0 && uniformBlur !== undefined
-      ? { filter: `blur(${uniformBlur}px)` }
-      : filtering && uniformBlur === undefined
-      ? { filter: `url(#${filterId})` }
-      : {}),
+    ...(applyBlur ? { filter: `blur(${clampedBlur}px)` } : {}),
   };
   return (
     <ParentContext.Provider value={token}>
-      {filtering && uniformBlur === undefined && <FocusFilter id={filterId} node={node} />}
       <div
         ref={element}
         className={className}
@@ -336,12 +354,19 @@ export function SceneErrorBoundary({ children, resetKey, onError, onReset }: Sce
 
 function SceneErrorFallback({ error, resetErrorBoundary }: FallbackProps) {
   const message = error instanceof Error ? error.message : String(error);
+  const stack = error instanceof Error ? error.stack : undefined;
   return (
-    <div role="alert" data-seene-error="">
-      <strong>Unable to render the Seene scene.</strong>
-      <p>{message}</p>
-      <p>Correct the component or scene configuration, then retry.</p>
-      <button type="button" onClick={resetErrorBoundary}>
+    <div role="alert" data-seene-error="" style={{ padding: 24, maxWidth: 640, background: "#1c1917", border: "1px solid rgba(239, 68, 68, 0.4)", borderRadius: 16, color: "#fca5a5", fontSize: 12, fontFamily: "system-ui, sans-serif" }}>
+      <strong style={{ fontSize: 14, fontWeight: 600, color: "#f87171", display: "block", marginBottom: 8 }}>Unable to render the Seene scene.</strong>
+      <p style={{ fontFamily: "monospace", color: "#fca5a5", background: "rgba(0,0,0,0.5)", padding: 12, borderRadius: 8, overflowX: "auto", whiteSpace: "pre-wrap", marginBottom: 12 }}>{message}</p>
+      {stack && (
+        <details style={{ marginBottom: 16 }}>
+          <summary style={{ cursor: "pointer", color: "#f87171", fontWeight: 500, marginBottom: 4 }}>View call stack</summary>
+          <pre style={{ fontSize: 10, fontFamily: "monospace", color: "rgba(252, 165, 165, 0.8)", background: "rgba(0,0,0,0.7)", padding: 12, borderRadius: 8, overflowX: "auto", maxHeight: 200, whiteSpace: "pre-wrap" }}>{stack}</pre>
+        </details>
+      )}
+      <p style={{ color: "rgba(252, 165, 165, 0.7)", marginBottom: 16 }}>Correct the component or scene configuration, then retry.</p>
+      <button type="button" onClick={resetErrorBoundary} style={{ padding: "8px 16px", borderRadius: 8, background: "#dc2626", color: "#ffffff", fontWeight: 500, border: "none", cursor: "pointer" }}>
         Retry scene
       </button>
     </div>

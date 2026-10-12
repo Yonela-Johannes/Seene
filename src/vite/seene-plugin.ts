@@ -1,9 +1,10 @@
 import path from "node:path";
+import { readFile, lstat } from "node:fs/promises";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { Plugin } from "vite";
 import { SceneRecipeSchema } from "../core/recipes";
-import { sceneComponentSource } from "../core/platform";
-import { PlatformFault, writeSceneSourcePair } from "./scene-files";
+import { sceneComponentSource, validateHostComponent } from "../core/platform";
+import { PlatformFault, writeSceneSourcePair, componentImportSpecifier } from "./scene-files";
 export { writeSceneSourcePair, removeSceneSourcePair, duplicateSceneSourcePair, syncCatalog } from "./scene-files";
 
 const route = "/__seene/create-scene";
@@ -47,22 +48,44 @@ export function seeneCreateScenePlugin(): Plugin {
             send(response, 400, { error: "Missing scene id or recipe." });
             return;
           }
-          const parsed = SceneRecipeSchema.safeParse((payload as { recipe: unknown }).recipe);
-          if (!parsed.success || parsed.data.id !== payload.id) {
+          const rawPayload = payload as { id: string; recipe: unknown; hostPath?: string };
+          const parsed = SceneRecipeSchema.safeParse(rawPayload.recipe);
+          if (!parsed.success || parsed.data.id !== rawPayload.id) {
             send(response, 400, {
               error: parsed.success
-                ? `Scene id "${payload.id}" does not match recipe id "${parsed.data.id}".`
+                ? `Scene id "${rawPayload.id}" does not match recipe id "${parsed.data.id}".`
                 : parsed.error.issues.map(issue => `${issue.path.join(".")}: ${issue.message}`).join("; "),
             });
             return;
           }
           try {
-            const outcome = await writeSceneSourcePair(path.resolve(server.config.root), parsed.data.id, parsed.data, sceneComponentSource({ id: parsed.data.id }));
+            const root = path.resolve(server.config.root);
+            let content: { importSpecifier: string; export?: string } | undefined = undefined;
+            let warning: string | undefined = undefined;
+
+            if (rawPayload.hostPath) {
+              const hostRel = rawPayload.hostPath.trim();
+              const absolute = path.resolve(root, hostRel);
+              const stat = await lstat(absolute).catch(() => undefined);
+              if (!stat?.isFile()) return send(response, 400, { error: `Host component path "${hostRel}" does not exist.` });
+              const source = await readFile(absolute, "utf8").catch(() => undefined);
+              if (source === undefined) return send(response, 400, { error: `Host component path "${hostRel}" could not be read.` });
+              try {
+                const val = validateHostComponent(hostRel, source);
+                warning = val.warning;
+              } catch (err: any) {
+                return send(response, 400, { error: err?.message || String(err) });
+              }
+              content = { importSpecifier: componentImportSpecifier(hostRel) };
+            }
+
+            const componentSource = sceneComponentSource({ id: parsed.data.id, content });
+            const outcome = await writeSceneSourcePair(root, parsed.data.id, parsed.data, componentSource);
             if (outcome === "exists") {
               send(response, 409, { error: `Scene "${parsed.data.id}" already exists or has an incomplete source pair.` });
               return;
             }
-            send(response, 200, { success: true, id: parsed.data.id });
+            send(response, 200, { success: true, id: parsed.data.id, ...(warning ? { warning } : {}) });
           } catch (error) {
             if (error instanceof PlatformFault && error.code === "denied-path") { send(response, 400, { error: error.message }); return; }
             send(response, 500, { error: error instanceof Error ? error.message : "Unable to create scene files." });

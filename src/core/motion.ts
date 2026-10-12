@@ -8,8 +8,10 @@ import {
 const finite = z.number().finite();
 const SurfaceMotionSchema = TransformSchema.extend({
   opacity: finite.min(0).max(1),
+  blur: finite.min(0).max(32),
 });
 const CameraMotionSchema = CameraSchema.pick({
+  perspective: true,
   x: true,
   y: true,
   z: true,
@@ -23,10 +25,18 @@ const FocusMotionSchema = z.strictObject({
   focalLength: finite.min(1).max(5000).default(50),
   maxBlur: finite.min(0).max(32).default(6),
 });
+export const EasingTypeSchema = z.string().refine(val => {
+  if (["linear", "easeInOut", "cinematic", "easeIn", "easeOut"].includes(val)) return true;
+  if (/^cubic-bezier\(\s*[-+]?\d*\.?\d+\s*,\s*[-+]?\d*\.?\d+\s*,\s*[-+]?\d*\.?\d+\s*,\s*[-+]?\d*\.?\d+\s*\)$/.test(val)) return true;
+  if (/^spring\(\s*\d*\.?\d+\s*,\s*\d*\.?\d+\s*,\s*\d*\.?\d+\s*\)$/.test(val)) return true;
+  return false;
+}, "Easing must be linear, easeIn, easeOut, easeInOut, cinematic, cubic-bezier(x1,y1,x2,y2), or spring(stiffness,damping,mass).");
+
 export const MotionKeyframeSchema = z.strictObject({
   timeMs: finite.nonnegative(),
   value: finite,
-  easing: z.enum(["linear", "easeInOut", "cinematic"]).default("cinematic"),
+  easing: EasingTypeSchema.default("cinematic"),
+  name: z.string().trim().max(60).optional(),
 });
 const keyframes = z.array(MotionKeyframeSchema).min(1);
 export const MotionTrackSchema = z

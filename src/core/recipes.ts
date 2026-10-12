@@ -37,6 +37,7 @@ export type SceneCatalog = {
   scenes: DiscoveredRecipe[];
   selected?: DiscoveredRecipe;
   issues: SceneIssue[];
+  warnings: SceneIssue[];
 };
 function canonicalSourcePath(target: string): boolean {
   return /^src\/seene\/scenes\/[a-z0-9]+(?:-[a-z0-9]+)*\.scene\.json$/.test(target);
@@ -44,10 +45,10 @@ function canonicalSourcePath(target: string): boolean {
 export function loadSceneRecipes(input: unknown): SceneCatalog {
   if (!input || typeof input !== "object" || !("sources" in input) || !("bindingPaths" in input)
     || !Array.isArray((input as { sources: unknown }).sources) || !Array.isArray((input as { bindingPaths: unknown }).bindingPaths))
-    return { scenes: [], issues: [{ path: "catalog", message: "Catalog requires sources and bindingPaths arrays." }] };
+    return { scenes: [], issues: [{ path: "catalog", message: "Catalog requires sources and bindingPaths arrays." }], warnings: [] };
   const payload = input as { sources: { path: string; document: unknown }[]; bindingPaths: string[]; sceneId?: unknown };
   if (payload.sceneId !== undefined && typeof payload.sceneId !== "string")
-    return { scenes: [], issues: [{ path: "sceneId", message: "Selected scene ID must be a string." }] };
+    return { scenes: [], issues: [{ path: "sceneId", message: "Selected scene ID must be a string." }], warnings: [] };
   const bindings = new Set(payload.bindingPaths);
   const map = new Map<string, DiscoveredRecipe>();
   const issues: SceneIssue[] = [];
@@ -99,5 +100,5 @@ export function loadSceneRecipes(input: unknown): SceneCatalog {
   const selected = payload.sceneId ? map.get(payload.sceneId) : undefined;
   if (payload.sceneId && !selected)
     issues.push({ path: "sceneId", message: `Scene "${payload.sceneId}" is unavailable. Check its recipe and component diagnostics or choose an available scene.` });
-  return { scenes, selected, issues: issues.sort((a, b) => a.path < b.path ? -1 : a.path > b.path ? 1 : 0) };
+  return { scenes, selected, issues: issues.sort((a, b) => a.path < b.path ? -1 : a.path > b.path ? 1 : 0), warnings: [] };
 }

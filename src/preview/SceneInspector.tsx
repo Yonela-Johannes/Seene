@@ -1,6 +1,60 @@
 import { useState } from "react";
 import { PRESENTATION_PRESETS, applyPresentationPreset, type PresentationPresetName, type PreviewDefinitionInput } from "../core/preview";
 
+const CAMERA_MOTION_PRESETS = {
+  dolly: { name: "Dolly", description: "Camera moves toward the subject" },
+  orbit: { name: "Orbit", description: "Slow horizontal orbit around the scene" },
+  push: { name: "Push", description: "Start wide, close in on the subject" },
+  pull: { name: "Pull", description: "Start close, pull back to reveal context" },
+} as const;
+
+function applyCameraMotionPreset(definition: PreviewDefinitionInput, preset: keyof typeof CAMERA_MOTION_PRESETS): PreviewDefinitionInput {
+  const duration = definition.motion?.durationMs ?? 5000;
+  let tracks: NonNullable<NonNullable<PreviewDefinitionInput["motion"]>["tracks"]>;
+  switch (preset) {
+    case "dolly":
+      tracks = [{ target: { kind: "camera" }, property: "z", keyframes: [
+        { timeMs: 0, value: -120, easing: "easeInOut" },
+        { timeMs: duration, value: 80, easing: "easeInOut" },
+      ]}];
+      break;
+    case "orbit":
+      tracks = [{ target: { kind: "camera" }, property: "y", keyframes: [
+        { timeMs: 0, value: -80, easing: "cinematic" },
+        { timeMs: duration, value: 80, easing: "cinematic" },
+      ]}];
+      break;
+    case "push":
+      tracks = [
+        { target: { kind: "camera" }, property: "z", keyframes: [
+          { timeMs: 0, value: 120, easing: "easeInOut" },
+          { timeMs: duration, value: -40, easing: "easeInOut" },
+        ]},
+        { target: { kind: "camera" }, property: "perspective", keyframes: [
+          { timeMs: 0, value: 2000, easing: "easeInOut" },
+          { timeMs: duration, value: 1400, easing: "easeInOut" },
+        ]},
+      ];
+      break;
+    case "pull":
+      tracks = [
+        { target: { kind: "camera" }, property: "z", keyframes: [
+          { timeMs: 0, value: -80, easing: "easeInOut" },
+          { timeMs: duration, value: 100, easing: "easeInOut" },
+        ]},
+        { target: { kind: "camera" }, property: "perspective", keyframes: [
+          { timeMs: 0, value: 1200, easing: "easeInOut" },
+          { timeMs: duration, value: 2200, easing: "easeInOut" },
+        ]},
+      ];
+      break;
+  }
+  return {
+    ...definition,
+    motion: { durationMs: duration, speed: definition.motion?.speed ?? 0.8, tracks },
+  };
+}
+
 export type SceneInspectorProps = {
   definition?: PreviewDefinitionInput;
   onChange?: (updated: PreviewDefinitionInput) => void;
@@ -119,6 +173,25 @@ export function SceneInspector({definition, onChange}: SceneInspectorProps) {
         <label className="block space-y-1"><span>Focus Distance: {focus.distance ?? 1400}</span>
           <input type="range" min="0" max="3000" step="50" value={focus.distance ?? 1400} onChange={e => updateFocus("distance", parseFloat(e.target.value))} className="w-full accent-[var(--seene-accent)]" />
         </label>
+      </div>
+
+      <div className="mb-3">
+        <label className="block text-xs font-medium text-[var(--seene-text-muted)] uppercase tracking-wider mb-2">
+          Camera Motion Presets
+        </label>
+        <div className="grid grid-cols-2 gap-2">
+          {Object.entries(CAMERA_MOTION_PRESETS).map(([key, preset]) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => onChange?.(applyCameraMotionPreset(definition, key as keyof typeof CAMERA_MOTION_PRESETS))}
+              className="rounded-lg border border-[var(--seene-border-text)] bg-[var(--seene-surface-2)] px-2.5 py-1.5 text-center text-[11px] font-medium text-[var(--seene-text)] transition-colors hover:bg-[var(--seene-surface)] hover:text-[var(--seene-accent)]"
+              title={preset.description}
+            >
+              {preset.name}
+            </button>
+          ))}
+        </div>
       </div>
 
       <div>

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Surface, type PreviewDefinitionInput } from "../../src";
 import { ScenePreview } from "../../src/preview";
 import { PRESENTATIONS, presentation, type CaptureBridge } from "../../src/core";
@@ -38,7 +38,16 @@ function renderPreview(props: { presentation?: string; onPresentationChange?: (i
   );
 }
 
-afterEach(() => cleanup());
+import { installLayoutStubs } from "../helpers/layout";
+
+beforeEach(() => {
+  installLayoutStubs();
+});
+
+afterEach(() => {
+  cleanup();
+  vi.restoreAllMocks();
+});
 
 describe("presentation switching in the preview", () => {
   it("offers every treatment, marks the active one and explains it", async () => {

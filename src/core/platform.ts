@@ -7,7 +7,7 @@ import type { SceneIssue } from "./scene";
 export const PLATFORM_HOME_DIRECTORY = ".seene";
 export const PLATFORM_REGISTRY_FILE = "projects.json";
 export const PLATFORM_API_PREFIX = "/__seene/platform";
-export const SCENE_PRESENTATION_SURFACE = "seene-application";
+export const SCENE_PRESENTATION_SURFACE = "host";
 export const SCENE_PRESENTATION_WIDTH = 1400;
 export const SCENE_PRESENTATION_HEIGHT = 980;
 export const SEENE_PREVIEW_QUERY_PARAM = "seene-preview";
@@ -164,7 +164,7 @@ export function defaultSceneDefinition(): PreviewDefinitionInput {
       focus: { distance: 1800, fStop: 8, focalLength: 50, maxBlur: 6 },
       nodes: [{ id: SCENE_PRESENTATION_SURFACE }],
     },
-    motion: { durationMs: 4000, tracks: [] },
+    motion: { durationMs: 5000, speed: 0.8, tracks: [] },
   };
 }
 
@@ -181,33 +181,88 @@ export function createSceneRecipe(input: { id: string; title: string; descriptio
 
 export function sceneComponentSource(input: { id: string; content?: { importSpecifier: string; export?: string } }): string {
   const name = sceneComponentName(input.id);
-  const open = `    <Surface id=${JSON.stringify(SCENE_PRESENTATION_SURFACE)} style={{ width: ${SCENE_PRESENTATION_WIDTH}, height: ${SCENE_PRESENTATION_HEIGHT} }}>`;
   if (!input.content) {
-    return `import { Surface } from "@thatg33k/seene";
-import type { ReactNode } from "react";
+    return `// @seene-scaffold-version 1
+"use client";
+import { Surface } from "@thatg33k/seene";
 
-export default function ${name}({ children }: { children?: ReactNode }) {
+export default function ${name}() {
   return (
-${open}
-      {children}
+    <Surface id="host" style={{ width: 1400, height: 980, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", background: "#18181b", color: "#f4f4f5", fontFamily: "system-ui, sans-serif", borderRadius: 16, border: "1px solid #27272a" }}>
+      <h1 style={{ fontSize: 24, fontWeight: 600, marginBottom: 8, color: "#ffffff" }}>Scene Preview</h1>
+      <p style={{ fontSize: 14, color: "#a1a1aa" }}>Edit src/seene/scenes/${input.id}.tsx to add your component.</p>
     </Surface>
   );
 }
 `;
   }
-  const element = input.content.export ?? "ApplicationContent";
-  const binding = input.content.export ? `{ ${input.content.export} }` : element;
-  return `import { Surface } from "@thatg33k/seene";
+  const componentName = "HostComponent";
+  const binding = input.content.export ? `{ ${input.content.export} as HostComponent }` : "HostComponent";
+  return `// @seene-scaffold-version 1
+"use client";
+import { Surface } from "@thatg33k/seene";
 import ${binding} from ${JSON.stringify(input.content.importSpecifier)};
 
 export default function ${name}() {
   return (
-${open}
-      <${element} />
+    <Surface id="host" style={{ width: 1400, height: 980 }}>
+      <${componentName} />
     </Surface>
   );
 }
 `;
+}
+
+export function validateHostComponent(hostPath: string, source: string): { valid: boolean; warning?: string } {
+  const normPath = hostPath.replace(/\\/g, "/");
+  const analysis = analyzeApplicationModule(source);
+
+  if (!analysis.default) {
+    throw new Error(`Host component "${hostPath}" has no default export.`);
+  }
+
+  let warning: string | undefined = undefined;
+  const isRoute = /(?:^|\/)(?:page|layout|_app|_document|route)\.[a-z0-9]+$/i.test(normPath);
+  const isAsync = /export\s+default\s+async\b/i.test(source)
+    || /async\s+function\s+[A-Za-z0-9_$]+[\s\S]*?export\s+default/i.test(source)
+    || /const\s+[A-Za-z0-9_$]+\s*=\s*async\b[\s\S]*?export\s+default/i.test(source);
+
+  if (isRoute || isAsync) {
+    const reason = isRoute && isAsync
+      ? "is a route file and an async Server Component"
+      : isRoute
+      ? "is a route file"
+      : "is an async Server Component";
+    warning = `Warning: ${hostPath} ${reason}, which cannot be mounted in the client tree.`;
+  }
+
+  return { valid: true, warning };
+}
+
+export function componentImportSpecifier(target: string): string {
+  const normalized = target.replace(/\\/g, "/").replace(/^\.\//, "");
+  const withoutExt = normalized.replace(/\.(?:[cm]?[jt]sx?)$/, "");
+  const fromDir = "src/seene/scenes";
+
+  const fromParts = fromDir.split("/").filter(Boolean);
+  const targetParts = withoutExt.split("/").filter(Boolean);
+
+  let common = 0;
+  while (common < fromParts.length && common < targetParts.length && fromParts[common] === targetParts[common]) {
+    common++;
+  }
+
+  const upCount = fromParts.length - common;
+  const remainingTarget = targetParts.slice(common);
+
+  let relative = "";
+  if (upCount > 0) {
+    relative = "../".repeat(upCount) + remainingTarget.join("/");
+  } else {
+    relative = "./" + remainingTarget.join("/");
+  }
+
+  return relative.startsWith(".") ? relative : `./${relative}`;
 }
 
 export function isDocumentOrLayoutWrapper(target: string): boolean {
@@ -303,7 +358,8 @@ export function analyzeApplicationModule(source: string): { default: boolean; ex
       if (name && /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(name)) found.add(name);
     }
   }
-  return { default: /export\s+default\b/.test(source), exports: [...found].sort((a, b) => a.localeCompare(b)) };
+  const hasDefault = /export\s+default\b/.test(source) || /export\s*\{[^}]*\b(?:as\s+default|default)\b/.test(source);
+  return { default: hasDefault, exports: [...found].sort((a, b) => a.localeCompare(b)) };
 }
 
 export function isAllowedDevOrigin(origin: string): boolean {

@@ -1,5 +1,51 @@
 # Changelog
 
+## 0.1.6
+
+### Scene transitions
+
+- Added `SceneTransitionSchema` and `TRANSITION_PRESETS` to the core preview module, defining
+  transition types (crossfade, camera, focus) with configurable durations.
+- `ScenePreview` now cross-fades between scenes when the scene definition changes (detected via
+  node signature), using `requestAnimationFrame` and an ease-in-out timing function. Presentation-only
+  changes (same scene, different camera/focus) skip the transition to avoid visual disruption.
+- Added `TransitionPicker` component and wired `transition`/`onTransitionChange` props through
+  `SceneLibrary` → `SceneModuleLibrary` for UI-driven transition selection.
+- Added `SCENE_TRANSITION_DURATION` constant (300ms) with CSS styling in `previewTheme`.
+
+### Export quality
+
+- Added `--quality`/`crf` flag to `seene export` for controlling video encoding quality (CRF 0–51,
+  default 18 for high quality).
+- Improved ffmpeg encoding: lanczos scaling filter for higher-quality downscaling, explicit `-preset
+  medium` for consistent encode speed, and `-crf` for configurable quality/size tradeoff.
+- Added quality selector (High/Standard/Compact) to the export panel in ScenePreview.
+
+### Motion enhancements
+
+- Camera perspective is now animatable via motion tracks. The `CameraMotionSchema` includes
+  `perspective`, enabling cinematic zoom-in/zoom-out effects alongside position and rotation.
+- Added a perspective-zoom authoring check in `reviewAuthoring` to warn about clipping risk
+  when animating perspective.
+
+### Default duration
+
+- Extended default motion duration from 4000ms to 5000ms and added default speed of 0.8,
+  providing a more cinematic timing baseline for new scenes.
+
+### Inspector
+
+- Added camera motion preset buttons (Dolly, Orbit, Push, Pull) to `SceneInspector` for one-click
+  cinematic camera movement creation.
+- Added quality selector (High/Standard/Compact) to the export panel in ScenePreview.
+- Removed the `key` prop from `ScenePreview` in `SceneLibrary` rendering to enable proper
+  cross-fade transitions between scenes without full component remounts.
+
+### Depth/focus polish
+
+- Clamped blur radius in `Surface` to a maximum of 60px to prevent surfaces from becoming
+  completely unrecognizable when far from the focus plane.
+
 ## 0.1.5
 
 ### Fix: invalid-scenes regression test

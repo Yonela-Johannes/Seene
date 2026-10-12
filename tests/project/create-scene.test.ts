@@ -86,7 +86,9 @@ describe("Vite scene creation bridge", () => {
     const source = await readFile(path.join(directory, `${id}.tsx`), "utf8");
     expect(saved).toEqual(SceneRecipeSchema.parse(value));
     expect(saved.title).toBe(title);
-    expect(source).toContain("{children}");
+    expect(source).toContain("// @seene-scaffold-version 1");
+    expect(source).toContain('"use client";');
+    expect(source).not.toContain("{children}");
     expect(source).not.toContain(title);
     expect(ts.transpileModule(source, {
       fileName: `${id}.tsx`,

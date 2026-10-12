@@ -3,6 +3,7 @@ import { z } from "zod";
 export const InitProjectSchema = z.strictObject({
   packageSource: z.string().min(1).optional(),
   adapter: z.enum(["auto", "react"]).optional(),
+  hostPath: z.string().min(1).optional(),
 });
 export const SyncProjectSchema = z.strictObject({});
 export const LoadProjectSchema = z.strictObject({});

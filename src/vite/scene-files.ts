@@ -2,7 +2,7 @@ import { lstat, mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/
 import path from "node:path";
 import { SCENE_RECIPE_DIRECTORY, type SceneCatalog, type SceneRecipe } from "../core/recipes";
 import { RESOURCES } from "../core/resources";
-import { analyzeApplicationModule, classifyApplicationUnit, isApplicationSourcePath, isIconOrPrimitive, sceneComponentName, type PlatformContent } from "../core/platform";
+import { analyzeApplicationModule, classifyApplicationUnit, componentImportSpecifier, isApplicationSourcePath, isIconOrPrimitive, sceneComponentName, type PlatformContent } from "../core/platform";
 import { portableCatalog } from "../project/portable";
 import type { SceneIssue } from "../core/scene";
 
@@ -80,6 +80,13 @@ async function replaceIfUnchanged(root: string, target: string, before: string, 
   await rename(temporary, absolute);
 }
 
+import { createHash } from "node:crypto";
+
+// Note: SHA-256 hash covers the entire file content including the scaffold version marker line.
+function sha256(text: string): string {
+  return createHash("sha256").update(text, "utf8").digest("hex");
+}
+
 export async function syncCatalog(root: string): Promise<void> {
   const catalogTarget = "src/seene/catalog.js";
   const catalogPath = await resolveProjectTarget(root, catalogTarget).catch(() => undefined);
@@ -108,7 +115,13 @@ export async function syncCatalog(root: string): Promise<void> {
   catch { throw new PlatformFault("invalid-file", "Cannot safely refresh the generated catalog because .seene/integration.json is invalid.", manifestPath); }
   if (!manifest.files || typeof manifest.files[catalogTarget] !== "string")
     throw new PlatformFault("conflict", "The generated catalog is not recorded as a managed Seene file; run seene init to repair the connection.", manifestPath);
-  if (manifest.files[catalogTarget] !== before)
+
+  const recordedValue = manifest.files[catalogTarget] as string;
+  const recordedHash = /^[a-f0-9]{64}$/i.test(recordedValue.trim())
+    ? recordedValue.trim().toLowerCase()
+    : sha256(recordedValue);
+
+  if (recordedHash !== sha256(before))
     throw new PlatformFault("conflict", "The generated catalog was edited outside Seene; run npx seene sync to review and recover.", catalogTarget);
 
   const pendingTarget = ".seene/catalog-pending.json";
@@ -118,7 +131,7 @@ export async function syncCatalog(root: string): Promise<void> {
   const journal = JSON.stringify({ before, after: catalogText });
   await writeFile(pendingPath, journal, { encoding: "utf8", flag: "wx" });
   await replaceIfUnchanged(root, catalogTarget, before, catalogText);
-  manifest.files[catalogTarget] = catalogText;
+  manifest.files[catalogTarget] = sha256(catalogText);
   await replaceIfUnchanged(root, manifestPath, manifestText, JSON.stringify(manifest, null, 2) + "\n");
   await rm(pendingPath, { force: true });
 }
@@ -231,7 +244,4 @@ export async function discoverApplicationContent(root: string, limit = 400): Pro
   return { files: files.sort((a, b) => a.path.localeCompare(b.path)) };
 }
 
-export function componentImportSpecifier(target: string): string {
-  const relative = path.posix.relative(SCENE_RECIPE_DIRECTORY, target.replace(/\\/g, "/")).replace(/\.(?:tsx|jsx)$/, "");
-  return relative.startsWith(".") ? relative : `./${relative}`;
-}
+export { componentImportSpecifier };

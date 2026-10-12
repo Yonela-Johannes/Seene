@@ -11,6 +11,7 @@ export const ExportVideoSchema = z.strictObject({
   fps: ExportFrameRateSchema.default(60),
   width: z.number().int().min(64).max(3840).multipleOf(2).default(1440),
   height: z.number().int().min(64).max(3840).multipleOf(2).default(1000),
+  crf: z.number().int().min(0).max(51).default(18),
 });
 export const CaptureManifestSchema = z.strictObject({
   version: z.literal(1),

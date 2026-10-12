@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { validateScene, evaluateScene, transformToCss } from "../../src/core";
+import { validateScene, evaluateScene, transformToCss, cameraFromPose, uniformFocusBlur, focusForSurface, FocusSchema } from "../../src/core";
 
 describe("versioned scene contract", () => {
   it("derives defaults and preserves a data-only serializable recipe", () => {
@@ -78,6 +78,84 @@ describe("spatial evaluation", () => {
     expect(transformToCss({ x: 2, rotateY: 30 })).toBe(
       "translate3d(2px, 0px, 0px) rotateX(0deg) rotateY(30deg) rotateZ(0deg) scale(1)",
     );
+  });
+  it("cameraFromPose computes look-at rotation for common cinematic angles", () => {
+    const direct = cameraFromPose({
+      position: { x: 0, y: 0, z: 1200 },
+      target: { x: 0, y: 0, z: 0 },
+      perspective: 1400,
+    });
+    expect(direct.rotateX).toBeCloseTo(0);
+    expect(direct.rotateY).toBeCloseTo(0);
+    expect(direct.x).toBe(0);
+    expect(direct.z).toBe(1200);
+    expect(direct.perspective).toBe(1400);
+
+    const right = cameraFromPose({
+      position: { x: 0, y: 0, z: 1200 },
+      target: { x: 300, y: 0, z: 0 },
+      perspective: 1400,
+    });
+    expect(right.rotateY).toBeGreaterThan(0);
+
+    const up = cameraFromPose({
+      position: { x: 0, y: 0, z: 1200 },
+      target: { x: 0, y: -200, z: 0 },
+      perspective: 1400,
+    });
+    expect(up.rotateX).toBeGreaterThan(0);
+
+    const corner = cameraFromPose({
+      position: { x: 0, y: -400, z: 1000 },
+      target: { x: 0, y: 0, z: 0 },
+      perspective: 1400,
+    });
+    expect(corner.rotateX).toBeLessThan(0);
+  });
+  it("graduated blur increases with defocus distance and respects f-stop", () => {
+    const focus = FocusSchema.parse({});
+    const atFocus = evaluateScene({
+      version: 3,
+      focus: { distance: 1400, fStop: 8, maxBlur: 6 },
+      nodes: [{ id: "at-focus", transform: { z: 0 } }],
+    }).nodes[0]!.blur;
+    const close = evaluateScene({
+      version: 3,
+      focus: { distance: 1400, fStop: 8, maxBlur: 6 },
+      nodes: [{ id: "close", transform: { z: 200 } }],
+    }).nodes[0]!.blur;
+    const far = evaluateScene({
+      version: 3,
+      focus: { distance: 1400, fStop: 8, maxBlur: 6 },
+      nodes: [{ id: "far", transform: { z: -400 } }],
+    }).nodes[0]!.blur;
+    expect(atFocus).toBe(0);
+    expect(close).toBeGreaterThan(0);
+    expect(far).toBeGreaterThan(close);
+
+    const wide = evaluateScene({
+      version: 3,
+      focus: { distance: 1400, fStop: 1.4, maxBlur: 6 },
+      nodes: [{ id: "w", transform: { z: -400 } }],
+    }).nodes[0]!.blur;
+    expect(wide).toBeGreaterThan(far);
+
+    const sharp = evaluateScene({
+      version: 3,
+      focus: { distance: 1400, maxBlur: 0 },
+      nodes: [{ id: "sharp", transform: { z: 500 } }],
+    }).nodes[0]!.blur;
+    expect(sharp).toBe(0);
+  });
+  it("uniformFocusBlur produces graduated values across defocus distances", () => {
+    const focus = FocusSchema.parse({ distance: 1400, fStop: 8, maxBlur: 6 });
+     const atFocus = uniformFocusBlur({ depth: 0, distance: 0, span: 200, maxBlur: 6, scale: 1, fStop: 8, focalLength: 50 }, 200) ?? 0;
+    const near = uniformFocusBlur({ depth: 100, distance: 100, span: 200, maxBlur: 6, scale: 1, fStop: 8, focalLength: 50 }, 200) ?? 0;
+    const far = uniformFocusBlur({ depth: -100, distance: 100, span: 200, maxBlur: 6, scale: 1, fStop: 8, focalLength: 50 }, 200) ?? 0;
+    const farther = uniformFocusBlur({ depth: -300, distance: 300, span: 200, maxBlur: 6, scale: 1, fStop: 8, focalLength: 50 }, 200) ?? 0;
+    expect(atFocus).toBe(0);
+    expect(far).toBeGreaterThanOrEqual(near);
+    expect(farther).toBeGreaterThanOrEqual(far);
   });
 });
 

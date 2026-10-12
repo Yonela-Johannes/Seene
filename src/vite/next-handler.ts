@@ -1,10 +1,12 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
+import { readFile, lstat } from "node:fs/promises";
+import path from "node:path";
 import { SceneRecipeSchema } from "../core/recipes";
-import { sceneComponentSource } from "../core/platform";
-import { PlatformFault, writeSceneSourcePair } from "./scene-files";
+import { sceneComponentSource, validateHostComponent } from "../core/platform";
+import { PlatformFault, writeSceneSourcePair, componentImportSpecifier } from "./scene-files";
 
 const maxBodyBytes = 256_000;
-type Result = { status: number; body: { success?: true; id?: string; error?: string } };
+type Result = { status: number; body: { success?: true; id?: string; error?: string; warning?: string } };
 type ReadResult = { kind: "ok"; text: string } | { kind: "too-large" } | { kind: "unreadable" };
 
 function json(response: ServerResponse, status: number, body: unknown): void {
@@ -53,16 +55,36 @@ async function createScene(payload: unknown, root: string): Promise<Result> {
   if (process.env.NODE_ENV !== "development") return jsonError(404, "Scene creation is available only in development.");
   if (!payload || typeof payload !== "object" || !("id" in payload) || !("recipe" in payload) || typeof payload.id !== "string")
     return jsonError(400, "Missing scene id or recipe.");
-  const input = payload as { id: string; recipe: unknown };
+  const input = payload as { id: string; recipe: unknown; hostPath?: string };
   const parsed = SceneRecipeSchema.safeParse(input.recipe);
   if (!parsed.success || parsed.data.id !== input.id)
     return jsonError(400, parsed.success
       ? `Scene id "${input.id}" does not match recipe id "${parsed.data.id}".`
       : parsed.error.issues.map(issue => `${issue.path.join(".")}: ${issue.message}`).join("; "));
   try {
-    const outcome = await writeSceneSourcePair(root, parsed.data.id, parsed.data, sceneComponentSource({ id: parsed.data.id }));
+    let content: { importSpecifier: string; export?: string } | undefined = undefined;
+    let warning: string | undefined = undefined;
+
+    if (input.hostPath) {
+      const hostRel = input.hostPath.trim();
+      const absolute = path.resolve(root, hostRel);
+      const stat = await lstat(absolute).catch(() => undefined);
+      if (!stat?.isFile()) return jsonError(400, `Host component path "${hostRel}" does not exist.`);
+      const source = await readFile(absolute, "utf8").catch(() => undefined);
+      if (source === undefined) return jsonError(400, `Host component path "${hostRel}" could not be read.`);
+      try {
+        const val = validateHostComponent(hostRel, source);
+        warning = val.warning;
+      } catch (err: any) {
+        return jsonError(400, err?.message || String(err));
+      }
+      content = { importSpecifier: componentImportSpecifier(hostRel) };
+    }
+
+    const componentSource = sceneComponentSource({ id: parsed.data.id, content });
+    const outcome = await writeSceneSourcePair(root, parsed.data.id, parsed.data, componentSource);
     if (outcome === "exists") return jsonError(409, `Scene "${parsed.data.id}" already exists or has an incomplete source pair.`);
-    return { status: 200, body: { success: true, id: parsed.data.id } };
+    return { status: 200, body: { success: true, id: parsed.data.id, ...(warning ? { warning } : {}) } };
   } catch (error) {
     if (error instanceof PlatformFault && error.code === "denied-path") return jsonError(400, error.message);
     return jsonError(500, error instanceof Error ? error.message : "Unable to create scene files.");

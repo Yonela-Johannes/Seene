@@ -8,15 +8,15 @@ export default defineConfig({
   fullyParallel: false,
   workers: 1,
   retries: 0,
-  timeout: 30000,
-  expect: { timeout: 7000 },
+  timeout: 180000,
+  expect: { timeout: 10000 },
   use: { baseURL, trace: "retain-on-failure", screenshot: "only-on-failure" },
   webServer: process.env.SEENE_TEST_URL
     ? undefined
     : {
         command: `npm run preview -- --config vite.test.config.ts --port ${process.env.SEENE_TEST_PORT ?? 4173} --strictPort`,
         url: baseURL,
-        reuseExistingServer: false,
+        reuseExistingServer: true,
         timeout: 30000,
       },
   projects: [

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useId, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { SUPPORTED_EXPORT_FPS, ExportFrameRateSchema, type PreviewDefinitionInput } from "../core";
+import { SUPPORTED_EXPORT_FPS, ExportFrameRateSchema, SCENE_TRANSITION_DURATION, type TransitionPresetName, type PreviewDefinition, type PreviewDefinitionInput } from "../core";
 import { Scene, SceneErrorBoundary, useSceneCapture } from "../react";
 import { resolvePresentation } from "../core";
 import { usePreviewSession } from "./session";
@@ -8,8 +8,11 @@ import { usePreviewConnection, type PreviewHot } from "./connection";
 import { BrandAttribution } from "./BrandAttribution";
 import { GettingStarted } from "./GettingStarted";
 import { PresentationPicker } from "./PresentationPicker";
+import { TransitionPicker } from "./TransitionPicker";
 import { SceneInspector } from "./SceneInspector";
 import { previewTheme } from "./theme";
+
+const easeInOut = (t: number) => t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
 
 export type ScenePreviewProps = {
   definition?: PreviewDefinitionInput;
@@ -21,6 +24,8 @@ export type ScenePreviewProps = {
   hot?: PreviewHot;
   presentation?: string;
   onPresentationChange?: (id: string) => void;
+  transition?: TransitionPresetName;
+  onTransitionChange?: (id: TransitionPresetName | undefined) => void;
 };
 const timeLabel = (ms: number) => `${Math.floor(ms / 60000)}:${String(Math.floor(ms / 1000) % 60).padStart(2,"0")}`;
 function Glyph({kind}: {kind: "play" | "pause" | "restart" | "export"}) {
@@ -43,10 +48,11 @@ function ExportMenu({disabled, panelHost}: {disabled: boolean; panelHost: HTMLDi
   }, [disabled, open, panelHost]);
   const details = useRef<HTMLDetailsElement>(null);
   const [fps, setFps] = useState(60);
+  const [crf, setCrf] = useState(18);
   const [copied, setCopied] = useState(false);
   const [copyError, setCopyError] = useState(false);
   const quote = (value: string) => "'" + value.replaceAll("'", "'\\''") + "'";
-  const command = `pnpm exec seene export --url ${quote(typeof location === "undefined" ? "http://localhost:5173" : location.href)} --output scene-${fps}.mp4 --fps ${fps}`;
+  const command = `pnpm exec seene export --url ${quote(typeof location === "undefined" ? "http://localhost:5173" : location.href)} --output scene-${fps}.mp4 --fps ${fps} --quality ${crf}`;
   return disabled ? <button className="seene-control" disabled><Glyph kind="export"/>Export</button> :
     <details className="seene-export" ref={details} onToggle={event => setOpen(event.currentTarget.open)}><summary className="seene-control seene-primary" aria-controls={panelId}><Glyph kind="export"/>Export</summary>
       {open && panelHost && createPortal(<div id={panelId} role="region" aria-label="Export your scene" className="seene-export-panel seene-chrome" onKeyDown={event => {
@@ -59,6 +65,11 @@ function ExportMenu({disabled, panelHost}: {disabled: boolean; panelHost: HTMLDi
         <p>Run this in your project to save an MP4. Use a new filename for each export.</p>
         <label>Frame rate<select aria-label="Export frame rate" value={fps} onChange={event => {setFps(ExportFrameRateSchema.parse(Number(event.target.value)));setCopied(false);}}>
           {SUPPORTED_EXPORT_FPS.map(value => <option key={value} value={value}>{value} fps</option>)}
+        </select></label>
+        <label>Quality<select aria-label="Export quality (CRF)" value={crf} onChange={event => {setCrf(Number(event.target.value));setCopied(false);}}>
+          <option value={18}>High (CRF 18)</option>
+          <option value={23}>Standard (CRF 23)</option>
+          <option value={28}>Compact (CRF 28)</option>
         </select></label><code>{command}</code>
         <button className="seene-control seene-primary" onClick={async () => {
           try { await navigator.clipboard.writeText(command);setCopied(true);setCopyError(false); }
@@ -69,7 +80,7 @@ function ExportMenu({disabled, panelHost}: {disabled: boolean; panelHost: HTMLDi
     </details>;
 }
 
-export function ScenePreview({definition: input, children, title = "Untitled scene", backHref, onBack, revision, hot, presentation, onPresentationChange}: ScenePreviewProps) {
+export function ScenePreview({definition: input, children, title = "Untitled scene", backHref, onBack, revision, hot, presentation, onPresentationChange, transition, onTransitionChange}: ScenePreviewProps) {
   const presented = useMemo(
     () => (input === undefined ? undefined : resolvePresentation(input, presentation)),
     [input, presentation],
@@ -97,6 +108,47 @@ export function ScenePreview({definition: input, children, title = "Untitled sce
   }, [viewport]);
   const definition = session.definition;
   const blocked = !session.valid || !connection.connected || !!connection.error || !!renderError;
+  const [prevDefinition, setPrevDefinition] = useState<PreviewDefinition | undefined>(undefined);
+  const [transitionProgress, setTransitionProgress] = useState(0);
+  const prevDefinitionRef = useRef<PreviewDefinition | undefined>(undefined);
+  const sceneSignature = definition ? JSON.stringify(definition.scene.nodes) : "";
+  useEffect(() => {
+    if (definition && definition !== prevDefinitionRef.current) {
+      const prevSignature = prevDefinitionRef.current ? JSON.stringify(prevDefinitionRef.current.scene.nodes) : "";
+      if (prevSignature && prevSignature !== sceneSignature) {
+        setPrevDefinition(prevDefinitionRef.current);
+        setTransitionProgress(0);
+        const start = performance.now();
+        const animate = () => {
+          const elapsed = performance.now() - start;
+          const progress = Math.min(elapsed / SCENE_TRANSITION_DURATION, 1);
+          setTransitionProgress(progress);
+          if (progress < 1) {
+            if (typeof requestAnimationFrame !== "undefined") {
+              requestAnimationFrame(animate);
+            } else {
+              setTimeout(animate, 16);
+            }
+          }
+        };
+        if (typeof requestAnimationFrame !== "undefined") {
+          requestAnimationFrame(animate);
+        } else {
+          setTimeout(animate, 16);
+        }
+      }
+      prevDefinitionRef.current = definition;
+    }
+  }, [definition, sceneSignature]);
+  useEffect(() => {
+    if (transitionProgress >= 1 && prevDefinition) {
+      const timer = setTimeout(() => {
+        setPrevDefinition(undefined);
+        setTransitionProgress(0);
+      }, 50);
+      return () => clearTimeout(timer);
+    }
+  }, [transitionProgress, prevDefinition]);
   const captureSeek = useCallback((ms: number) => {
     if (blocked) throw new Error("Correct the scene before exporting.");
     session.seek(ms);
@@ -129,15 +181,38 @@ export function ScenePreview({definition: input, children, title = "Untitled sce
         <SceneErrorBoundary resetKey={resetKey} onError={failure} onReset={() => setRenderError("")}>
           {definition && viewport && createPortal(
             <div className="seene-canvas" data-seene-capture="scene" data-seene-valid={blocked ? "false" : "true"}
-              style={{width: "100%", height: "100%"}}>
-              <div style={{position: "absolute", left: "50%", top: "50%", width: definition.width, height: definition.height, transform: `translate(-50%, -50%) scale(${scale})`, transformOrigin: "center"}}>
-                <Scene camera={definition.scene.camera} focus={definition.scene.focus} motion={definition.motion}
-                  timeMs={session.timeMs} onDiagnostics={session.onDiagnostics} style={{width: definition.width, height: definition.height}}>
+              style={{width: "100%", height: "100%", position: "relative"}}>
+            {prevDefinition && transitionProgress < 1 && (
+              <div style={{
+                position: "absolute", left: "50%", top: "50%",
+                width: prevDefinition.width, height: prevDefinition.height,
+                transform: `translate(-50%, -50%) scale(${scale})`, transformOrigin: "center",
+                opacity: 1 - easeInOut(transitionProgress),
+                transition: `opacity ${SCENE_TRANSITION_DURATION}ms ease-out`,
+                pointerEvents: "none",
+              }}>
+                <Scene camera={prevDefinition.scene.camera} focus={prevDefinition.scene.focus} motion={prevDefinition.motion}
+                  recipeNodes={prevDefinition.scene.nodes}
+                  timeMs={session.timeMs} onDiagnostics={session.onDiagnostics} style={{width: prevDefinition.width, height: prevDefinition.height}}>
                   {children}
                 </Scene>
               </div>
-              <Capture durationMs={session.durationMs} seek={captureSeek}/>
-            </div>, viewport)}
+            )}
+            <div style={{
+              position: "absolute", left: "50%", top: "50%",
+              width: definition.width, height: definition.height,
+              transform: `translate(-50%, -50%) scale(${scale})`, transformOrigin: "center",
+              opacity: prevDefinition && transitionProgress < 1 ? easeInOut(transitionProgress) : 1,
+              transition: `opacity ${SCENE_TRANSITION_DURATION}ms ease-out`,
+            }}>
+              <Scene camera={definition.scene.camera} focus={definition.scene.focus} motion={definition.motion}
+                recipeNodes={definition.scene.nodes}
+                timeMs={session.timeMs} onDiagnostics={session.onDiagnostics} style={{width: definition.width, height: definition.height}}>
+                {children}
+              </Scene>
+            </div>
+            <Capture durationMs={session.durationMs} seek={captureSeek}/>
+          </div>, viewport)}
         </SceneErrorBoundary>
         <div className="seene-header">
           <div className="seene-heading">
@@ -152,6 +227,7 @@ export function ScenePreview({definition: input, children, title = "Untitled sce
           <ExportMenu disabled={blocked || !session.durationMs} panelHost={exportPanel}/>
         </div>
         {onPresentationChange && <PresentationPicker value={presentation} onChange={onPresentationChange} />}
+        {onTransitionChange && <TransitionPicker value={transition} onChange={onTransitionChange} />}
         {!definition && <GettingStarted/>}
         <div className="seene-dock">
           <button className="seene-control seene-primary seene-icon" disabled={blocked || !session.durationMs}

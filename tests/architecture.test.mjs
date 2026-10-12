@@ -351,3 +351,12 @@ test('framework connection cannot duplicate canonical recipe discovery', () => {
   const issues=checkArchitecture({'src/project/other.ts':'export async function discoverRecipes() { return {}; }'});
   assert.ok(issues.length);
 });
+
+test('dist/library/preview.js and dist/library/index.js do not import Node-only modules', async () => {
+  const { readFile } = await import('node:fs/promises');
+  for (const entry of ['dist/library/preview.js', 'dist/library/index.js']) {
+    const text = await readFile(path.join(root, entry), 'utf8');
+    assert.ok(!/from\s*["']node:/.test(text), `${entry} statically imports a node: module`);
+    assert.ok(!/require\(\s*["']node:/.test(text), `${entry} requires a node: module`);
+  }
+});

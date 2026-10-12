@@ -88,7 +88,7 @@ export async function openCapture(input: Pick<ExportVideo,"url"|"width"|"height"
           await scopedPath(scope.root, scope.output);
           temporary = await mkdtemp(path.join(path.dirname(target), ".seene-export-"));
           const video = path.join(temporary, "video.mp4");
-          encoder = spawn("ffmpeg", ["-hide_banner", "-loglevel", "error", "-nostdin", "-f", "image2pipe", "-framerate", String(options.fps), "-vcodec", "png", "-i", "pipe:0", "-an", "-vf", `scale=${options.width}:${options.height}:force_original_aspect_ratio=decrease,pad=${options.width}:${options.height}:(ow-iw)/2:(oh-ih)/2`, "-c:v", "libx264", "-pix_fmt", "yuv420p", "-movflags", "+faststart", "-frames:v", String(frames), "-n", video], { cwd: scope.root, shell: false, stdio: ["pipe", "ignore", "pipe"] });
+          encoder = spawn("ffmpeg", ["-hide_banner", "-loglevel", "error", "-nostdin", "-f", "image2pipe", "-framerate", String(options.fps), "-vcodec", "png", "-i", "pipe:0", "-an", "-vf", `scale=${options.width}:${options.height}:flags=lanczos,pad=${options.width}:${options.height}:(ow-iw)/2:(oh-ih)/2`, "-c:v", "libx264", "-pix_fmt", "yuv420p", "-crf", String(options.crf), "-preset", "medium", "-movflags", "+faststart", "-frames:v", String(frames), "-n", video], { cwd: scope.root, shell: false, stdio: ["pipe", "ignore", "pipe"] });
           const timeout = setTimeout(() => encoder?.kill("SIGKILL"), 15 * 60_000);
           let stderr = "";
           encoder.stderr?.on("data", chunk => { stderr = (stderr + chunk.toString()).slice(-4096); });

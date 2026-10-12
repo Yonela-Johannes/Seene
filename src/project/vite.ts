@@ -24,6 +24,31 @@ export function SeeneProjectPreview(props${typed ? ': Omit<ComponentProps<typeof
 `;
   return { path, specifier, text };
 }
+export function extractSurfaceIds(source: string, filename: string): { literalIds: Set<string>; dynamicCount: number } {
+  const literalIds = new Set<string>();
+  let dynamicCount = 0;
+  const file = ts.createSourceFile(filename, source, ts.ScriptTarget.Latest, true,
+    /\.[jt]sx$/.test(filename) ? ts.ScriptKind.TSX : ts.ScriptKind.TS);
+  const walk = (node: ts.Node) => {
+    if ((ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) && ts.isIdentifier(node.tagName)
+      && (node.tagName.text === "Surface" || node.tagName.text === "Motion")) {
+      const idAttr = node.attributes.properties.find(attr => ts.isJsxAttribute(attr) && ts.isIdentifier(attr.name) && attr.name.text === "id");
+      if (idAttr && ts.isJsxAttribute(idAttr) && idAttr.initializer) {
+        if (ts.isStringLiteral(idAttr.initializer)) {
+          literalIds.add(idAttr.initializer.text);
+        } else if (ts.isJsxExpression(idAttr.initializer) && idAttr.initializer.expression && ts.isStringLiteral(idAttr.initializer.expression)) {
+          literalIds.add(idAttr.initializer.expression.text);
+        } else {
+          dynamicCount++;
+        }
+      }
+    }
+    ts.forEachChild(node, walk);
+  };
+  walk(file);
+  return { literalIds, dynamicCount };
+}
+
 function unsupported(message: string): never { throw fault("unsupported-project", message); }
 function parse(source: string, filename: string) {
   const file = ts.createSourceFile(filename, source, ts.ScriptTarget.Latest, true,

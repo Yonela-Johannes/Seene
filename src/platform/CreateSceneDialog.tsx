@@ -17,6 +17,7 @@ export function CreateSceneDialog({ project, onClose, onCreated }: { project: st
   const content = useResource(`content:${project}`, () => platformApi.content(project));
   const [title, setTitle] = useState("");
   const [choice, setChoice] = useState("");
+  const [customHostPath, setCustomHostPath] = useState("");
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const id = useMemo(() => sceneIdFromTitle(title), [title]);
@@ -31,7 +32,7 @@ export function CreateSceneDialog({ project, onClose, onCreated }: { project: st
     setSaving(true);
     setError("");
     try {
-      const selection = parseSelection(choice);
+      const selection = customHostPath.trim() ? { file: customHostPath.trim() } : parseSelection(choice);
       const created = await platformApi.createScene({ path: project, id, title: title.trim(), content: selection });
       onCreated(created.scene.id);
     } catch (failure) {
@@ -90,6 +91,11 @@ export function CreateSceneDialog({ project, onClose, onCreated }: { project: st
             <p className="text-xs text-[var(--seene-text-muted)]">
               {content.loading ? "Reading your application…" : content.data ? `${content.data.content.files.length} application targets (Pages, Sections, Components) found.` : content.error || "Application content could not be read."}
             </p>
+          </div>
+
+          <div className="space-y-2">
+            <label className="block text-sm font-medium text-[var(--seene-text)]" htmlFor="scene-host-path">Component to present (optional)</label>
+            <input id="scene-host-path" className={fieldClass} value={customHostPath} placeholder="e.g. src/components/Header.tsx" onChange={event => setCustomHostPath(event.target.value)} />
           </div>
 
           {error && <Notice>{error}</Notice>}

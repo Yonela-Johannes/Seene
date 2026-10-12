@@ -22,7 +22,7 @@ seene scenes [--project DIR] [--json]
 seene snapshot --scene ID --url ORIGIN [--time MS] [--project DIR] [--json]
 seene load [--scene ID] [--project DIR] [--json]
 seene validate [--project DIR]
-seene export --url URL --output FILE [--fps 30|60|120] [--width N --height N] [--project DIR] [--json]
+seene export --url URL --output FILE [--fps 30|60|120] [--width N --height N] [--quality N] [--project DIR] [--json]
 
 One-step setup in a React DOM app (React 18.2+ or 19): npx @thatg33k/seene init
 init installs @thatg33k/seene with your package manager, connects the app and writes SEENE.md.
@@ -71,7 +71,7 @@ export async function runCli(argv: string[], environment: Environment, execute: 
   const flags = new Map<string, string | true>();
   for (let i = 0; i < args.length; i++) {
     const flag = args[i];
-    if (!(command === "snapshot" ? ["--project","--url","--scene","--time","--json"] : command === "export" ? ["--project", "--url", "--output", "--fps", "--width", "--height", "--json"] : ["--project", "--package", "--url", "--no-open", "--json", "--scene", "--adapter"]).includes(flag)) return fail(`Unknown option: ${flag}`);
+    if (!(command === "snapshot" ? ["--project","--url","--scene","--time","--json"] : command === "export" ? ["--project", "--url", "--output", "--fps", "--width", "--height", "--quality", "--json"] : ["--project", "--package", "--url", "--no-open", "--json", "--scene", "--adapter", "--host"]).includes(flag)) return fail(`Unknown option: ${flag}`);
     if (flags.has(flag)) return fail(`Duplicate option: ${flag}`);
     if (["--no-open", "--json"].includes(flag)) flags.set(flag, true);
     else {
@@ -82,6 +82,7 @@ export async function runCli(argv: string[], environment: Environment, execute: 
   }
   if (flags.has("--adapter") && command !== "init") return fail("--adapter is only valid for init.");
   if (flags.has("--package") && command !== "init") return fail("--package is only valid for init.");
+  if (flags.has("--host") && command !== "init") return fail("--host is only valid for init.");
   if (flags.has("--scene") && !["load", "open", "snapshot"].includes(command)) return fail("--scene is only valid for load, open or snapshot.");
   if (["load", "validate", "scenes", "sync"].includes(command) && (flags.has("--url") || flags.has("--no-open"))) return fail("Preview options require init or open.");
   if (command === "init" && flags.has("--no-open") && !flags.has("--url")) return fail("init --no-open requires --url. To initialize without opening a browser, run seene init.");
@@ -106,14 +107,15 @@ export async function runCli(argv: string[], environment: Environment, execute: 
   if (command === "export") {
     if (!flags.has("--url") || !flags.has("--output")) return fail("export requires --url and --output.");
     const input = { url: flags.get("--url"), output: flags.get("--output"),
-      ...Object.fromEntries(["fps", "width", "height"].filter(key => flags.has(`--${key}`)).map(key => [key, Number(flags.get(`--${key}`))])) };
+      ...Object.fromEntries(["fps", "width", "height"].filter(key => flags.has(`--${key}`)).map(key => [key, Number(flags.get(`--${key}`))])),
+      ...(flags.has("--quality") ? { crf: Number(flags.get("--quality")) } : {}) };
     try {
       const result = await exporter(input, context);
       if (!result.success) return { code: 1, stdout: "", stderr: (json ? JSON.stringify(result) : result.issues.map(i => `${i.code}: ${i.message}`).join("\n")) + "\n" };
       return { code: 0, stdout: (json ? JSON.stringify(result) : `Exported ${result.data.output} (${result.data.frames} frames at ${result.data.fps} FPS).`) + "\n", stderr: "" };
     } catch { return { code: 1, stdout: "", stderr: "Video export failed unexpectedly. Check the local scene server and retry.\n" }; }
   }
-  const input = command === "init" ? { ...(flags.has("--adapter") ? {adapter:flags.get("--adapter")} : {}), ...(flags.has("--package") ? { packageSource: flags.get("--package") } : {}) }
+  const input = command === "init" ? { ...(flags.has("--adapter") ? {adapter:flags.get("--adapter")} : {}), ...(flags.has("--package") ? { packageSource: flags.get("--package") } : {}), ...(flags.has("--host") ? { hostPath: flags.get("--host") as string } : {}) }
     : command === "open" ? { url: flags.get("--url") ?? `http://127.0.0.1:${environment.port ?? "5173"}`, launch: !flags.has("--no-open") } : {};
   const onboarding = command === "init" ? {terminal:environment.terminal, streamed:!json && !!environment.progress} : undefined;
   if (onboarding?.streamed) environment.progress!(terminalWelcome(environment.terminal) + "Preparing your project…\n");

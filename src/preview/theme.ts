@@ -20,6 +20,7 @@ ${studioTheme}
 .seene-control:hover{background:#3a3a3a}.seene-control:disabled{opacity:.45;cursor:default}
 .seene-control:focus-visible,.seene-timeline:focus-visible,.seene-export-panel select:focus-visible,[data-seene-error] button:focus-visible{outline:2px solid #fff;outline-offset:3px}
 .seene-presentations{display:flex;flex-direction:column;align-items:center;gap:7px;width:100%;min-width:0;flex-shrink:0}
+.seene-transitions{display:flex;flex-direction:column;align-items:center;gap:7px;width:100%;min-width:0;flex-shrink:0}
 .seene-presentation-rail{display:flex;gap:6px;max-width:100%;overflow-x:auto;overscroll-behavior-x:contain;padding:2px;scrollbar-width:none}
 .seene-presentation-rail::-webkit-scrollbar{display:none}
 .seene-presentation-rail .seene-control{min-height:36px;padding:8px 14px;font-size:12px}

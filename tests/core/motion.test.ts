@@ -64,6 +64,7 @@ describe("explicit scene time motion", () => {
       (property) => track({ kind: "camera" }, property, -100, 100),
     );
     tracks.push(
+      track({ kind: "camera" }, "perspective", 1000, 2000),
       track({kind:"focus"},"distance",1000,1400),
       track({kind:"focus"},"fStop",4,12),
       track({kind:"focus"},"focalLength",40,60),
@@ -71,7 +72,7 @@ describe("explicit scene time motion", () => {
     );
     expect(evaluateMotion(motion(tracks), 500)).toEqual({
       surfaces: {},
-      camera: { x: 0, y: 0, z: 0, rotateX: 0, rotateY: 0, rotateZ: 0 },
+      camera: { x: 0, y: 0, z: 0, perspective: 1500, rotateX: 0, rotateY: 0, rotateZ: 0 },
       focus: { distance:1200, fStop:8, focalLength:50, maxBlur:16 },
       issues: [],
     });

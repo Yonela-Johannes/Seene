@@ -3,6 +3,7 @@ import type { SceneIssue } from "../core";
 import type { ApplicationIssue } from "./application";
 import { SceneLibrary } from "./SceneLibrary";
 import { usePreviewConnection, type PreviewHot } from "./connection";
+import type { TransitionPresetName } from "../core/preview";
 
 export type SceneModules = Record<string, () => Promise<unknown>>;
 const pause = () => {};
@@ -14,6 +15,8 @@ export function SceneModuleLibrary({
   applicationRoute,
   createSceneEndpoint,
   onApplicationIssue,
+  transition,
+  onTransitionChange,
 }: {
   modules: SceneModules;
   hot?: PreviewHot;
@@ -22,6 +25,8 @@ export function SceneModuleLibrary({
   applicationRoute?: string;
   createSceneEndpoint?: string;
   onApplicationIssue?: (issue: ApplicationIssue) => void;
+  transition?: TransitionPresetName;
+  onTransitionChange?: (value: TransitionPresetName | undefined) => void;
 }) {
   const connection = usePreviewConnection(hot, pause);
   const [state, setState] = useState<{
@@ -117,8 +122,10 @@ export function SceneModuleLibrary({
       hot={hot}
       backHref={backHref}
       applicationRoute={applicationRoute}
-      createSceneEndpoint={createSceneEndpoint}
-      onApplicationIssue={onApplicationIssue}
-    />
-  );
-}
+       createSceneEndpoint={createSceneEndpoint}
+       onApplicationIssue={onApplicationIssue}
+       transition={transition}
+       onTransitionChange={onTransitionChange}
+     />
+   );
+ }

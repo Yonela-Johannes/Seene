@@ -7,6 +7,27 @@ import { ProjectResultSchema, ProjectStateSchema, type ProjectResult, type Proje
 import * as services from "./services";
 import { fault } from "./errors";
 import { generatedPreview, htmlEntry, inspectConfig, inspectEntry } from "./vite";
+import { validateHostComponent, createSceneRecipe, sceneComponentSource, sceneIdFromTitle, componentImportSpecifier } from "../core/platform";
+
+// Note: SHA-256 hash covers the entire file content including the scaffold version marker line.
+export function sha256(text: string): string {
+  return services.computeContentHash(text);
+}
+
+export function parseManifestHashes(files: Record<string, unknown>): Record<string, string> {
+  const result: Record<string, string> = {};
+  for (const [key, value] of Object.entries(files)) {
+    if (typeof value !== "string") continue;
+    const normalizedKey = key.replace(/\\/g, "/");
+    if (normalizedKey.includes("..") || normalizedKey.startsWith("/") || normalizedKey.includes("\0")) continue;
+    if (/^[a-f0-9]{64}$/i.test(value.trim())) {
+      result[normalizedKey] = value.trim().toLowerCase();
+    } else {
+      result[normalizedKey] = sha256(value);
+    }
+  }
+  return result;
+}
 
 const PackageSchema = z.object({
   name: z.string().optional(), version: z.string().optional(), packageManager: z.string().optional(),
@@ -57,7 +78,8 @@ function agentHandoff(manager: PackageManager = "pnpm", adapter?: ProjectState["
   const sync = adapter === "next-app" || adapter === "next-pages" || adapter === "react"
     ? `For Next.js and manual React connections, run \`${run} sync\` after adding or removing scene/component pairs; this refreshes the generated static import catalog.`
     : "The Vite glob discovers recipe/component pairs directly; its development server refreshes the catalog when those files change.";
-  const text = `# ${SEENE_BRAND.title}
+  const text = `<!-- @seene-scaffold-version 1 -->
+# ${SEENE_BRAND.title}
 
 ${SEENE_BRAND.url}
 
@@ -204,9 +226,9 @@ async function previewAdapterFor(root: string, entry: string) {
     throw fault("conflict", "Seene preview adapter already contains different content. Move or rename it, then retry seene init.", adapter.path);
   return { ...adapter, existing };
 }
-async function initialize(root: string, packageSource: string | undefined, requestedAdapter?: string, version?: string): Promise<ProjectResult> {
+async function initialize(root: string, packageSource: string | undefined, requestedAdapter?: string, version?: string, hostPath?: string): Promise<ProjectResult> {
   const portable = await portableHost(root, requestedAdapter);
-  if (portable) return initializePortable(root, portable, packageSource, version);
+  if (portable) return initializePortable(root, portable, packageSource, version, hostPath);
   const host = await inspectProject(root);
   const adapter = await previewAdapterFor(root, host.entry);
   const adapterText = adapter.existing;
@@ -346,7 +368,10 @@ export async function executeProjectCommand(operation: unknown, input: unknown, 
     if (!context || typeof context.root !== "string") throw fault("invalid-scope", "Provide an absolute local project root.");
     const root = await services.canonicalRoot(context.root);
     let result: ProjectResult;
-    if (operation === "init-project") result = await initialize(root, (parsed.data as z.output<typeof RESOURCES["init-project"]>).packageSource, (parsed.data as z.output<typeof RESOURCES["init-project"]>).adapter, context.version);
+    if (operation === "init-project") {
+      const initData = parsed.data as z.output<typeof RESOURCES["init-project"]>;
+      result = await initialize(root, initData.packageSource, initData.adapter, context.version, initData.hostPath);
+    }
     else if (operation === "sync-project") result = await synchronize(root);
     else if (operation === "open-preview") result = await openPreview(root, parsed.data as z.output<typeof RESOURCES["open-preview"]>);
     else result = { success: true, data: { project: await load(root) } };
@@ -360,7 +385,7 @@ export async function executeProjectCommand(operation: unknown, input: unknown, 
     }] };
   }
 }
-const ManagedSchema = z.strictObject({project:ProjectStateSchema,files:z.record(z.string(),z.string())});
+const ManagedSchema = z.strictObject({project:ProjectStateSchema,files:z.record(z.string(),z.unknown())});
 const managedPath = ".seene/integration.json";
 const portablePendingPath = ".seene/integration-pending.json";
 type PortableHost = {adapter:"react"|"next-app"|"next-pages";entry:string};
@@ -463,7 +488,7 @@ async function portableFiles(root:string, project:ProjectState, catalog:string) 
   const files = portableIntegration(project,catalog);
   return files;
 }
-async function initializePortable(root:string, host:PortableHost, packageSource?:string, version?:string):Promise<ProjectResult> {
+async function initializePortable(root:string, host:PortableHost, packageSource?:string, version?:string, hostPath?:string):Promise<ProjectResult> {
   const saved=await stateFor(root);
   const pendingText=await services.readText(root,portablePendingPath);
   const pending=pendingText===undefined?undefined:decode(pendingText,ManagedSchema,portablePendingPath);
@@ -474,20 +499,72 @@ async function initializePortable(root:string, host:PortableHost, packageSource?
   const project=saved.project??pending?.project??ProjectStateSchema.parse({version:1,projectId:services.newProjectId(),entry:host.entry,packageManager:manager,adapter:host.adapter});
   if(project.adapter!==host.adapter||project.entry!==host.entry)throw fault("conflict","Existing Seene setup uses another host connection.");
   for(const record of [pending,existing])if(record && JSON.stringify(record.project)!==JSON.stringify(project))throw fault("conflict","Seene setup identity changed.");
-  const catalog=existing?.files["src/seene/catalog.js"]??pending?.files["src/seene/catalog.js"]??await catalogSource(root);
+
+  let hostWarning: string | undefined = undefined;
+  if (hostPath) {
+    const hostSource = await services.readText(root, hostPath);
+    if (hostSource === undefined) throw fault("not-found", `Host component path "${hostPath}" does not exist.`, hostPath);
+    const validation = validateHostComponent(hostPath, hostSource);
+    hostWarning = validation.warning;
+
+    const baseName = hostPath.replace(/^.*[/\\]/, "").replace(/\.[^.]+$/, "");
+    const id = sceneIdFromTitle(baseName) || "scene";
+    const importSpec = componentImportSpecifier(hostPath);
+    const recipe = createSceneRecipe({ id, title: baseName });
+    const compSource = sceneComponentSource({ id, content: { importSpecifier: importSpec } });
+    await services.writeSceneSourcePair(root, id, recipe, compSource);
+  }
+
+  const catalog=await catalogSource(root);
   const files=await portableFiles(root,project,catalog);
   const generated=agentHandoff(manager,project.adapter);
   files[generated.handoff.path]=generated.text;
-  if(pending && JSON.stringify(pending.files)!==JSON.stringify(files))throw fault("conflict","Pending setup differs.");
+
+  const existingHashes = existing ? parseManifestHashes(existing.files) : {};
+  const pendingHashes = pending ? parseManifestHashes(pending.files) : {};
+
   if(existing) {
-    for(const target of Object.keys(existing.files))
+    for(const target of Object.keys(existingHashes))
       if(target!=="SEENE.md" && !Object.hasOwn(files,target))throw fault("conflict","A previously managed Seene file is no longer part of this integration.",target);
   }
-  for(const [target,text] of Object.entries(files)) {
+
+  const manifestHashes: Record<string, string> = {};
+
+  for(const [target, scaffoldText] of Object.entries(files)) {
     const current=await services.readText(root,target);
-    const recorded=target==="SEENE.md"?existing?.files[target]:undefined;
-    if(current!==undefined && current!==text && current!==recorded)throw fault("conflict","Seene will not overwrite an existing file.",target);
+    const scaffoldHash = sha256(scaffoldText);
+    const currentHash = current !== undefined ? sha256(current) : undefined;
+    const recordedHash = existingHashes[target] ?? pendingHashes[target];
+
+    const isLegacyHandoff = target === "SEENE.md" && (current === legacyAgentHandoff(manager) || current === generated.text);
+
+    if (current === undefined) {
+      manifestHashes[target] = scaffoldHash;
+    } else if (!existing) {
+      // First init
+      if (target === "SEENE.md") {
+        if (current === scaffoldText || isLegacyHandoff) {
+          manifestHashes[target] = scaffoldHash;
+        } else {
+          throw fault("conflict", "SEENE.md already contains different content. Move or rename it to preserve your document, then retry seene init.", target);
+        }
+      } else if (current !== scaffoldText) {
+        throw fault("conflict", "Seene will not overwrite an existing file.", target);
+      } else {
+        manifestHashes[target] = scaffoldHash;
+      }
+    } else {
+      // Subsequent init
+      if (currentHash === recordedHash) {
+        // Unchanged hash: upgrade silently
+        manifestHashes[target] = scaffoldHash;
+      } else {
+        // Changed hash: treat as customized, leave it, preserve it
+        if (currentHash !== undefined) manifestHashes[target] = currentHash;
+      }
+    }
   }
+
   await hostDependenciesValid(root);
   const needsNextHandler=host.adapter==="next-app"||host.adapter==="next-pages";
   let installed=false;
@@ -496,28 +573,47 @@ async function initializePortable(root:string, host:PortableHost, packageSource?
     if((!packageSource&&!version) || !(error instanceof Error) || !("code" in error) || error.code!=="missing-installation")throw error;
   }
   const source=installed?undefined:await sourceForInstall(root,packageSource,version);
-  if(existing && saved.project && !pending && existing.files["SEENE.md"]===generated.text && JSON.stringify(existing.files)===JSON.stringify(files)) {
+  const handoffCurrent = await services.readText(root, "SEENE.md");
+  const handoffMatch = handoffCurrent === generated.text;
+  if(existing && saved.project && !pending && handoffMatch && JSON.stringify(existingHashes)===JSON.stringify(manifestHashes)) {
     await verifyPortable(root,project);
     return {success:true,data:{project,changed:false,handoff:generated.handoff,integration:integrationInfo(project)}};
   }
-  const journal=JSON.stringify({project,files},null,2)+"\n";
+
+  const journal=JSON.stringify({project,files:manifestHashes},null,2)+"\n";
   if(!pendingText)await services.atomicWrite(root,portablePendingPath,journal,undefined);
   if(source){await services.installPackage(root,source,project.packageManager);await installationValid(root,true,needsNextHandler);}
-  for(const [target,text] of Object.entries(files)) {
+
+  for(const [target, scaffoldText] of Object.entries(files)) {
     const current=await services.readText(root,target);
-    if(current===undefined)await services.atomicWrite(root,target,text,undefined);
-    else if(current!==text) {
-      const recorded=target==="SEENE.md"?existing?.files[target]:undefined;
-      if(current!==recorded)throw fault("conflict","File changed during setup.",target);
-      await services.atomicWrite(root,target,text,current);
+    const scaffoldHash = sha256(scaffoldText);
+    const currentHash = current !== undefined ? sha256(current) : undefined;
+    const recordedHash = existingHashes[target] ?? pendingHashes[target];
+
+    if(current===undefined) {
+      await services.atomicWrite(root,target,scaffoldText,undefined);
+    } else if(currentHash === recordedHash) {
+      // Unchanged hash: upgrade silently
+      if (current !== scaffoldText) {
+        await services.atomicWrite(root,target,scaffoldText,current);
+      }
+    } else {
+      // Customized by user: leave it untouched
     }
   }
+
   if(!existing)await services.atomicWrite(root,managedPath,journal,undefined);
-  else if(JSON.stringify(existing.files)!==JSON.stringify(files))
+  else if(JSON.stringify(existingHashes)!==JSON.stringify(manifestHashes))
     await services.atomicWrite(root,managedPath,journal,existingText);
   if(!saved.project)await services.atomicWrite(root,statePath,JSON.stringify(project,null,2)+"\n",saved.text);
   await services.removeText(root,portablePendingPath,pendingText??journal);
-  return {success:true,data:{project,changed:true,handoff:generated.handoff,integration:integrationInfo(project)}};
+
+  const integration = integrationInfo(project);
+  if (hostWarning) {
+    integration.instructions += `\n${hostWarning}`;
+  }
+
+  return {success:true,data:{project,changed:true,handoff:generated.handoff,integration}};
 }
 async function verifyPortable(root:string,project:ProjectState) {
   if(await services.readText(root,portablePendingPath)!==undefined)throw fault("incomplete-setup","Run seene init to resume.");
@@ -525,10 +621,16 @@ async function verifyPortable(root:string,project:ProjectState) {
   if(text===undefined)throw fault("incomplete-setup","Missing managed connection. Run seene init.");
   const managed=decode(text,ManagedSchema,managedPath);
   if(JSON.stringify(managed.project)!==JSON.stringify(project))throw fault("conflict","Managed project identity differs.");
-  const expected=await portableFiles(root,project,managed.files["src/seene/catalog.js"]??"");
-  expected["SEENE.md"]=agentHandoff(project.packageManager,project.adapter).text;
-  if(JSON.stringify(expected)!==JSON.stringify(managed.files))throw fault("conflict","Managed file list differs.");
-  for(const [target,content] of Object.entries(expected))if(await services.readText(root,target)!==content)throw fault("conflict","Generated connection changed.",target);
+  const recordedHashes = parseManifestHashes(managed.files);
+
+  const expected=await portableFiles(root,project,await catalogSource(root));
+  expected["SEENE.md"] = agentHandoff(project.packageManager,project.adapter).text;
+
+  for(const target of Object.keys(expected)) {
+    const current = await services.readText(root,target);
+    if(current === undefined) throw fault("conflict","Missing generated file.",target);
+    if(!Object.hasOwn(recordedHashes, target)) throw fault("conflict","Missing managed connection file.",target);
+  }
   await installationValid(root,true,project.adapter==="next-app"||project.adapter==="next-pages");
 }
 async function synchronize(root:string):Promise<ProjectResult> {
@@ -543,27 +645,34 @@ async function synchronize(root:string):Promise<ProjectResult> {
     if(recordText===undefined)throw fault("conflict","Missing catalog ownership record.");
     const record=decode(recordText,ManagedSchema,managedPath);
     const current=await services.readText(root,"src/seene/catalog.js");
-    if(![pending.before,pending.after].includes(record.files["src/seene/catalog.js"]) || ![pending.before,pending.after].includes(current??""))
-      throw fault("conflict","Catalog changed during interrupted sync.");
     if(current!==pending.after)await services.atomicWrite(root,"src/seene/catalog.js",pending.after,current);
-    if(record.files["src/seene/catalog.js"]!==pending.after) {
-      record.files["src/seene/catalog.js"]=pending.after;
-      await services.atomicWrite(root,managedPath,JSON.stringify(record,null,2)+"\n",recordText);
-    }
+    record.files["src/seene/catalog.js"]=sha256(pending.after);
+    await services.atomicWrite(root,managedPath,JSON.stringify(record,null,2)+"\n",recordText);
     await services.removeText(root, transactionPath, interrupted);
   }
   await verifyPortable(root,project);
   const target="src/seene/catalog.js";
   const text=await catalogSource(root);
+  const textHash=sha256(text);
   const savedText=(await services.readText(root,managedPath))!;
   const managed=decode(savedText,ManagedSchema,managedPath);
-  const original=managed.files[target];
-  if(text===original)return {success:true,data:{project,changed:false}};
-  const transaction=JSON.stringify({before:original,after:text});
-  await services.atomicWrite(root,transactionPath,transaction,undefined);
-  await services.atomicWrite(root,target,text,original);
-  managed.files[target]=text;
-  await services.atomicWrite(root,managedPath,JSON.stringify(managed,null,2)+"\n",savedText);
-  await services.removeText(root,transactionPath,transaction);
-  return {success:true,data:{project,changed:true}};
+  const recordedHashes = parseManifestHashes(managed.files);
+  const originalHash = recordedHashes[target];
+  const currentCatalog = await services.readText(root, target);
+  const currentHash = currentCatalog !== undefined ? sha256(currentCatalog) : undefined;
+
+  if (currentHash === originalHash || originalHash === undefined) {
+    // Unchanged catalog: upgrade silently
+    if (text === currentCatalog) return {success:true,data:{project,changed:false}};
+    const transaction=JSON.stringify({before:currentCatalog??"",after:text});
+    await services.atomicWrite(root,transactionPath,transaction,undefined);
+    await services.atomicWrite(root,target,text,currentCatalog);
+    managed.files[target]=textHash;
+    await services.atomicWrite(root,managedPath,JSON.stringify(managed,null,2)+"\n",savedText);
+    await services.removeText(root,transactionPath,transaction);
+    return {success:true,data:{project,changed:true}};
+  } else {
+    // Customized catalog: leave it
+    return {success:true,data:{project,changed:false}};
+  }
 }

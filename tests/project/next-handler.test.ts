@@ -5,7 +5,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import os from "node:os";
 import path from "node:path";
 import { defaultSceneDefinition } from "../../src/core";
-import { executeProjectCommand } from "../../src/project/commands";
+import { executeProjectCommand, sha256 } from "../../src/project/commands";
 import { createPagesHandler, handleNextScenePost } from "../../src/vite/next-handler";
 
 const roots: string[] = [];
@@ -64,7 +64,7 @@ it("creates Next.js scene pairs through JSON, refreshes the generated catalog an
   const catalog = await readFile(path.join(root, "src/seene/catalog.js"), "utf8");
   expect(catalog).toContain("launch-screen.scene.json");
   const manifest = JSON.parse(await readFile(path.join(root, ".seene/integration.json"), "utf8"));
-  expect(manifest.files["src/seene/catalog.js"]).toBe(catalog);
+  expect(manifest.files["src/seene/catalog.js"]).toBe(sha256(catalog));
   expect((await executeProjectCommand("validate-project", {}, { root })).success).toBe(true);
 });
 

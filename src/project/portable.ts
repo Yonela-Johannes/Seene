@@ -3,7 +3,8 @@ import type { ProjectState } from "../core/project";
 export function portableIntegration(project: ProjectState, catalog: string): Record<string,string> {
   const files: Record<string,string> = {
     "src/seene/catalog.js": catalog,
-    "src/seene/ProjectPreview.jsx": `"use client";
+    "src/seene/ProjectPreview.jsx": `// @seene-scaffold-version 1
+"use client";
 import React from "react";
 import { ProjectPreview } from "@thatg33k/seene/preview";
 import { sceneModules } from "./catalog";
@@ -14,19 +15,21 @@ export function SeeneProjectPreview({ children, enabled, active, ...props }) {
 `,
   };
   if (project.adapter === "react") return files;
-  files["src/seene/Studio.jsx"] = `"use client";
+  files["src/seene/Studio.jsx"] = `// @seene-scaffold-version 1
+"use client";
 import React from "react";
 import dynamic from "next/dynamic";
 const Preview = process.env.NODE_ENV === "development" ? dynamic(() => import("./ProjectPreview").then(m => m.SeeneProjectPreview), { ssr: false }) : () => null;
-export default function SeeneStudio() {
-  return <Preview enabled={process.env.NODE_ENV === "development"} active createSceneEndpoint="/api/seene/create-scene" />;
+export default function SeeneStudio({ children }) {
+  return <Preview enabled={process.env.NODE_ENV === "development"} active createSceneEndpoint="/api/seene/create-scene">{children}</Preview>;
 }
 `;
   const depth = project.entry.split("/").length - 1;
   const studio = "../".repeat(depth) + "src/seene/Studio";
   if (project.adapter === "next-app") {
     const appEntry = project.entry.startsWith("src/") ? project.entry.slice(4) : project.entry;
-    files[project.entry] = `import React from "react";
+    files[project.entry] = `// @seene-scaffold-version 1
+import React from "react";
 import { notFound } from "next/navigation";
 import SeeneStudio from ${JSON.stringify(studio)};
 export default function SeenePage() {
@@ -35,9 +38,10 @@ export default function SeenePage() {
 }
 `;
     const routeDirectory = (project.entry.startsWith("src/") ? "src/" : "") + appEntry.slice(0, appEntry.lastIndexOf("/seene/page.jsx"));
-    files[`${routeDirectory}/api/seene/create-scene/route.js`] = `export { POST } from "@thatg33k/seene/next";\nexport const runtime = "nodejs";\n`;
+    files[`${routeDirectory}/api/seene/create-scene/route.js`] = `// @seene-scaffold-version 1\nexport { POST } from "@thatg33k/seene/next";\nexport const runtime = "nodejs";\n`;
   } else {
-    files[project.entry] = `import React from "react";
+    files[project.entry] = `// @seene-scaffold-version 1
+import React from "react";
 import SeeneStudio from ${JSON.stringify(studio)};
 export function getServerSideProps() {
   return process.env.NODE_ENV === "development" ? { props: {} } : { notFound: true };
@@ -47,7 +51,7 @@ export default function SeenePage() {
 }
 `;
     const pagesDirectory = project.entry.startsWith("src/") ? "src/pages" : "pages";
-    files[`${pagesDirectory}/api/seene/create-scene.js`] = `import { createPagesHandler } from "@thatg33k/seene/next";\nexport const config = { api: { bodyParser: false } };\nexport default createPagesHandler;\n`;
+    files[`${pagesDirectory}/api/seene/create-scene.js`] = `// @seene-scaffold-version 1\nimport { createPagesHandler } from "@thatg33k/seene/next";\nexport const config = { api: { bodyParser: false } };\nexport default createPagesHandler;\n`;
   }
   return files;
 }
@@ -58,6 +62,6 @@ export function portableCatalog(entries: {source:string;binding:string}[]): stri
     `  ${JSON.stringify(entry.source)}: async () => ({default:recipe${index}}),`,
     `  ${JSON.stringify(entry.binding)}: () => import(${JSON.stringify("./scenes/" + entry.binding.split("/").pop()?.replace(/\.[jt]sx$/, ""))}),`,
   ]);
-  return imports.join("\n") + "\nexport const sceneModules = {\n" + mappings.join("\n") + "\n};\n";
+  return "// @seene-scaffold-version 1\n" + imports.join("\n") + "\nexport const sceneModules = {\n" + mappings.join("\n") + "\n};\n";
 }
 

@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import {
+  type ReactNode,
   StrictMode,
   createContext,
   useContext,
@@ -14,8 +15,10 @@ import {
   screen,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cameraToCss, evaluateScene, transformToCss } from "../../src/core";
+import { cameraToCss, cameraFromPose, evaluateScene, transformToCss } from "../../src/core";
 import { Motion, Scene, SceneErrorBoundary, Surface } from "../../src/react";
+
+import { installLayoutStubs } from "../helpers/layout";
 
 function createObserver(callback: ResizeObserverCallback) {
   const targets = new Set<Element>();
@@ -39,38 +42,7 @@ const node = (id: string) =>
 beforeEach(() => {
   observerInstances = [];
   vi.stubGlobal("ResizeObserver", Observer);
-  vi.spyOn(HTMLElement.prototype, "offsetWidth", "get").mockImplementation(
-    function (this: HTMLElement) {
-      return this.hasAttribute("data-seene-stage")
-        ? 800
-        : parseFloat(this.style.width) || 200;
-    },
-  );
-  vi.spyOn(HTMLElement.prototype, "offsetHeight", "get").mockImplementation(
-    function (this: HTMLElement) {
-      return this.hasAttribute("data-seene-stage")
-        ? 400
-        : parseFloat(this.style.height) || 100;
-    },
-  );
-  vi.spyOn(HTMLElement.prototype, "offsetLeft", "get").mockImplementation(
-    function (this: HTMLElement) {
-      return parseFloat(this.style.left) || 0;
-    },
-  );
-  vi.spyOn(HTMLElement.prototype, "offsetTop", "get").mockImplementation(
-    function (this: HTMLElement) {
-      return parseFloat(this.style.top) || 0;
-    },
-  );
-  vi.spyOn(HTMLElement.prototype, "offsetParent", "get").mockImplementation(
-    function (this: HTMLElement) {
-      return (
-        this.parentElement?.closest("[data-seene-id], [data-seene-stage]") ??
-        null
-      );
-    },
-  );
+  installLayoutStubs();
 });
 afterEach(() => {
   cleanup();
@@ -210,19 +182,61 @@ describe("live React spatial adapter", () => {
         </Surface>
       </Scene>,
     );
-    expect(node("group").style.filter).toBe("none");
-    expect(
-      node("group")
-        .querySelector("[data-seene-content]")
-        ?.getAttribute("style"),
-    ).toContain("blur(6px)");
+     expect(node("group").style.filter).toBe("none");
+    const groupBlur = node("group")
+      .querySelector("[data-seene-content]")
+      ?.getAttribute("style");
+    expect(groupBlur).toMatch(/filter:\s*blur\(\d+\.\d+px\)/);
+    const groupBlurValue = parseFloat(groupBlur!.match(/blur\((\d+\.\d+)px\)/)![1]);
+    expect(groupBlurValue).toBeGreaterThan(0);
+    expect(groupBlurValue).toBeLessThan(12);
     expect(node("child").closest("[data-seene-content]")).toBeNull();
     expect(node("implicit-group").style.filter).toBe("none");
     expect(node("motion").parentElement?.style.filter).toBe("none");
     expect(
       node("leaf").querySelector<HTMLElement>("[data-seene-content]")?.style
         .filter,
-    ).toBe("blur(6px)");
+    ).toBe(`blur(${groupBlurValue}px)`);
+  });
+
+  it("cameraFromPose drives visible camera movement through the Scene transform", () => {
+    const stage = (() => {
+      const view = render(
+        <Scene camera={cameraFromPose({
+          position: { x: 200, y: -100, z: 800 },
+          target: { x: 0, y: 0, z: 0 },
+          perspective: 1200,
+        })}>
+          <Surface id="surf">Content</Surface>
+        </Scene>,
+      );
+      const el = view.container.querySelector("[data-seene-stage]") as HTMLElement;
+      view.unmount();
+      return el;
+    })();
+
+    const pose = cameraFromPose({
+      position: { x: 200, y: -100, z: 800 },
+      target: { x: 0, y: 0, z: 0 },
+      perspective: 1200,
+    });
+    expect(stage.style.transform).toBe(cameraToCss(pose));
+    expect(stage.style.transform).toContain("translate3d(-200px, 100px, -800px)");
+
+    const direct = render(
+      <Scene camera={cameraFromPose({
+        position: { x: 0, y: 0, z: 1200 },
+        target: { x: 0, y: 0, z: 0 },
+        perspective: 1400,
+      })}>
+        <Surface id="surf">Content</Surface>
+      </Scene>,
+    );
+    const directStage = direct.container.querySelector("[data-seene-stage]") as HTMLElement;
+    expect(directStage.style.transform).toContain("rotateX(0deg)");
+    expect(directStage.style.transform).toContain("rotateY(0deg)");
+
+    direct.unmount();
   });
 
   it("updates local geometry on ResizeObserver and releases measurements on unmount", () => {
@@ -449,6 +463,45 @@ describe("live React spatial adapter", () => {
     expect(button.textContent).toBe("Count 1");
   });
 
+  it("diagnoses empty Surface nodes independently of maxBlur", () => {
+    const { rerender } = render(
+      <Scene focus={{ maxBlur: 0 }}>
+        <Surface id="empty" style={{ width: 100, height: 100 }}></Surface>
+      </Scene>,
+    );
+    expect(screen.getByRole("alert").textContent).toContain("Surface node 'empty' has no mounted content.");
+
+    rerender(
+      <Scene focus={{ maxBlur: 6 }}>
+        <Surface id="empty" style={{ width: 100, height: 100 }}></Surface>
+      </Scene>,
+    );
+    expect(screen.getByRole("alert").textContent).toContain("Surface node 'empty' has no mounted content.");
+  });
+
+  it("standalone Scene emits no node mismatch", () => {
+    render(
+      <Scene>
+        <Surface id="standalone">Content</Surface>
+      </Scene>,
+    );
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("catches host render errors and displays call stack", () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    function FailingHost(): ReactNode {
+      throw new Error("Explicit host failure for call stack test");
+    }
+    render(
+      <SceneErrorBoundary>
+        <FailingHost />
+      </SceneErrorBoundary>,
+    );
+    expect(screen.getByRole("alert").textContent).toContain("Explicit host failure for call stack test");
+    expect(screen.getByText("View call stack")).toBeTruthy();
+  });
+
   it("makes out-of-scene usage actionable", () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
     render(
@@ -555,4 +608,22 @@ it("diagnoses scene content outside any focus owner", async()=>{
  view.rerender(app(true));
  await act(async()=>{});
  expect(screen.queryByRole("alert")).toBeNull();
+});
+
+it("diagnoses empty Surface nodes and node/surface mismatches", async () => {
+  const app = (empty: boolean) => (
+    <Scene>
+      <Surface id="empty">{empty ? null : "Non-empty content"}</Surface>
+    </Scene>
+  );
+  const view = render(app(true));
+  act(() => {
+    observerInstances.forEach((observer) => observer.flush());
+  });
+  expect(screen.getByRole("alert").textContent).toContain("has no mounted content");
+  view.rerender(app(false));
+  act(() => {
+    observerInstances.forEach((observer) => observer.flush());
+  });
+  expect(screen.queryByRole("alert")).toBeNull();
 });

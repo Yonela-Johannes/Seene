@@ -58,6 +58,24 @@ describe("CLI adapter", () => {
     const r=await runCli(["init"],context,execute);
     expect(r.code).toBe(1);expect(r.stderr).not.toContain("secret value");
   });
+  it("includes catalog warnings in validate json output and text summary", async () => {
+    const execute = vi.fn().mockResolvedValue({
+      success: true,
+      data: {
+        project: ready.success ? ready.data.project : undefined,
+        catalog: {
+          scenes: [],
+          issues: [],
+          warnings: [{ path: "src/seene/scenes/demo.tsx", message: "Surface inspection note: Uses dynamic computed ID" }],
+        },
+      },
+    });
+    const jsonResult = await runCli(["validate", "--json"], context, execute);
+    expect(jsonResult.code).toBe(0);
+    const parsed = JSON.parse(jsonResult.stdout);
+    expect(parsed.data.catalog.warnings).toHaveLength(1);
+    expect(parsed.data.catalog.warnings[0].message).toContain("dynamic computed ID");
+  });
 });
 
 describe("studio onboarding CLI", () => {

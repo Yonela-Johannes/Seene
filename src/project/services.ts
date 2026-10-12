@@ -1,8 +1,13 @@
 import {createRequire} from 'node:module';
+import {createHash} from 'node:crypto';
 import {existsSync} from 'node:fs';
 import {lstat, realpath, readFile, writeFile, mkdir, rm, rename, link} from 'node:fs/promises';
 import path from 'node:path';
 import {fault} from './errors';
+
+export function computeContentHash(content: string): string {
+  return createHash("sha256").update(content, "utf8").digest("hex");
+}
 
 export async function canonicalRoot(root: string): Promise<string> {
   return realpath(path.resolve(root));
@@ -196,4 +201,18 @@ export async function readDependency(root:string,name:string,target="package.jso
     return readText(directory,target);
   }
   return undefined;
+}
+
+export async function writeSceneSourcePair(root: string, id: string, recipe: unknown, componentSource: string): Promise<"created" | "exists"> {
+  const recipeTarget = `src/seene/scenes/${id}.scene.json`;
+  const bindingTarget = `src/seene/scenes/${id}.tsx`;
+
+  if (await readText(root, recipeTarget) !== undefined || await readText(root, bindingTarget) !== undefined) {
+    return "exists";
+  }
+
+  await writeText(root, bindingTarget, componentSource);
+  await writeText(root, recipeTarget, typeof recipe === "string" ? recipe : JSON.stringify(recipe, null, 2) + "\n");
+
+  return "created";
 }

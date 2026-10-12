@@ -152,6 +152,17 @@ describe("portable host connections",()=>{
   expect(await readFile(path.join(root,"app/api/seene/create-scene/route.js"),"utf8")).toContain("@thatg33k/seene/next");
   expect(success(await run(root,"validate-project")).project).toEqual(upgraded.project);
  });
+ it("preserves hand-edited generated connection files (Studio.jsx, ProjectPreview.jsx, SEENE.md) during init and sync",async()=>{
+  const root=await host("next-app");
+  success(await run(root));
+  await put(root, "src/seene/Studio.jsx", '"use client";\nimport React from "react";\nexport default function SeeneStudio({children}){return <div data-custom="studio">{children}</div>;}\n');
+  await put(root, "SEENE.md", "# Custom User Hand-edited Guide\n");
+  const synced = success(await run(root, "sync-project"));
+  expect(synced.changed).toBe(false);
+  expect(await readFile(path.join(root, "src/seene/Studio.jsx"), "utf8")).toContain("data-custom=\"studio\"");
+  expect(await readFile(path.join(root, "SEENE.md"), "utf8")).toContain("Custom User Hand-edited Guide");
+  success(await run(root, "validate-project"));
+ });
  it("adds the new local scene API to an existing managed Next.js connection without replacing host files",async()=>{
   const root=await host("next-app");success(await run(root));
   const manifestPath=path.join(root,".seene/integration.json");
@@ -172,10 +183,10 @@ describe("portable host connections",()=>{
   await rm(path.join(root,"app/seene/page.tsx"));await symlink(path.join(root,"app/layout.tsx"),path.join(root,"app/seene/page.jsx"));
   expect(await run(root)).toMatchObject({success:false,issues:[{code:"denied-path"}]});
  });
- it("refuses edited managed files and unrelated handoff documents",async()=>{
+ it("refuses unrelated handoff documents on init but preserves edited managed files during validate",async()=>{
   const root=await host();await put(root,"SEENE.md","mine");expect(await run(root)).toMatchObject({success:false,issues:[{code:"conflict"}]});
   await rm(path.join(root,"SEENE.md"));success(await run(root));await put(root,"src/seene/ProjectPreview.jsx","edited");
-  expect(await run(root,"validate-project")).toMatchObject({success:false,issues:[{code:"conflict"}]});
+  expect((await run(root,"validate-project")).success).toBe(true);
  });
   it("uses the canonical catalog, supports JSX and refuses ambiguous bindings",async()=>{
    const root=await host();success(await run(root));await scene(root);success(await run(root,"sync-project"));

@@ -7,6 +7,7 @@ import { discoverRecipes } from "../../src/project/discovery";
 import * as commands from "../../src/project/commands";
 import * as services from "../../src/project/services";
 import { loadSceneRecipes } from "../../src/core/recipes";
+import { extractSurfaceIds } from "../../src/project/surfaces";
 import { runCli } from "../../src/cli";
 
 const roots: string[] = [];
@@ -23,7 +24,7 @@ async function put(root: string, target: string, text: string) {
 }
 async function add(root: string, id = "demo", document: unknown = recipe(id)) {
   await put(root, `${directory}/${id}.scene.json`, JSON.stringify(document));
-  await put(root, `${directory}/${id}.tsx`, 'throw new Error("must never execute component source"); export default () => null;');
+  await put(root, `${directory}/${id}.tsx`, 'import { Surface } from "@thatg33k/seene"; throw new Error("must never execute component source"); export default () => <Surface id="panel">Panel</Surface>;');
 }
 afterEach(async () => {
   vi.restoreAllMocks();
@@ -31,7 +32,7 @@ afterEach(async () => {
 });
 describe("scoped recipe commands", () => {
   it("returns honest empty discovery for a missing directory", async () => {
-    expect(await executeRecipeCommand("list-scenes", {}, { root: await root() })).toEqual({ success: true, data: { scenes: [], issues: [] } });
+    expect(await executeRecipeCommand("list-scenes", {}, { root: await root() })).toEqual({ success: true, data: { scenes: [], issues: [], warnings: [] } });
   });
   it("keeps project worktrees and generated/cache directories out of broad discovery scans", async () => {
     const value = await root();
@@ -142,6 +143,47 @@ describe("scoped recipe commands", () => {
     for (const input of [{ sceneId: "missing", url: "http://localhost:5173" }, { sceneId: "demo", url: "https://example.com" }])
       expect(await executeRecipeCommand("open-scene", input, { root: value })).toMatchObject({ success: false });
     expect(execute).not.toHaveBeenCalled();
+  });
+  it("extracts Surface IDs statically without failing on dynamic IDs, spread attributes, or imported components", () => {
+    expect(extractSurfaceIds('<Surface id="alpha"><Surface id="beta">UI</Surface></Surface>', "test.tsx")).toEqual({
+      literalIds: new Set(["alpha", "beta"]),
+      unverifiableReason: undefined,
+    });
+    expect(extractSurfaceIds('import { Surface as S } from "@thatg33k/seene"; export default function Scene(){ return <S id="alpha">UI</S>; }', "test.tsx")).toEqual({
+      literalIds: new Set(["alpha"]),
+      unverifiableReason: undefined,
+    });
+    expect(extractSurfaceIds('import type { SurfaceProps } from "@thatg33k/seene"; import "./styles.css"; import { clsx } from "clsx"; import { Surface } from "@thatg33k/seene"; export default function Scene(){ return <Surface id="alpha">UI</Surface>; }', "test.tsx")).toEqual({
+      literalIds: new Set(["alpha"]),
+      unverifiableReason: undefined,
+    });
+    expect(extractSurfaceIds('<Surface id={dynamicId}>UI</Surface>', "test.tsx")).toEqual({
+      literalIds: new Set(),
+      unverifiableReason: "Uses dynamic computed ID on Surface.",
+    });
+    expect(extractSurfaceIds('<Seene.Surface id="alpha">UI</Seene.Surface>', "test.tsx")).toEqual({
+      literalIds: new Set(),
+      unverifiableReason: "Uses member expression Surface (Seene.Surface).",
+    });
+    expect(extractSurfaceIds('<Surface id="alpha" {...props}>UI</Surface>', "test.tsx")).toEqual({
+      literalIds: new Set(),
+      unverifiableReason: "Uses spread attributes on Surface.",
+    });
+    expect(extractSurfaceIds('import Hero from "./Hero"; export default function Scene(){ return <Surface id="alpha"><Hero /></Surface>; }', "test.tsx")).toEqual({
+      literalIds: new Set(["alpha"]),
+      unverifiableReason: "Renders locally imported component (<Hero />).",
+    });
+  });
+  it("emits catalog warnings for missing surface nodes without failing sync-project or validate", async () => {
+    const value = await root();
+    await put(value, `${directory}/demo.scene.json`, JSON.stringify(recipe("demo")));
+    await put(value, `${directory}/demo.tsx`, 'import { Surface } from "@thatg33k/seene"; export default function Scene(){ return <Surface id="other">Other</Surface>; }');
+    const catalog = await discoverRecipes(value);
+    expect(catalog.issues).toEqual([]);
+    expect(catalog.warnings.length).toBeGreaterThan(0);
+    expect(catalog.warnings[0].message).toContain("missing from component");
+    const sync = await executeRecipeCommand("list-scenes", {}, { root: value });
+    expect(sync.success).toBe(true);
   });
 });
 describe("scene CLI adapter", () => {
