@@ -6,7 +6,7 @@
 import { useState, type FormEvent } from "react";
 import { HOME_ROUTE, platformApi, settingsHref, studioHref } from "./api";
 import { useResource } from "./data";
-import { Command, Notice, Panel, StatusPill, buttonPrimary, buttonQuiet, fieldClass } from "./ui";
+import { Command, Notice, Panel, StatusPill, fieldClass } from "./ui";
 import { FrameSection, Kbd, PlusIcon, SeeneButton } from "./site";
 import { SEENE_BRAND, SEENE_INSTALL_COMMAND } from "../core/branding";
 
@@ -54,13 +54,13 @@ export function ProjectsView() {
         <div className="py-12">
           <div className="flex flex-wrap items-end justify-between gap-4">
             <div>
-              <h1 className="text-3xl font-semibold tracking-tight">Local studio</h1>
+              <h1 className="seene-h2 text-3xl">Local studio</h1>
               <p className="mt-2 max-w-xl text-sm leading-relaxed text-[var(--seene-text-muted)]">
                 Register React projects on this machine to open their Seene studios. This console runs
                 locally and is not part of the public site.
               </p>
             </div>
-            <a className="seene-nav-item" href={HOME_ROUTE}>Back to overview</a>
+            <SeeneButton variant="secondary" size="nav" href={HOME_ROUTE}>Back to overview</SeeneButton>
           </div>
 
           <div className="mt-8 space-y-3">
@@ -74,18 +74,18 @@ export function ProjectsView() {
             <Panel title="Register project" description="Enter the folder path of your React application on this machine.">
               <form className="flex flex-col gap-3 sm:flex-row sm:items-start" aria-label="Register project" onSubmit={add}>
                 <label className="sr-only" htmlFor="project-path">Project folder path</label>
-                <input
-                  id="project-path"
-                  className={fieldClass}
-                  value={target}
-                  autoComplete="off"
-                  spellCheck={false}
-                  placeholder="/Users/you/projects/my-app"
-                  onChange={event => setTarget(event.target.value)}
-                />
-                <SeeneButton variant="primary" size="cta" kbd={<Kbd onPrimary>R</Kbd>} loading={busy} disabled={!target.trim()} className="shrink-0 gap-1.5" type="submit">
-                  <PlusIcon /> Register project
-                </SeeneButton>
+<input
+                   id="project-path"
+                   className="w-full rounded-md border border-[var(--seene-border)] bg-[var(--seene-surface)] px-3 py-2 text-sm placeholder:text-[var(--seene-text-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--seene-accent)]"
+                   value={target}
+                   autoComplete="off"
+                   spellCheck={false}
+                   placeholder="/Users/you/projects/my-app"
+                   onChange={event => setTarget(event.target.value)}
+                 />
+<SeeneButton variant="primary" size="nav" kbd={<Kbd onPrimary>R</Kbd>} loading={busy} disabled={!target.trim()} className="gap-1.5" type="submit">
+                   <PlusIcon /> Register project
+                 </SeeneButton>
               </form>
               {error && <div className="mt-3"><Notice>{error}</Notice></div>}
             </Panel>
@@ -98,52 +98,52 @@ export function ProjectsView() {
                 <span className="font-mono text-xs text-[var(--seene-text-muted)]">{list.length} registered</span>
               </div>
 
-              {list.length === 0 ? (
-                <div className="space-y-2 rounded-md border border-dashed border-[var(--seene-border)] bg-[var(--seene-surface)] p-8 text-center">
-                  <p className="text-sm font-medium">No projects registered yet</p>
-                  <p className="text-xs text-[var(--seene-text-muted)]">
-                    Run <Command>{SEENE_INSTALL_COMMAND}</Command> in your React project first.
-                  </p>
-                </div>
-              ) : (
-                <div className="grid gap-4 sm:grid-cols-2">
-                  {list.map(project => (
-                    <article key={project.path} data-project-path={project.path} className="flex flex-col justify-between gap-4 rounded-md border border-[var(--seene-border)] bg-[var(--seene-surface)] p-6">
-                      <div className="space-y-3">
-                        <header className="flex items-start justify-between gap-2">
-                          <div className="min-w-0 space-y-0.5">
-                            <h3 className="truncate text-lg font-medium">{project.name}</h3>
-                            <p className="truncate font-mono text-xs text-[var(--seene-text-muted)]" title={project.path}>{project.path}</p>
-                          </div>
-                          <StatusPill ok={project.connected} label={project.connected ? "Connected" : "Not connected"} />
-                        </header>
-                        <p className="text-xs text-[var(--seene-text-muted)]">
-                          {project.sceneCount === 1 ? "1 scene" : `${project.sceneCount} scenes`}
-                          {project.adapter ? ` · ${project.adapter}` : ""}
-                          {project.packageManager ? ` · ${project.packageManager}` : ""}
-                        </p>
-                      </div>
+                  {list.length === 0 ? (
+                   <div className="space-y-2 rounded-md border border-dashed border-[var(--seene-border)] bg-[var(--seene-surface)] p-8 text-center">
+                     <p className="text-sm font-medium">No projects registered yet</p>
+                     <p className="text-xs text-[var(--seene-text-muted)]">
+                       Run <Command>{SEENE_INSTALL_COMMAND}</Command> in your React project first.
+                     </p>
+                   </div>
+                 ) : (
+                   <div className="grid gap-4 sm:grid-cols-2">
+                     {list.map(project => (
+                       <article key={project.path} data-project-path={project.path} className="flex flex-col justify-between gap-4 rounded-md border border-[var(--seene-border)] bg-[var(--seene-surface)] p-6 shadow-sm hover:shadow-md transition-shadow">
+                         <div className="space-y-3">
+                           <header className="flex items-start justify-between gap-2">
+                             <div className="min-w-0 space-y-0.5">
+                               <h3 className="truncate text-lg font-medium text-[var(--seene-text)]">{project.name}</h3>
+                               <p className="truncate font-mono text-xs text-[var(--seene-text-muted)]" title={project.path}>{project.path}</p>
+                             </div>
+                             <StatusPill ok={project.connected} label={project.connected ? "Connected" : "Not connected"} />
+                           </header>
+                           <p className="text-xs text-[var(--seene-text-muted)]">
+                             {project.sceneCount === 1 ? "1 scene" : `${project.sceneCount} scenes`}
+                             {project.adapter ? ` · ${project.adapter}` : ""}
+                             {project.packageManager ? ` · ${project.packageManager}` : ""}
+                           </p>
+                         </div>
 
-                      <div className="flex flex-wrap items-center gap-2 border-t border-[var(--seene-border)] pt-2">
-                        <a className={buttonPrimary} href={studioHref(project.path)}>Open studio</a>
-                        <a className={buttonQuiet} href={settingsHref(project.path)}>Settings</a>
-                        {confirmRemove === project.path ? (
-                          <>
-                            <button type="button" className={buttonQuiet} onClick={() => void remove(project.path)}>Confirm remove</button>
-                            <button type="button" className={buttonQuiet} onClick={() => setConfirmRemove("")}>Cancel</button>
-                          </>
-                        ) : (
-                          <button type="button" className={buttonQuiet} onClick={() => setConfirmRemove(project.path)}>Remove</button>
-                        )}
-                      </div>
+                         <div className="flex flex-wrap items-center gap-2 border-t border-[var(--seene-border)] pt-2">
+                           <a className="seene-btn seene-btn-primary seene-btn-nav" href={studioHref(project.path)}>Open studio</a>
+                           <a className="seene-btn seene-btn-secondary seene-btn-nav" href={settingsHref(project.path)}>Settings</a>
+                           {confirmRemove === project.path ? (
+                             <>
+                               <button type="button" className="seene-btn seene-btn-secondary seene-btn-nav" onClick={() => void remove(project.path)}>Confirm remove</button>
+                               <button type="button" className="seene-btn seene-btn-secondary seene-btn-nav" onClick={() => setConfirmRemove("")}>Cancel</button>
+                             </>
+                           ) : (
+                             <button type="button" className="seene-btn seene-btn-secondary seene-btn-nav" onClick={() => setConfirmRemove(project.path)}>Remove</button>
+                           )}
+                         </div>
 
-                      {!project.connected && (
-                        <Notice tone="info">Run <Command>seene init</Command> in this project folder, then refresh.</Notice>
-                      )}
-                    </article>
-                  ))}
-                </div>
-              )}
+                         {!project.connected && (
+                           <Notice tone="info">Run <Command>seene init</Command> in this project folder, then refresh.</Notice>
+                         )}
+                       </article>
+                     ))}
+                   </div>
+                 )}
             </section>
           </div>
         </div>

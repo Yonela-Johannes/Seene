@@ -51,7 +51,7 @@ export function ProjectPreview({children, projectId, enabled, active, hot, scene
   const content = useMemo(() => <Surface id={SCENE_PRESENTATION_SURFACE} style={{width:"100%",minHeight:980}}>{children}</Surface>, [children]);
   if (!enabled || !(active ?? entry?.requested)) return children;
   if(sceneModules) return <div data-seene-project={projectId}><SceneModuleLibrary modules={sceneModules} hot={hot} backHref={entry?.back} applicationRoute={entry?.route} createSceneEndpoint={createSceneEndpoint} onApplicationIssue={reportApplicationIssue}/></div>;
-  return <div data-seene-project={projectId}><ScenePreview title="Your application" definition={applicationDefinition} backHref={entry?.back} hot={hot}>
+  return <div data-seene-project={projectId}><ScenePreview title="Your application" definition={defaultSceneDefinition()} backHref={entry?.back} hot={hot}>
     {route
       ? <Surface id={SCENE_PRESENTATION_SURFACE} style={{width:"100%",minHeight:980}}>
           <ApplicationPreview route={route} onIssue={reportApplicationIssue}/>

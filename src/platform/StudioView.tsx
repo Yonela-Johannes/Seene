@@ -3,7 +3,11 @@ import { defaultDevOrigin, previewUrl, type PlatformStatus } from "../core/platf
 import { platformApi, presentHref, settingsHref, useStudioBridge, PROJECTS_ROUTE } from "./api";
 import { useResource } from "./data";
 import { CreateSceneDialog } from "./CreateSceneDialog";
-import { Command, Notice, Panel, StatusPill, buttonPrimary, buttonQuiet, fieldClass } from "./ui";
+import { Command, Notice, Panel, StatusPill, fieldClass } from "./ui";
+import { FrameSection, Kbd, PlusIcon, SeeneButton } from "./site";
+
+const buttonPrimary = "seene-btn seene-btn-primary seene-btn-nav";
+const buttonQuiet = "seene-btn seene-btn-secondary seene-btn-nav";
 
 export function StudioView({ project }: { project: string }) {
   const catalog = useResource(`catalog:${project}`, () => platformApi.catalog(project));
@@ -64,15 +68,15 @@ export function StudioView({ project }: { project: string }) {
       <header className="space-y-3">
         <a className="font-mono text-xs text-[var(--seene-text-muted)] hover:text-[var(--seene-text)]" href={PROJECTS_ROUTE}>← Projects</a>
         <div className="flex flex-wrap items-end justify-between gap-4">
-          <div className="space-y-1">
-            <h1 className="text-3xl font-medium tracking-tight text-[var(--seene-text)]">{data?.project.name ?? "Studio"}</h1>
-            <p className="truncate font-mono text-xs text-[var(--seene-text-muted)]">{project}</p>
-          </div>
-          <div className="flex items-center gap-2">
-            {data && <StatusPill ok={isConnected} label={isConnected ? "Connected" : "Not connected"} />}
-            <a className={buttonQuiet} href={settingsHref(project)}>Settings</a>
-            {scenes.length > 0 && <a className={buttonPrimary} href={presentHref(project, activeScene?.id ?? scenes[0].id)}>Present</a>}
-          </div>
+        <div className="space-y-1">
+          <h1 className="seene-h2 text-3xl">{data?.project.name ?? "Studio"}</h1>
+          <p className="truncate font-mono text-xs text-[var(--seene-text-muted)]">{project}</p>
+        </div>
+        <div className="flex items-center gap-2">
+          {data && <StatusPill ok={isConnected} label={isConnected ? "Connected" : "Not connected"} />}
+          <SeeneButton variant="secondary" size="nav" href={settingsHref(project)}>Settings</SeeneButton>
+          {scenes.length > 0 && <SeeneButton variant="primary" size="nav" href={presentHref(project, activeScene?.id ?? scenes[0].id)}>Present</SeeneButton>}
+        </div>
         </div>
       </header>
 
