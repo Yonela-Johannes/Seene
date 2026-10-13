@@ -13,6 +13,8 @@ export interface WebsiteSectionProps {
   pause?: number;
   /** Optional scroll offset to position this section within the viewport */
   scrollOffset?: number;
+  /** Optional CSS class for the section container */
+  className?: string;
 }
 
 /**
@@ -22,14 +24,17 @@ export interface WebsiteSectionProps {
  * Compatible with server-rendered React frameworks and maintains accessibility.
  */
 export function WebsiteSection(props: WebsiteSectionProps): ReactNode {
-  const { id, label, children } = props;
+  const { id, label, children, duration, pause, scrollOffset, className } = props;
 
   return (
     <div
       id={`website-section-${id}`}
-      className="website-section"
+      className={`website-section ${className || ""}`.trim()}
       data-website-section-id={id}
       data-website-section-label={label}
+      data-website-section-duration={duration}
+      data-website-section-pause={pause}
+      data-website-section-scroll-offset={scrollOffset}
     >
       {children}
     </div>

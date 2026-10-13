@@ -14,3 +14,7 @@ export { TransitionPicker } from "./TransitionPicker";
 export { SceneInspector } from "./SceneInspector";
 export { previewTheme } from "./theme";
 export { ProjectPreview } from "./ProjectPreview";
+export { WebsiteSection, type WebsiteSectionProps } from "./WebsiteSection";
+export { WebsiteWalkthrough, type WebsiteWalkthroughProps, type WebsiteSectionDefinition } from "./WebsiteWalkthrough";
+export { discoverExplicitSections, discoverSemanticSections } from "./sectionDiscovery";
+export { evaluateTimeline, getActiveSection, getTimestampForSection, evaluateTimelineState, calculateSectionBoundaries } from "./websiteTimeline";
