@@ -1,0 +1,99 @@
+{
+  "version": 1,
+  "id": "home-showcase",
+  "title": "Seene Home Showcase",
+  "description": "A comprehensive demonstration of Seene's cinematic scene capabilities with orbital camera movement and focus reveal effects.",
+  "definition": {
+    "width": 1400,
+    "height": 980,
+    "scene": {
+      "version": 3,
+      "camera": {
+        "perspective": 1600,
+        "x": 0,
+        "y": 0,
+        "z": 0,
+        "rotateX": 5,
+        "rotateY": -15,
+        "rotateZ": 0
+      },
+      "focus": {
+        "distance": 1600,
+        "fStop": 4,
+        "focalLength": 50,
+        "maxBlur": 4
+      },
+      "nodes": [
+        {
+          "id": "home",
+          "transform": {
+            "x": 0,
+            "y": 0,
+            "z": 0,
+            "rotateX": 0,
+            "rotateY": 0,
+            "rotateZ": 0,
+            "scale": 1
+          }
+        }
+      ]
+    },
+    "motion": {
+      "durationMs": 10000,
+      "speed": 1,
+      "tracks": [
+        {
+          "target": {
+            "kind": "camera",
+            "id": "home"
+          },
+          "property": "rotateY",
+          "keyframes": [
+            {
+              "timeMs": 0,
+              "value": -15
+            },
+            {
+              "timeMs": 10000,
+              "value": -165
+            }
+          ]
+        },
+        {
+          "target": {
+            "kind": "camera",
+            "id": "home"
+          },
+          "property": "perspective",
+          "keyframes": [
+            {
+              "timeMs": 0,
+              "value": 1600
+            },
+            {
+              "timeMs": 10000,
+              "value": 1200
+            }
+          ]
+        },
+        {
+          "target": {
+            "kind": "focus",
+            "id": "home"
+          },
+          "property": "distance",
+          "keyframes": [
+            {
+              "timeMs": 0,
+              "value": 1600
+            },
+            {
+              "timeMs": 10000,
+              "value": 800
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

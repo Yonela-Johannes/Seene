@@ -26,6 +26,15 @@ export type ScenePreviewProps = {
   onPresentationChange?: (id: string) => void;
   transition?: TransitionPresetName;
   onTransitionChange?: (id: TransitionPresetName | undefined) => void;
+  // New duration/timeline controls
+  duration?: number;
+  seekTime?: number;
+  isPlaying?: boolean;
+  onDurationChange?: (duration: number) => void;
+  onPlayPause?: (playing: boolean) => void;
+  onSeek?: (time: number) => void;
+  timelineRef?: React.RefObject<HTMLDivElement>;
+  formatTime?: (ms: number) => string;
 };
 const timeLabel = (ms: number) => `${Math.floor(ms / 60000)}:${String(Math.floor(ms / 1000) % 60).padStart(2,"0")}`;
 function Glyph({kind}: {kind: "play" | "pause" | "restart" | "export"}) {
@@ -80,7 +89,7 @@ function ExportMenu({disabled, panelHost}: {disabled: boolean; panelHost: HTMLDi
     </details>;
 }
 
-export function ScenePreview({definition: input, children, title = "Untitled scene", backHref, onBack, revision, hot, presentation, onPresentationChange, transition, onTransitionChange}: ScenePreviewProps) {
+export function ScenePreview({definition: input, children, title = "Untitled scene", backHref, onBack, revision, hot, presentation, onPresentationChange, transition, onTransitionChange, duration, seekTime, isPlaying, onDurationChange, onPlayPause, onSeek, timelineRef, formatTime}: ScenePreviewProps) {
   const presented = useMemo(
     () => (input === undefined ? undefined : resolvePresentation(input, presentation)),
     [input, presentation],
