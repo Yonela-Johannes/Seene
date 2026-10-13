@@ -1,6 +1,6 @@
 import { lstat, mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { SCENE_RECIPE_DIRECTORY, type SceneCatalog, type SceneRecipe } from "../core/recipes";
+import { SCENE_RECIPE_DIRECTORY, type SceneCatalog, type SceneRecipe, SceneRecipeSchema } from "../core/recipes";
 import { RESOURCES } from "../core/resources";
 import { analyzeApplicationModule, classifyApplicationUnit, componentImportSpecifier, isApplicationSourcePath, isIconOrPrimitive, sceneComponentName, type PlatformContent } from "../core/platform";
 import { portableCatalog } from "../project/portable";
@@ -245,3 +245,31 @@ export async function discoverApplicationContent(root: string, limit = 400): Pro
 }
 
 export { componentImportSpecifier };
+
+export async function updateSceneRecipe(root: string, id: string, definition: { backdrop?: string | undefined }): Promise<"updated" | "not-found"> {
+  const directory = await resolveProjectTarget(root, SCENE_RECIPE_DIRECTORY);
+  const recipePath = path.join(directory, `${id}.scene.json`);
+  const exists = await lstat(recipePath).then(() => true, () => false);
+  if (!exists) return "not-found";
+  const before = await readFile(recipePath, "utf8");
+  let parsed: SceneRecipe;
+  try {
+    parsed = JSON.parse(before) as SceneRecipe;
+  } catch {
+    return "not-found";
+  }
+  const merged = {
+    ...parsed,
+    definition: {
+      ...parsed.definition,
+      ...definition,
+      ...(definition.backdrop === undefined ? { backdrop: undefined } : {}),
+    },
+  } as SceneRecipe;
+  const validated = SceneRecipeSchema.safeParse(merged);
+  if (!validated.success) return "not-found";
+  const after = JSON.stringify(validated.data, null, 2) + "\n";
+  if (after === before) return "updated";
+  await writeFile(recipePath, after, { encoding: "utf8", flag: "w" });
+  return "updated";
+}

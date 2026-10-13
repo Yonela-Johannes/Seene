@@ -261,15 +261,6 @@ const showcase: Presentation = {
   entrance: { depth: 70, depthStep: 10, staggerMs: 150, entranceMs: 2000 },
 };
 
-const authored: Presentation = {
-  id: "authored",
-  label: "Authored",
-  summary: "Custom scene defined by the creator.",
-  camera: { perspective: 1400, x: 0, y: 0, z: 0, rotateX: 0, rotateY: 0, rotateZ: 0 },
-  focus: { distance: 1400, fStop: 8, focalLength: 50, maxBlur: 6 },
-  durationMs: 6000,
-  tracks: [],
-};
 
 const minimal: Presentation = {
   id: "minimal",
@@ -282,7 +273,7 @@ const minimal: Presentation = {
 };
 
 export const PRESENTATIONS: readonly Presentation[] = Object.freeze(
-  [clean, depth, cinematic, floating, focus, showcase, minimal, orbit, reveal, productTour, editorial, parallax, dramaticPush, overview, detailFocus, authored].map((value) => {
+  [clean, depth, cinematic, floating, focus, showcase, minimal, orbit, reveal, productTour, editorial, parallax, dramaticPush, overview, detailFocus].map((value) => {
     const parsed = PresentationSchema.parse(value);
     assertEntrance(parsed);
     return parsed;

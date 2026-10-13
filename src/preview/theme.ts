@@ -2,16 +2,16 @@ import {studioTheme} from './studio-theme';
 
 export const previewTheme = `
 ${studioTheme}
-[data-seene-preview]{position:fixed;inset:0;height:100dvh;overflow:hidden;background:#000;color:#fff;min-height:0;width:100%;box-sizing:border-box;isolation:isolate}
+[data-seene-preview]{position:fixed;inset:0;height:100dvh;overflow:hidden;background:transparent;color:#fff;min-height:0;width:100%;box-sizing:border-box;isolation:isolate}
 .seene-chrome{font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;box-sizing:border-box;color:#fff}
-.seene-viewport{position:absolute;inset:0;background:#000;overflow:hidden;display:flex;align-items:center;justify-content:center}
-.seene-canvas{flex:none;position:relative;overflow:hidden;background:#000}
+.seene-viewport{position:absolute;inset:0;background:var(--seene-scene-backdrop, #000);overflow:hidden;display:flex;align-items:center;justify-content:center}
+.seene-canvas{flex:none;position:relative;overflow:hidden;background:var(--seene-scene-backdrop, #000)}
 .seene-bottom-blur{position:absolute;inset:auto 0 0;height:min(320px,50%);pointer-events:none;z-index:1}
 .seene-bottom-blur i{position:absolute;inset:0;pointer-events:none;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);mask-image:linear-gradient(transparent,#000 55%);-webkit-mask-image:linear-gradient(transparent,#000 55%)}
 .seene-bottom-blur i:first-child{background:rgb(0 0 0 / .28)}
 .seene-bottom-blur i:nth-child(2){top:25%;backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);mask-image:linear-gradient(transparent,#000 65%);-webkit-mask-image:linear-gradient(transparent,#000 65%)}
 .seene-bottom-blur i:nth-child(3){top:50%;backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);mask-image:linear-gradient(transparent,#000 80%);-webkit-mask-image:linear-gradient(transparent,#000 80%)}
-.seene-footer{position:absolute;inset:auto 0 0;z-index:2;pointer-events:none;padding:24px max(24px,env(safe-area-inset-right)) max(20px,env(safe-area-inset-bottom)) max(24px,env(safe-area-inset-left));box-sizing:border-box}
+.seene-footer{position:absolute;inset:auto 0 0;z-index:2;pointer-events:none;padding:24px max(24px,env(safe-area-inset-right)) max(20px,env(safe-area-inset-bottom)) max(24px,env(safe-area-inset-left));box-sizing:border-box;background:rgba(13,17,25,0.92)}
 .seene-controls{max-width:760px;max-height:calc(100dvh - 48px - env(safe-area-inset-bottom));overflow:auto;overscroll-behavior:contain;margin:0 auto;display:flex;flex-direction:column;gap:12px;pointer-events:auto;padding:6px;scrollbar-width:thin;scrollbar-color:#666 transparent}
 .seene-header{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-shrink:0}
 .seene-heading{display:flex;align-items:center;gap:16px;min-width:0}

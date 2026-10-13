@@ -33,6 +33,17 @@ export const SceneRecipeSchema = z.strictObject({
 export type SceneRecipeInput = z.input<typeof SceneRecipeSchema>;
 export type SceneRecipe = z.output<typeof SceneRecipeSchema>;
 export type DiscoveredRecipe = SceneRecipe & { source: string; binding: string };
+
+export const BackdropPatchSchema = z.string().trim().min(1).max(64);
+export const SceneUpdateSchema = z.strictObject({
+  id: SceneRecipeIdSchema,
+  recipe: z.strictObject({
+    definition: z.strictObject({
+      backdrop: BackdropPatchSchema.optional(),
+    }),
+  }),
+});
+export type SceneUpdateInput = z.input<typeof SceneUpdateSchema>;
 export type SceneCatalog = {
   scenes: DiscoveredRecipe[];
   selected?: DiscoveredRecipe;

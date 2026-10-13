@@ -24,7 +24,7 @@ import { ApplicationPreview, containsDocumentContent, type ApplicationIssue } fr
 import { ScenePreview } from "./ScenePreview";
 import type { PreviewHot } from "./connection";
 import { GettingStarted } from "./GettingStarted";
-import { TRANSITION_PRESETS, type TransitionPresetName } from "../core/preview";
+import { TRANSITION_PRESETS, type TransitionPresetName, type PreviewDefinitionInput } from "../core/preview";
 
 export type SceneLibraryProps = {
   sources?: Record<string, unknown>;
@@ -414,7 +414,18 @@ export function SceneLibrary({
     }
   };
 
-  if (!entered) {
+   const saveSceneDefinition = useCallback((definition: PreviewDefinitionInput) => {
+    if (!createSceneEndpoint || !selectedScene) return;
+    void fetch(createSceneEndpoint, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: selectedScene.id, recipe: { definition: { backdrop: definition.backdrop ?? "site" } } }),
+    }).then((res) => {
+      void res;
+    });
+  }, [createSceneEndpoint, selectedScene]);
+
+   if (!entered) {
     return (
       <GettingStarted
         onStartCreating={() => {
@@ -436,10 +447,11 @@ export function SceneLibrary({
         onBack={closeScene}
         hot={hot}
         presentation={presentation}
-        onPresentationChange={changePresentation}
-        transition={transition}
-        onTransitionChange={onTransitionChange}
-      >
+         onPresentationChange={changePresentation}
+         transition={transition}
+         onTransitionChange={onTransitionChange}
+         onSaveDefinition={saveSceneDefinition}
+       >
         {effectiveRoute ? (
           <Surface
             id={SCENE_PRESENTATION_SURFACE}

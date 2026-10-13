@@ -1,9 +1,9 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { readFile, lstat } from "node:fs/promises";
 import path from "node:path";
-import { SceneRecipeSchema } from "../core/recipes";
+import { SceneRecipeSchema, SceneUpdateSchema } from "../core/recipes";
 import { sceneComponentSource, validateHostComponent } from "../core/platform";
-import { PlatformFault, writeSceneSourcePair, componentImportSpecifier } from "./scene-files";
+import { PlatformFault, writeSceneSourcePair, updateSceneRecipe, componentImportSpecifier } from "./scene-files";
 
 const maxBodyBytes = 256_000;
 type Result = { status: number; body: { success?: true; id?: string; error?: string; warning?: string } };
@@ -130,11 +130,54 @@ export async function POST(request: Request): Promise<Response> {
   return handleNextScenePost(request);
 }
 
+async function updateScene(payload: unknown, root: string): Promise<Result> {
+  if (process.env.NODE_ENV !== "development") return jsonError(404, "Scene updates are available only in development.");
+  const parsed = SceneUpdateSchema.safeParse(payload);
+  if (!parsed.success) return jsonError(400, parsed.error.issues.map(issue => `${issue.path.join(".")}: ${issue.message}`).join("; "));
+  try {
+    const outcome = await updateSceneRecipe(root, parsed.data.id, parsed.data.recipe.definition);
+    if (outcome === "not-found") return jsonError(404, `Scene "${parsed.data.id}" not found.`);
+    return { status: 200, body: { success: true, id: parsed.data.id } };
+  } catch (error) {
+    if (error instanceof PlatformFault && error.code === "denied-path") return jsonError(400, error.message);
+    return jsonError(400, error instanceof Error ? error.message : "Unable to update scene recipe.");
+  }
+}
+
+export async function handleNextScenePut(request: Request, root = process.cwd()): Promise<Response> {
+  try {
+    if (request.method !== "PUT") return Response.json({ error: "Use PUT to update a scene." }, { status: 405, headers: { Allow: "PUT" } });
+    const origin = request.headers.get("origin");
+    const host = request.headers.get("host") ?? new URL(request.url).host;
+    if (origin && !isSameOrigin(origin, host, new URL(request.url).origin)) return Response.json({ error: "Cross-origin scene updates are not allowed." }, { status: 403 });
+    const read = await readWebBody(request);
+    if (read.kind === "too-large") return Response.json({ error: "Scene update request is too large." }, { status: 413 });
+    if (read.kind === "unreadable") return Response.json({ error: "Scene update request could not be read." }, { status: 400 });
+    const parsed = parseJson(read.text);
+    if (!parsed.ok) return Response.json({ error: "Scene update request must contain valid JSON." }, { status: 400 });
+    const result = await updateScene(parsed.value, root);
+    return Response.json(result.body, { status: result.status });
+  } catch (err: any) {
+    return Response.json({ error: err?.message || String(err) }, { status: 500 });
+  }
+}
+
+export async function PUT(request: Request): Promise<Response> {
+  return handleNextScenePut(request);
+}
+
 export function createPagesHandler(request: IncomingMessage, response: ServerResponse, root = process.cwd()): void {
-  if (request.method !== "POST") { json(response, 405, { error: "Use POST to create a scene." }); return; }
-  const origin = request.headers.origin;
-  const host = request.headers.host;
-  if (origin && host && !isSameOrigin(origin, host, origin)) { json(response, 403, { error: "Cross-origin scene creation is not allowed." }); return; }
+  if (request.method === "POST") {
+    handlePagesScenePost(request, response, root);
+  } else if (request.method === "PUT") {
+    handlePagesScenePut(request, response, root);
+  } else {
+    json(response, 405, { error: "Use POST to create a scene or PUT to update one." });
+  }
+}
+
+function handlePagesScenePost(request: IncomingMessage, response: ServerResponse, root: string): void {
+  if (request.headers.origin && request.headers.host && !isSameOrigin(request.headers.origin, request.headers.host, request.headers.origin)) { json(response, 403, { error: "Cross-origin scene creation is not allowed." }); return; }
   void (async () => {
     const read = await readNodeBody(request);
     if (read.kind === "too-large") { json(response, 413, { error: "Scene request is too large." }); return; }
@@ -142,6 +185,19 @@ export function createPagesHandler(request: IncomingMessage, response: ServerRes
     const parsed = parseJson(read.text);
     if (!parsed.ok) { json(response, 400, { error: "Scene request must contain valid JSON." }); return; }
     const result = await createScene(parsed.value, root);
+    json(response, result.status, result.body);
+  })();
+}
+
+function handlePagesScenePut(request: IncomingMessage, response: ServerResponse, root: string): void {
+  if (request.headers.origin && request.headers.host && !isSameOrigin(request.headers.origin, request.headers.host, request.headers.origin)) { json(response, 403, { error: "Cross-origin scene updates are not allowed." }); return; }
+  void (async () => {
+    const read = await readNodeBody(request);
+    if (read.kind === "too-large") { json(response, 413, { error: "Scene update request is too large." }); return; }
+    if (read.kind === "unreadable") { json(response, 400, { error: "Scene update request could not be read." }); return; }
+    const parsed = parseJson(read.text);
+    if (!parsed.ok) { json(response, 400, { error: "Scene update request must contain valid JSON." }); return; }
+    const result = await updateScene(parsed.value, root);
     json(response, result.status, result.body);
   })();
 }

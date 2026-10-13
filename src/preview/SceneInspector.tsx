@@ -1,5 +1,6 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { PRESENTATION_PRESETS, applyPresentationPreset, type PresentationPresetName, type PreviewDefinitionInput } from "../core/preview";
+import { parseBackdropMode } from "./backdrop";
 
 const CAMERA_MOTION_PRESETS = {
   dolly: { name: "Dolly", description: "Camera moves toward the subject" },
@@ -58,11 +59,12 @@ function applyCameraMotionPreset(definition: PreviewDefinitionInput, preset: key
 export type SceneInspectorProps = {
   definition?: PreviewDefinitionInput;
   onChange?: (updated: PreviewDefinitionInput) => void;
+  onSaveDefinition?: (definition: PreviewDefinitionInput) => void;
   isOpen?: boolean;
   onToggle?: () => void;
 };
 
-export function SceneInspector({definition, onChange, isOpen, onToggle}: SceneInspectorProps) {
+export function SceneInspector({definition, onChange, onSaveDefinition, isOpen, onToggle}: SceneInspectorProps) {
   const [internalIsOpen, setInternalIsOpen] = useState(false);
   const open = isOpen !== undefined ? isOpen : internalIsOpen;
   const toggle = onToggle || (() => setInternalIsOpen(!open));
@@ -83,6 +85,7 @@ export function SceneInspector({definition, onChange, isOpen, onToggle}: SceneIn
   const focus = definition.scene?.focus ?? {};
   const sceneInfo = definition.scene;
   const durMs = definition.motion?.durationMs ?? 0;
+  const { mode, color } = parseBackdropMode(definition.backdrop);
 
   const updateCamera = (key: string, val: number) => {
     if (!onChange) return;
@@ -130,6 +133,22 @@ export function SceneInspector({definition, onChange, isOpen, onToggle}: SceneIn
     });
   };
 
+  const updateBackdrop = (backdrop: string | undefined) => {
+    if (!onChange) return;
+    onChange({ ...definition, backdrop: backdrop && backdrop !== "site" ? backdrop : undefined });
+  };
+
+  const updateCustomBackdrop = (value: string) => {
+    const trimmed = value.trim();
+    if (!onChange) return;
+    onChange(trimmed ? { ...definition, backdrop: trimmed } : { ...definition, backdrop: undefined });
+  };
+
+  const handleSave = useCallback(() => {
+    if (!onSaveDefinition) return;
+    onSaveDefinition(definition);
+  }, [onSaveDefinition, definition]);
+
   return (
     <div className="relative">
       <button
@@ -140,7 +159,7 @@ export function SceneInspector({definition, onChange, isOpen, onToggle}: SceneIn
       >
         {open ? "Close Inspector" : "Scene Inspector"}
       </button>
-      
+
       {open && (
         <div
           id="scene-inspector-panel"
@@ -198,7 +217,7 @@ export function SceneInspector({definition, onChange, isOpen, onToggle}: SceneIn
             {/* Camera Controls */}
             <div className="space-y-3">
               <h4 className="text-sm font-medium text-[var(--seene-text)]">Camera & Lens</h4>
-              
+
               <div className="grid grid-cols-3 gap-2">
                 <label className="space-y-1">
                   <span className="text-xs text-[var(--seene-text-muted)]">Cam X</span>
@@ -326,6 +345,50 @@ export function SceneInspector({definition, onChange, isOpen, onToggle}: SceneIn
               </div>
             </div>
 
+            {/* Backdrop */}
+            <div className="space-y-3">
+              <h4 className="text-sm font-medium text-[var(--seene-text)]">Backdrop</h4>
+              <div className="flex items-center gap-4 text-xs">
+                <label className="flex items-center gap-2">
+                  <input type="radio" name="seene-backdrop" value="site"
+                    checked={mode === "site"}
+                    onChange={() => updateBackdrop("site")} />
+                  <span className="text-[var(--seene-text)]">Use site background</span>
+                </label>
+                <label className="flex items-center gap-2">
+                  <input type="radio" name="seene-backdrop" value="transparent"
+                    checked={mode === "transparent"}
+                    onChange={() => updateBackdrop("transparent")} />
+                  <span className="text-[var(--seene-text)]">Transparent</span>
+                </label>
+                <label className="flex items-center gap-2">
+                  <input type="radio" name="seene-backdrop" value="custom"
+                    checked={mode === "custom"}
+                    onChange={() => updateBackdrop(color ?? "#000000")} />
+                  <span className="text-[var(--seene-text)]">Custom</span>
+                </label>
+              </div>
+              {mode === "custom" && (
+                <div className="flex items-center gap-3">
+                  <label className="text-xs text-[var(--seene-text-muted)]">Color</label>
+                  <input
+                    type="color"
+                    aria-label="Custom backdrop color"
+                    value={color ?? "#000000"}
+                    onChange={(e) => updateBackdrop(e.target.value)}
+                    className="h-8 w-12 cursor-pointer rounded border border-[var(--seene-border-text)] bg-transparent p-0 outline-none"
+                  />
+                  <input
+                    type="text"
+                    aria-label="Custom backdrop color value"
+                    value={color ?? "#000000"}
+                    onChange={(e) => updateCustomBackdrop(e.target.value)}
+                    className="flex-1 rounded border border-[var(--seene-border-text)] bg-[var(--seene-surface)] px-2 py-1 text-xs text-[var(--seene-text)] focus:border-[var(--seene-accent)] focus:outline-none"
+                  />
+                </div>
+              )}
+            </div>
+
             {/* Camera Motion Presets */}
             <div className="space-y-3">
               <h4 className="text-xs font-medium text-[var(--seene-text-muted)] uppercase tracking-wider">
@@ -364,12 +427,21 @@ export function SceneInspector({definition, onChange, isOpen, onToggle}: SceneIn
             </div>
 
             {/* Reset Button */}
-            <div className="pt-3 border-t border-[var(--seene-border-text)]">
+            <div className="pt-3 border-t border-[var(--seene-border-text)] space-y-3">
               <button
                 onClick={resetCamera}
                 className="w-full rounded-lg border border-[var(--seene-border-text)] bg-[var(--seene-surface)] px-3 py-2 text-xs font-medium text-[var(--seene-text)] transition-all hover:bg-[var(--seene-surface-2)]"
               >
                 Reset Camera
+              </button>
+              <button
+                type="button"
+                data-testid="seene-inspector-save"
+                onClick={handleSave}
+                disabled={!onSaveDefinition}
+                className="w-full rounded-lg border border-[var(--seene-accent)] bg-[var(--seene-accent)] px-3 py-2 text-xs font-medium text-[var(--seene-surface)] transition-all hover:bg-[var(--seene-accent-hover)] disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Save Backdrop
               </button>
             </div>
           </div>
@@ -378,4 +450,3 @@ export function SceneInspector({definition, onChange, isOpen, onToggle}: SceneIn
     </div>
   );
 }
-

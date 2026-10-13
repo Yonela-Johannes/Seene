@@ -41,6 +41,14 @@ it.each([
   expect(view.container.innerHTML).toBe("<button>Original</button>");
 });
 
+it("activates on the active prop without a preview query string", () => {
+  window.history.replaceState({}, "", "/app");
+  render(<ProjectPreview projectId="host" enabled active><button>Original</button></ProjectPreview>);
+  expect(document.querySelectorAll("[data-seene-scene]")).toHaveLength(1);
+  expect(document.querySelector("[data-seene-project]")!.getAttribute("data-seene-project")).toBe("host");
+  expect(screen.getByText("Live preview")).toBeTruthy();
+});
+
 it("uses canonical camera and progressive focus while preserving host context, events and identity", () => {
   const Context = createContext("missing");
   const requestData = vi.fn();

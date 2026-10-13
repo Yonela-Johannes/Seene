@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, useId, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useId, type ReactNode, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
 import { SUPPORTED_EXPORT_FPS, ExportFrameRateSchema, SCENE_TRANSITION_DURATION, type TransitionPresetName, type PreviewDefinition, type PreviewDefinitionInput } from "../core";
 import { Scene, SceneErrorBoundary, useSceneCapture } from "../react";
@@ -11,6 +11,7 @@ import { PresentationPicker } from "./PresentationPicker";
 import { TransitionPicker } from "./TransitionPicker";
 import { SceneInspector } from "./SceneInspector";
 import { previewTheme } from "./theme";
+import { useSceneBackdrop } from "./backdrop";
 
 const easeInOut = (t: number) => t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
 
@@ -35,6 +36,7 @@ export type ScenePreviewProps = {
   onSeek?: (time: number) => void;
   timelineRef?: React.RefObject<HTMLDivElement>;
   formatTime?: (ms: number) => string;
+  onSaveDefinition?: (definition: PreviewDefinitionInput) => Promise<void> | void;
 };
 const timeLabel = (ms: number) => `${Math.floor(ms / 60000)}:${String(Math.floor(ms / 1000) % 60).padStart(2,"0")}`;
 function Glyph({kind}: {kind: "play" | "pause" | "restart" | "export"}) {
@@ -89,7 +91,7 @@ function ExportMenu({disabled, panelHost}: {disabled: boolean; panelHost: HTMLDi
     </details>;
 }
 
-export function ScenePreview({definition: input, children, title = "Untitled scene", backHref, onBack, revision, hot, presentation, onPresentationChange, transition, onTransitionChange, duration, seekTime, isPlaying, onDurationChange, onPlayPause, onSeek, timelineRef, formatTime}: ScenePreviewProps) {
+export function ScenePreview({definition: input, children, title = "Untitled scene", backHref, onBack, revision, hot, presentation, onPresentationChange, transition, onTransitionChange, duration, seekTime, isPlaying, onDurationChange, onPlayPause, onSeek, timelineRef, formatTime, onSaveDefinition}: ScenePreviewProps) {
   const presented = useMemo(
     () => (input === undefined ? undefined : resolvePresentation(input, presentation)),
     [input, presentation],
@@ -116,6 +118,7 @@ export function ScenePreview({definition: input, children, title = "Untitled sce
     return () => observer?.disconnect();
   }, [viewport]);
   const definition = session.definition;
+  const sceneBackdrop = useSceneBackdrop(definition?.backdrop);
   const blocked = !session.valid || !connection.connected || !!connection.error || !!renderError;
   const [prevDefinition, setPrevDefinition] = useState<PreviewDefinition | undefined>(undefined);
   const [transitionProgress, setTransitionProgress] = useState(0);
@@ -167,7 +170,7 @@ export function ScenePreview({definition: input, children, title = "Untitled sce
     connection.updating ? "Updating scene…" : renderError || session.issues.length ? "Scene needs a correction" :
     !definition ? "Waiting for a scene" : session.playing ? "Playing" : "Live preview";
   return (
-    <main data-seene-preview="" data-seene-state={blocked ? "unavailable" : "ready"}>
+    <main data-seene-preview="" data-seene-state={blocked ? "unavailable" : "ready"} style={{ "--seene-scene-backdrop": sceneBackdrop } as CSSProperties}>
     <style>{previewTheme}</style>
     <div className="seene-viewport" ref={setViewport} aria-label="Scene preview">
       {!definition && <div className="seene-empty seene-chrome">
@@ -232,7 +235,7 @@ export function ScenePreview({definition: input, children, title = "Untitled sce
             }}>{onBack ? "Back to scenes" : "Back to app"}</a> : onBack && <button className="seene-control" onClick={onBack}>Back to scenes</button>}
             <h1 className="seene-title">{title}</h1>
           </div>
-          <SceneInspector definition={localDef} onChange={updated => setLocalDef(updated)} />
+          <SceneInspector definition={localDef} onChange={updated => setLocalDef(updated)} onSaveDefinition={onSaveDefinition} />
           <ExportMenu disabled={blocked || !session.durationMs} panelHost={exportPanel}/>
         </div>
         {onPresentationChange && <PresentationPicker value={presentation} onChange={onPresentationChange} />}

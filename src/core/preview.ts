@@ -41,6 +41,7 @@ export const PreviewDefinitionSchema = z.strictObject({
   motion: MotionSchema.optional(),
   width: z.number().finite().positive().max(7680).default(1400),
   height: z.number().finite().positive().max(7680).default(980),
+  backdrop: z.string().trim().min(1).max(64).optional(),
 });
 export type PreviewDefinitionInput = z.input<typeof PreviewDefinitionSchema>;
 export type PreviewDefinition = z.output<typeof PreviewDefinitionSchema>;

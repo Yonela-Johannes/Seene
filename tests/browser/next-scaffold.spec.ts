@@ -19,6 +19,24 @@ async function freePort(): Promise<number> {
   return port;
 }
 
+async function fileExists(p: string): Promise<boolean> {
+  try {
+    await readFile(p, "utf8");
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function waitForFile(p: string, timeout = 20000): Promise<void> {
+  const start = Date.now();
+  while (Date.now() - start < timeout) {
+    if (await fileExists(p)) return;
+    await new Promise(r => setTimeout(r, 200));
+  }
+  expect(await fileExists(p)).toBe(true);
+}
+
 function runCmd(exe: string, args: string[], cwd: string) {
   return new Promise<string>((resolve, reject) => {
     const child = spawn(exe, args, {
@@ -314,6 +332,80 @@ for (const env of matrix) {
 
       const validSceneLink = page.locator('main[data-seene-library] a[data-scene-id="header"]');
       await expect(validSceneLink).toBeVisible();
+    });
+
+    test("creates a scene from the Studio UI and writes recipe + component files to disk, then renders it", async ({ page }) => {
+      const catalogUrl = `${env.devUrl}/seene?seene-preview=1`;
+      await page.goto(catalogUrl);
+      await expect(page.locator("main[data-seene-library]")).toBeVisible({ timeout: 20000 });
+
+      // Open the create-scene dialog from the catalog toolbar and author a new scene inline.
+      await page.getByRole("button", { name: "+ Create scene" }).click();
+      await expect(page.locator('section[role="dialog"]')).toBeVisible();
+
+      const sceneTitle = "E2E Studio Create";
+      const slug = "e2e-studio-create";
+      await page.locator("#seene-create-title").fill(sceneTitle);
+      await page.locator("button[type=submit]").click();
+
+      // Primary proof: the browser-initiated POST reached /api/seene/create-scene, which
+      // wrote the recipe + scaffolded component to disk (recipe+component pair in the host).
+      const scenesDir = path.join(env.hostDir!, "src/seene/scenes");
+      const recipePath = path.join(scenesDir, `${slug}.scene.json`);
+      const componentPath = path.join(scenesDir, `${slug}.tsx`);
+
+      await waitForFile(recipePath, 20000);
+      await waitForFile(componentPath, 20000);
+
+      const recipe = JSON.parse(await readFile(recipePath, "utf8"));
+      expect(recipe.id).toBe(slug);
+      expect(recipe.title).toBe(sceneTitle);
+      const component = await readFile(componentPath, "utf8");
+      expect(component).toContain('Surface id="host"');
+      expect(component).toContain(`Edit src/seene/scenes/${slug}.tsx to add your component.`);
+
+      // The create endpoint regenerated catalog.js server-side; reload so Next recompiles
+      // the updated static import catalog, then the freshly authored scene propagates through.
+      await page.goto(catalogUrl, { waitUntil: "domcontentloaded" });
+      await expect(page.locator(`main[data-seene-library] a[data-scene-id="${slug}"]`)).toHaveCount(1, { timeout: 30000 });
+
+      // Click the new scene; the catalog resolves it to host mode and renders the scaffolded
+      // Surface authored in Seene Studio, proving the round-trip from UI creation to preview.
+      await page.locator(`main[data-seene-library] a[data-scene-id="${slug}"]`).click();
+      const placeholder = page.locator('[data-seene-preview] [data-seene-id="host"] p');
+      await expect(placeholder).toBeVisible({ timeout: 20000 });
+      await expect(placeholder).toHaveText(`Edit src/seene/scenes/${slug}.tsx to add your component.`);
+    });
+
+    test("edits a scene backdrop from the inspector, saves it to the recipe JSON on disk, and persists across reloads", async ({ page }) => {
+      test.setTimeout(90000);
+      const recipePath = path.join(env.hostDir!, "src/seene/scenes/header.scene.json");
+      let putSeen = false;
+      page.on("request", (request) => {
+        if (request.url().endsWith("/api/seene/create-scene") && request.method() === "PUT") putSeen = true;
+      });
+
+      await page.goto(`${env.devUrl}/seene?seene-preview=1&seene-scene=header`);
+      await expect(page.locator('[data-seene-preview] [data-testid="next-host-header"]')).toHaveText("Real Next.js Header", { timeout: 20000 });
+
+      await page.getByRole("button", { name: "Scene Inspector" }).click();
+      await expect(page.locator("[data-testid=seene-inspector-save]")).toBeVisible();
+
+      await page.locator('input[name="seene-backdrop"][value="custom"]').click();
+      await page.locator('input[type="color"]').fill("#ff0000");
+      await page.locator("[data-testid=seene-inspector-save]").click();
+
+      await expect.poll(async () => {
+        const recipe = JSON.parse(await readFile(recipePath, "utf8"));
+        return recipe.definition.backdrop;
+      }, { timeout: 20000 }).toBe("#ff0000");
+      expect(putSeen).toBe(true);
+
+      // Reload and confirm the saved backdrop is restored in the inspector.
+      await page.goto(`${env.devUrl}/seene?seene-preview=1&seene-scene=header`, { waitUntil: "networkidle" });
+      await page.getByRole("button", { name: "Scene Inspector" }).click();
+      await expect(page.locator('input[name="seene-backdrop"][value="custom"]')).toBeChecked();
+      await expect(page.locator('input[type="color"]')).toHaveValue("#ff0000");
     });
   });
 }

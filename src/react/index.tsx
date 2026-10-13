@@ -13,7 +13,6 @@ import {
 } from "react";
 import {
   RESOURCES,
-  SCENE_BACKGROUND,
   cameraToCss,
   transformToCss,
   motionTime,
@@ -199,8 +198,7 @@ export function Scene({
           data-seene-valid={result.evaluation.issues.length===0 ? "true" : "false"}
           style={{
             ...style,
-            background: SCENE_BACKGROUND,
-            backgroundColor: SCENE_BACKGROUND,
+            background: "var(--seene-scene-backdrop, #000000)",
             backgroundImage: "none",
             position: style?.position ?? "relative",
             pointerEvents: "none",

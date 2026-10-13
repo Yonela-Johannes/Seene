@@ -48,6 +48,39 @@ it("keeps the preview create-scene dialog accessible and explains a missing Next
   expect(request).toHaveBeenCalledWith("/api/seene/create-scene", expect.objectContaining({ method: "POST" }));
 });
 
+it("submits a creation request, closes the dialog on success, and opens the generated scene once files are available", async () => {
+  enterLibrary();
+  const request = vi.fn(async (_url: string, _options: RequestInit) => ({
+    ok: true,
+    headers: { get: () => "application/json" },
+    json: async () => ({ success: true }),
+  }));
+  vi.stubGlobal("fetch", request);
+  const { Surface } = await import("../../src/react");
+  const view = render(<ProjectPreview projectId="next-project" enabled sceneModules={{}} createSceneEndpoint="/api/seene/create-scene" />);
+  fireEvent.click(await screen.findByRole("button", { name: "+ Create scene" }));
+  fireEvent.change(screen.getByLabelText("Scene Title"), { target: { value: "Landing scene" } });
+  fireEvent.submit(screen.getByRole("button", { name: "Create scene" }).closest("form")!);
+
+  await waitFor(() => expect(request).toHaveBeenCalledWith("/api/seene/create-scene", expect.objectContaining({ method: "POST" })));
+  const body = JSON.parse(request.mock.calls[0][1].body as string);
+  expect(body.id).toBe("landing-scene");
+  expect(body.recipe.title).toBe("Landing scene");
+  expect(body.recipe.definition).toBeDefined();
+  expect(body.hostPath).toBeUndefined();
+
+  await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  expect(new URL(window.location.href).searchParams.get("seene-scene")).toBe("landing-scene");
+
+  const updatedModules = {
+    "/src/seene/scenes/landing-scene.scene.json": async () => ({ default: recipe("landing-scene", "Landing scene") }),
+    "/src/seene/scenes/landing-scene.tsx": async () => ({ default: () => <Surface id="host"><p>Landing scene content</p></Surface> }),
+  };
+  view.rerender(<ProjectPreview projectId="next-project" enabled sceneModules={updatedModules} createSceneEndpoint="/api/seene/create-scene" />);
+  expect(await screen.findByText("Landing scene content")).toBeTruthy();
+  expect(screen.getByRole("heading", { name: "Landing scene" })).toBeTruthy();
+});
+
 it("uses inert cached images without mounting host scenes and recovers a failed image on replacement", () => {
   enterLibrary();
   const Host = vi.fn(() => null);
