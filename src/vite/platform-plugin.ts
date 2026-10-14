@@ -198,26 +198,57 @@ function createHandler(options: { platformRoot?: string }) {
             const input = parse<{ path: string } & SceneDraft>(CreateSceneRequestSchema, await body(request));
             const entry = await locate(input.path);
             const { project } = await inspectProject(entry.path, entry);
-            let content: { importSpecifier: string; export?: string } | undefined;
-            if (input.content) {
-              if (!isApplicationSourcePath(input.content.file))
-                throw new PlatformFault("invalid-input", "Choose a component file inside src/ that is not one of this project's Seene scenes.");
-              const absolute = await resolveProjectTarget(entry.path, input.content.file).catch(() => undefined);
+
+            const rawSelections = input.sections ?? (input.content ? [input.content] : []);
+            const resolvedSections: Array<{ id: string; title: string; file: string; importSpecifier: string; export?: string }> = [];
+
+            for (let i = 0; i < rawSelections.length; i++) {
+              const sel = rawSelections[i];
+              if (!isApplicationSourcePath(sel.file))
+                throw new PlatformFault("invalid-input", `Choose a component file inside src/ that is not a Seene scene: ${sel.file}`);
+              const absolute = await resolveProjectTarget(entry.path, sel.file).catch(() => undefined);
               const source = absolute ? await readFile(absolute, "utf8").catch(() => undefined) : undefined;
-              if (source === undefined) throw new PlatformFault("not-found", `${input.content.file} is no longer part of this project.`);
+              if (source === undefined) throw new PlatformFault("not-found", `${sel.file} is no longer part of this project.`);
               const analysis = analyzeApplicationModule(source);
-              if (input.content.export && !analysis.exports.includes(input.content.export))
-                throw new PlatformFault("invalid-input", `${input.content.file} does not export ${input.content.export}.`);
-              if (!input.content.export && !analysis.default)
-                throw new PlatformFault("invalid-input", `${input.content.file} has no default export; choose one of its named exports instead.`);
-              content = { importSpecifier: componentImportSpecifier(input.content.file), ...(input.content.export ? { export: input.content.export } : {}) };
+              if (sel.export && !analysis.exports.includes(sel.export))
+                throw new PlatformFault("invalid-input", `${sel.file} does not export ${sel.export}.`);
+              if (!sel.export && !analysis.default)
+                throw new PlatformFault("invalid-input", `${sel.file} has no default export; choose one of its named exports instead.`);
+
+              const basename = sel.file.split("/").pop()?.replace(/\.[jt]sx$/, "") || `section-${i + 1}`;
+              const formattedTitle = (sel.export && sel.export !== "default" ? sel.export : basename).replace(/([a-z])([A-Z])/g, "$1 $2");
+
+              resolvedSections.push({
+                id: `sec-${i + 1}-${sel.export || basename.toLowerCase()}`,
+                title: formattedTitle,
+                file: sel.file,
+                importSpecifier: componentImportSpecifier(sel.file),
+                ...(sel.export ? { export: sel.export } : {}),
+              });
             }
-            const route = input.content
-              ? applicationRouteForContent(input.content.file, input.content.export)
+
+            const primaryRoute = rawSelections.length > 0
+              ? applicationRouteForContent(rawSelections[0].file, rawSelections[0].export)
               : (isDocumentApplication(project.adapter) ? "/" : undefined);
-            const recipe = createSceneRecipe({ id: input.id, title: input.title,
-              ...(input.description ? { description: input.description } : {}), ...(route ? { applicationRoute: route } : {}) });
-            if (await writeSceneSourcePair(entry.path, input.id, recipe, sceneComponentSource({ id: input.id, content })) === "exists")
+
+            const recipe = createSceneRecipe({
+              id: input.id,
+              title: input.title,
+              ...(input.description ? { description: input.description } : {}),
+              ...(primaryRoute ? { applicationRoute: primaryRoute } : {}),
+              compositionType: input.compositionType ?? (rawSelections.length > 1 ? "walkthrough" : "scene"),
+              sections: resolvedSections.map(s => ({ id: s.id, title: s.title, file: s.file, ...(s.export ? { export: s.export } : {}) })),
+              width: input.width,
+              height: input.height,
+            });
+
+            const compSource = sceneComponentSource({
+              id: input.id,
+              compositionType: recipe.definition.compositionType,
+              sections: resolvedSections,
+            });
+
+            if (await writeSceneSourcePair(entry.path, input.id, recipe, compSource) === "exists")
               throw new PlatformFault("conflict", `Scene "${input.id}" already exists in this project. Choose another name.`);
             const catalog = summarizeCatalog(await readSceneCatalog(entry.path));
             const scene = catalog.scenes.find(item => item.id === input.id);

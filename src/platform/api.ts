@@ -29,8 +29,17 @@ export const platformApi = {
   catalog: (target: string) => request<CatalogResponse>(`${PLATFORM_API_PREFIX}/projects/scenes?path=${encodeURIComponent(target)}`),
   content: (target: string) => request<ContentResponse>(`${PLATFORM_API_PREFIX}/projects/content?path=${encodeURIComponent(target)}`),
   status: (target: string, origin: string) => request<PlatformStatus>(`${PLATFORM_API_PREFIX}/projects/status?path=${encodeURIComponent(target)}&origin=${encodeURIComponent(origin)}`),
-  createScene: (draft: { path: string; id: string; title: string; description?: string; content?: { file: string; export?: string } }) =>
-    request<SceneResponse>(`${PLATFORM_API_PREFIX}/projects/scenes`, body(draft)),
+  createScene: (draft: {
+    path: string;
+    id: string;
+    title: string;
+    description?: string;
+    compositionType?: "scene" | "walkthrough";
+    content?: { file: string; export?: string };
+    sections?: Array<{ file: string; export?: string; id?: string; title?: string }>;
+    width?: number;
+    height?: number;
+  }) => request<SceneResponse>(`${PLATFORM_API_PREFIX}/projects/scenes`, body(draft)),
   duplicateScene: (target: string, id: string, newId: string) =>
     request<CatalogResponse>(`${PLATFORM_API_PREFIX}/projects/scenes/duplicate`, body({ path: target, id, newId })),
   removeScene: (target: string, id: string) => request<CatalogResponse>(`${PLATFORM_API_PREFIX}/projects/scenes`, { ...body({ path: target, id }), method: "DELETE" }),
@@ -127,6 +136,11 @@ export function useStudioBridge(projectPath: string | undefined, active: boolean
           id: draft.id,
           title: draft.title,
           description: draft.description,
+          compositionType: draft.compositionType,
+          content: draft.content,
+          sections: draft.sections,
+          width: draft.width,
+          height: draft.height,
         }).then(() => {
           if (event.source && "postMessage" in event.source) {
             (event.source as Window).postMessage(
@@ -138,6 +152,25 @@ export function useStudioBridge(projectPath: string | undefined, active: boolean
           if (event.source && "postMessage" in event.source) {
             (event.source as Window).postMessage(
               { type: "SEENE_STUDIO_SCENE_CREATED", version: SEENE_PROTOCOL_VERSION, id: draft.id, success: false, error: err?.message },
+              "*"
+            );
+          }
+        });
+      }
+
+      if (data.type === "SEENE_CLIENT_REMOVE_SCENE" && (data as any).draft && projectPath) {
+        const draft = (data as any).draft;
+        void platformApi.removeScene(projectPath, draft.id).then(() => {
+          if (event.source && "postMessage" in event.source) {
+            (event.source as Window).postMessage(
+              { type: "SEENE_STUDIO_SCENE_REMOVED", version: SEENE_PROTOCOL_VERSION, id: draft.id, success: true },
+              "*"
+            );
+          }
+        }).catch(err => {
+          if (event.source && "postMessage" in event.source) {
+            (event.source as Window).postMessage(
+              { type: "SEENE_STUDIO_SCENE_REMOVED", version: SEENE_PROTOCOL_VERSION, id: draft.id, success: false, error: err?.message },
               "*"
             );
           }

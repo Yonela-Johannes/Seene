@@ -63,7 +63,8 @@ it("submits a creation request, closes the dialog on success, and opens the gene
   fireEvent.submit(screen.getByRole("button", { name: "Create scene" }).closest("form")!);
 
   await waitFor(() => expect(request).toHaveBeenCalledWith("/api/seene/create-scene", expect.objectContaining({ method: "POST" })));
-  const body = JSON.parse(request.mock.calls[0][1].body as string);
+  const postCall = request.mock.calls.find((call: any[]) => call[0] === "/api/seene/create-scene" && call[1]?.method === "POST")!;
+  const body = JSON.parse(postCall[1].body as string);
   expect(body.id).toBe("landing-scene");
   expect(body.recipe.title).toBe("Landing scene");
   expect(body.recipe.definition).toBeDefined();

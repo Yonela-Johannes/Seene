@@ -167,12 +167,28 @@ export function SceneLibrary({
     height: 1000,
   });
 
+  const [sceneToDelete, setSceneToDelete] = useState<{ id: string; title: string } | null>(null);
+  const [deleteSubmitting, setDeleteSubmitting] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
+
   const [isCreating, setIsCreating] = useState(false);
   const [createTitle, setCreateTitle] = useState("");
   const [createDescription, setCreateDescription] = useState("");
+  const [compositionType, setCompositionType] = useState<"scene" | "walkthrough">("scene");
+  const [search, setSearch] = useState("");
+  const [activeTab, setActiveTab] = useState<"all" | "page" | "section" | "component">("all");
+  const [choice, setChoice] = useState("");
+  const [selectedSections, setSelectedSections] = useState<Array<{ file: string; export?: string; title?: string }>>([]);
   const [createHostPath, setCreateHostPath] = useState("");
+  const [showCustomPath, setShowCustomPath] = useState(false);
+  const [createWidth, setCreateWidth] = useState<number>(1400);
+  const [createHeight, setCreateHeight] = useState<number>(980);
   const [createError, setCreateError] = useState("");
   const [createSubmitting, setCreateSubmitting] = useState(false);
+
+  const [contentFiles, setContentFiles] = useState<Array<{ path: string; default: boolean; exports: string[]; kind?: "page" | "section" | "component"; title?: string; route?: string }> | null>(null);
+  const [contentLoading, setContentLoading] = useState(false);
+  const [contentError, setContentError] = useState("");
 
   const scrollerRef = useRef<HTMLDivElement>(null);
   const savedScrollRef = useRef(0);
@@ -241,6 +257,30 @@ export function SceneLibrary({
   }, []);
 
   useEffect(() => {
+    if (!isCreating) return;
+    setContentLoading(true);
+    setContentError("");
+    const contentUrl = createSceneEndpoint.replace(/\/create-scene\/?$/, "/content");
+    fetch(contentUrl)
+      .then(res => res.json())
+      .then(data => {
+        if (data.content?.files) {
+          setContentFiles(data.content.files);
+        } else if (Array.isArray(data.files)) {
+          setContentFiles(data.files);
+        } else if (data.success && data.content) {
+          setContentFiles(data.content.files || []);
+        } else {
+          setContentError(data.error || "Could not discover project components.");
+        }
+      })
+      .catch(() => {
+        setContentError("Could not reach development server for component discovery.");
+      })
+      .finally(() => setContentLoading(false));
+  }, [isCreating, createSceneEndpoint]);
+
+  useEffect(() => {
     if (selectedScene && (SelectedComponent || documentRoute || selectedIsDocument)) {
       return;
     }
@@ -260,16 +300,16 @@ export function SceneLibrary({
       });
     };
 
-    const observer = new ResizeObserver(measure);
+    const observer = typeof ResizeObserver !== "undefined" ? new ResizeObserver(measure) : null;
 
-    observer.observe(element);
+    observer?.observe(element);
     window.addEventListener("resize", measure);
     measure();
 
     element.scrollTop = savedScrollRef.current;
 
     return () => {
-      observer.disconnect();
+      observer?.disconnect();
       window.removeEventListener("resize", measure);
     };
   }, [selectedScene?.id, SelectedComponent, documentRoute]);
@@ -341,10 +381,62 @@ export function SceneLibrary({
   const openCreateDialog = () => {
     setCreateTitle("");
     setCreateDescription("");
+    setCompositionType("scene");
+    setSearch("");
+    setActiveTab("all");
+    setChoice("");
+    setSelectedSections([]);
     setCreateHostPath("");
+    setShowCustomPath(false);
+    setCreateWidth(1400);
+    setCreateHeight(980);
     setCreateError("");
     setCreateSubmitting(false);
     setIsCreating(true);
+  };
+
+  const filteredContentFiles = useMemo(() => {
+    if (!contentFiles) return [];
+    return contentFiles.filter(file => {
+      if (activeTab !== "all" && file.kind !== activeTab) return false;
+      if (!search.trim()) return true;
+      const query = search.toLowerCase().trim();
+      return (
+        file.path.toLowerCase().includes(query) ||
+        (file.title && file.title.toLowerCase().includes(query)) ||
+        (file.route && file.route.toLowerCase().includes(query)) ||
+        file.exports.some(e => e.toLowerCase().includes(query))
+      );
+    });
+  }, [contentFiles, activeTab, search]);
+
+  const handleSelectComponent = (filePath: string, exportName?: string, fileTitle?: string) => {
+    const val = exportName ? `${filePath}#${exportName}` : filePath;
+    if (compositionType === "scene") {
+      if (choice === val) setChoice("");
+      else { setChoice(val); setCreateHostPath(""); }
+    } else {
+      const exists = selectedSections.some(s => (s.export ? `${s.file}#${s.export}` : s.file) === val);
+      if (!exists) {
+        setSelectedSections(prev => [...prev, { file: filePath, export: exportName, title: fileTitle }]);
+      }
+    }
+  };
+
+  const removeSectionFromSequence = (index: number) => {
+    setSelectedSections(prev => prev.filter((_, idx) => idx !== index));
+  };
+
+  const moveSectionInSequence = (index: number, direction: -1 | 1) => {
+    const targetIndex = index + direction;
+    if (targetIndex < 0 || targetIndex >= selectedSections.length) return;
+    setSelectedSections(prev => {
+      const next = [...prev];
+      const temp = next[index];
+      next[index] = next[targetIndex];
+      next[targetIndex] = temp;
+      return next;
+    });
   };
 
   const handleCreateSubmit = async (event: FormEvent) => {
@@ -357,12 +449,24 @@ export function SceneLibrary({
     const title = createTitle.trim();
     const id = title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || `scene-${Date.now()}`;
 
+    const rawSections = compositionType === "walkthrough"
+      ? selectedSections
+      : createHostPath.trim()
+        ? [{ file: createHostPath.trim() }]
+        : choice
+          ? [{ file: choice.split("#")[0], export: choice.split("#")[1] }]
+          : [];
+
     const recipe = {
       version: 1,
       id,
       title,
       description: createDescription.trim() || "Authored in Seene Studio",
-      definition: defaultSceneDefinition(),
+      definition: {
+        ...defaultSceneDefinition(),
+        compositionType,
+        ...(compositionType === "walkthrough" ? { sizingMode: "viewport", minHeight: "100vh" } : { width: createWidth, height: createHeight }),
+      },
     };
 
     const isIframe = typeof window !== "undefined" && window.parent !== window;
@@ -372,7 +476,16 @@ export function SceneLibrary({
         window.parent.postMessage({
           type: "SEENE_CLIENT_CREATE_SCENE",
           version: SEENE_PROTOCOL_VERSION,
-          draft: { id, title, description: createDescription.trim() || "Authored in Seene Studio" }
+          draft: {
+            id,
+            title,
+            description: createDescription.trim() || "Authored in Seene Studio",
+            compositionType,
+            sections: rawSections.length > 0 ? rawSections : undefined,
+            content: rawSections.length > 0 ? rawSections[0] : undefined,
+            width: createWidth,
+            height: createHeight,
+          }
         }, "*");
         setIsCreating(false);
         const destination = buildDestination(id);
@@ -390,11 +503,18 @@ export function SceneLibrary({
       const res = await fetch(createSceneEndpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id, recipe, hostPath: createHostPath.trim() || undefined })
+        body: JSON.stringify({
+          id,
+          recipe,
+          compositionType,
+          sections: rawSections.length > 0 ? rawSections : undefined,
+          content: rawSections.length > 0 ? rawSections[0] : undefined,
+          hostPath: createHostPath.trim() || undefined,
+        })
       });
       const contentType = res.headers.get("content-type") || "";
       if (!contentType.includes("application/json")) {
-        setCreateError(`Seene's scene-creation endpoint at ${createSceneEndpoint} returned HTML instead of JSON. Re-run seene init to generate or repair the local API route. For a custom Vite renderer, add seeneCreateScenePlugin() from @thatg33k/seene/vite.`);
+        setCreateError(`Seene's scene-creation endpoint at ${createSceneEndpoint} returned HTML instead of JSON. Re-run seene init to generate or repair the local API route.`);
         setCreateSubmitting(false);
         return;
       }
@@ -414,7 +534,56 @@ export function SceneLibrary({
     }
   };
 
-   const saveSceneDefinition = useCallback((definition: PreviewDefinitionInput) => {
+  const handleDeleteSubmit = async () => {
+    if (!sceneToDelete) return;
+    setDeleteSubmitting(true);
+    setDeleteError("");
+    const targetId = sceneToDelete.id;
+
+    const isIframe = typeof window !== "undefined" && window.parent !== window;
+
+    if (isIframe) {
+      try {
+        window.parent.postMessage({
+          type: "SEENE_CLIENT_REMOVE_SCENE",
+          version: SEENE_PROTOCOL_VERSION,
+          draft: { id: targetId },
+        }, "*");
+        setSceneToDelete(null);
+        if (sceneId === targetId) {
+          closeScene();
+        }
+        return;
+      } catch (err: any) {
+        setDeleteError("Failed to request scene deletion via Studio: " + (err?.message || String(err)));
+        setDeleteSubmitting(false);
+        return;
+      }
+    }
+
+    try {
+      const res = await fetch(createSceneEndpoint, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: targetId }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.success) {
+        setSceneToDelete(null);
+        if (sceneId === targetId) {
+          closeScene();
+        }
+      } else {
+        setDeleteError(data.error || "Failed to delete scene.");
+      }
+    } catch (err: any) {
+      setDeleteError("Failed to communicate with local development server: " + (err.message || String(err)));
+    } finally {
+      setDeleteSubmitting(false);
+    }
+  };
+
+  const saveSceneDefinition = useCallback((definition: PreviewDefinitionInput) => {
     if (!createSceneEndpoint || !selectedScene) return;
     void fetch(createSceneEndpoint, {
       method: "PUT",
@@ -425,7 +594,7 @@ export function SceneLibrary({
     });
   }, [createSceneEndpoint, selectedScene]);
 
-   if (!entered) {
+  if (!entered) {
     return (
       <GettingStarted
         onStartCreating={() => {
@@ -447,11 +616,11 @@ export function SceneLibrary({
         onBack={closeScene}
         hot={hot}
         presentation={presentation}
-         onPresentationChange={changePresentation}
-         transition={transition}
-         onTransitionChange={onTransitionChange}
-         onSaveDefinition={saveSceneDefinition}
-       >
+        onPresentationChange={changePresentation}
+        transition={transition}
+        onTransitionChange={onTransitionChange}
+        onSaveDefinition={saveSceneDefinition}
+      >
         {effectiveRoute ? (
           <Surface
             id={SCENE_PRESENTATION_SURFACE}
@@ -582,12 +751,12 @@ export function SceneLibrary({
       {catalog.scenes.length === 0 ? (
         <div className="absolute inset-0 flex flex-col items-center justify-center p-8 text-center">
           <div className="max-w-md space-y-4">
-              <h1 className="text-3xl font-medium tracking-tight text-[var(--seene-text)]">Your scenes will show up here.</h1>
+            <h1 className="text-3xl font-medium tracking-tight text-[var(--seene-text)]">Your scenes will show up here.</h1>
             <p className="text-sm text-[var(--seene-text-muted)]">Create your first cinematic scene to showcase your React components.</p>
             <button
               type="button"
               onClick={openCreateDialog}
-                className="mt-4 appearance-none border border-[var(--seene-border-text)] rounded-full px-6 py-3 bg-[var(--seene-surface)] text-[var(--seene-text)] text-xs font-medium inline-flex items-center gap-2 cursor-pointer hover:bg-[var(--seene-surface-2)] transition-colors pointer-events-auto"
+              className="mt-4 appearance-none border border-[var(--seene-border-text)] rounded-full px-6 py-3 bg-[var(--seene-surface)] text-[var(--seene-text)] text-xs font-medium inline-flex items-center gap-2 cursor-pointer hover:bg-[var(--seene-surface-2)] transition-colors pointer-events-auto"
             >
               + Create scene
             </button>
@@ -650,7 +819,7 @@ export function SceneLibrary({
                           <button
                             type="button"
                             onClick={openCreateDialog}
-                            className="appearance-none border border-white/20 rounded-full px-3 py-1.5 bg-[var(--seene-surface-2)] text-white text-xs font-medium inline-flex items-center gap-1.5 cursor-pointer bg-[var(--seene-surface-2)] transition-colors"
+                            className="appearance-none border border-white/20 rounded-full px-3 py-1.5 bg-[var(--seene-surface-2)] text-white text-xs font-medium inline-flex items-center gap-1.5 cursor-pointer hover:bg-white/20 transition-colors"
                           >
                             + Create scene
                           </button>
@@ -682,44 +851,61 @@ export function SceneLibrary({
                             height: ROW_HEIGHT,
                           }}
                         >
-                          <a
-                            className="group flex items-center justify-between gap-6 border-b border-[var(--seene-border)] py-6 transition-colors hover:border-[var(--seene-border-text)] focus-visible:outline-2 focus-visible:outline-white"
-                            data-scene-id={scene.id}
-                            href={buildDestination(scene.id)}
-                            onFocus={(event) => {
-                              if (
-                                event.currentTarget.matches(":focus-visible")
-                              ) {
-                                scrollerRef.current?.scrollTo({
-                                  top: Math.max(0, number * ROW_HEIGHT),
-                                  behavior: "smooth",
-                                });
-                              }
-                            }}
-                            onClick={(event) => navigate(event, scene.id)}
-                          >
-                            <span className="relative flex h-12 w-16 shrink-0 items-center justify-center rounded-md bg-[var(--seene-surface-2)] border border-[var(--seene-border-text)] font-mono text-xs text-[var(--seene-text-muted)]">
-                              {String(number + 1).padStart(2, "0")}
+                          <div className="group relative flex items-center justify-between gap-6 border-b border-[var(--seene-border)] py-6 transition-colors hover:border-[var(--seene-border-text)]">
+                            <a
+                              className="flex flex-1 items-center gap-6 min-w-0 pointer-events-auto focus-visible:outline-2 focus-visible:outline-white"
+                              data-scene-id={scene.id}
+                              href={buildDestination(scene.id)}
+                              onFocus={(event) => {
+                                if (
+                                  event.currentTarget.matches(":focus-visible")
+                                ) {
+                                  scrollerRef.current?.scrollTo({
+                                    top: Math.max(0, number * ROW_HEIGHT),
+                                    behavior: "smooth",
+                                  });
+                                }
+                              }}
+                              onClick={(event) => navigate(event, scene.id)}
+                            >
+                              <span className="relative flex h-12 w-16 shrink-0 items-center justify-center rounded-md bg-[var(--seene-surface-2)] border border-[var(--seene-border-text)] font-mono text-xs text-[var(--seene-text-muted)]">
+                                {String(number + 1).padStart(2, "0")}
 
-                              {scene.snapshot && (
-                                <SceneSnapshot key={scene.snapshot.image} src={scene.snapshot.image} />
-                              )}
-                            </span>
-
-                            <span className="flex flex-1 flex-col min-w-0">
-                              <strong className="text-base font-medium text-[var(--seene-text)] group-hover:text-white truncate">
-                                {scene.title}
-                              </strong>
-
-                              <span className="text-xs text-[var(--seene-text-muted)] truncate mt-0.5">
-                                {scene.description || "A scene from your app"}
+                                {scene.snapshot && (
+                                  <SceneSnapshot key={scene.snapshot.image} src={scene.snapshot.image} />
+                                )}
                               </span>
-                            </span>
 
-                            <span className="flex items-center gap-2 font-mono text-xs text-[var(--seene-text-muted)] group-hover:text-[var(--seene-text)]">
-                              {duration > 0 ? `${duration}s` : "Static"}<span aria-hidden="true">↗</span>
-                            </span>
-                          </a>
+                              <span className="flex flex-1 flex-col min-w-0">
+                                <strong className="text-base font-medium text-[var(--seene-text)] group-hover:text-white truncate">
+                                  {scene.title}
+                                </strong>
+
+                                <span className="text-xs text-[var(--seene-text-muted)] truncate mt-0.5">
+                                  {scene.description || "A scene from your app"}
+                                </span>
+                              </span>
+
+                              <span className="flex items-center gap-2 font-mono text-xs text-[var(--seene-text-muted)] group-hover:text-[var(--seene-text)]">
+                                {duration > 0 ? `${duration}s` : "Static"}<span aria-hidden="true">↗</span>
+                              </span>
+                            </a>
+
+                            <button
+                              type="button"
+                              aria-label={`Delete ${scene.title}`}
+                              data-testid={`delete-scene-${scene.id}`}
+                              onClick={(event) => {
+                                event.preventDefault();
+                                event.stopPropagation();
+                                setDeleteError("");
+                                setSceneToDelete({ id: scene.id, title: scene.title });
+                              }}
+                              className="pointer-events-auto shrink-0 rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-1.5 text-xs text-red-400 hover:bg-red-500/20 hover:border-red-500/40 transition-colors cursor-pointer opacity-70 group-hover:opacity-100"
+                            >
+                              Delete
+                            </button>
+                          </div>
                         </Surface>
                       );
                     })}
@@ -739,87 +925,406 @@ export function SceneLibrary({
         </div>
       )}
 
+      {/* Delete Confirmation Modal */}
+      {sceneToDelete && (
+        <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/75 p-4 backdrop-blur-md animate-in fade-in duration-200 pointer-events-auto">
+          <div role="dialog" aria-modal="true" aria-labelledby="seene-delete-confirm-title" className="w-full max-w-md rounded-2xl border border-red-500/30 bg-[var(--seene-surface-2)] p-6 text-[var(--seene-text)] shadow-2xl space-y-4 relative z-[10001] pointer-events-auto">
+            <h2 id="seene-delete-confirm-title" className="text-lg font-semibold text-white">
+              Delete Scene
+            </h2>
+            <p className="text-xs text-[var(--seene-text-muted)] leading-relaxed">
+              Are you sure you want to delete <strong className="text-white">&quot;{sceneToDelete.title}&quot;</strong>?
+              This will permanently delete its recipe and component files (<span className="font-mono text-zinc-300">{sceneToDelete.id}.scene.json</span> and <span className="font-mono text-zinc-300">{sceneToDelete.id}.tsx</span>). This action cannot be undone.
+            </p>
+
+            {deleteError && (
+              <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-xs text-red-400" role="alert">
+                {deleteError}
+              </div>
+            )}
+
+            <div className="flex items-center justify-end gap-3 pt-2 border-t border-[var(--seene-border-text)]">
+              <button
+                type="button"
+                onClick={() => { setSceneToDelete(null); setDeleteError(""); }}
+                className="rounded-lg border border-[var(--seene-border-text)] px-4 py-2 text-xs font-medium text-[var(--seene-text-muted)] hover:text-white transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={deleteSubmitting}
+                onClick={handleDeleteSubmit}
+                className="rounded-lg bg-red-600 hover:bg-red-500 text-white px-5 py-2 text-xs font-medium transition-colors cursor-pointer disabled:opacity-50"
+              >
+                {deleteSubmitting ? "Deleting..." : "Confirm Delete"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Create Scene Modal with Component Browser */}
       {isCreating && (
         <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/75 p-4 backdrop-blur-md animate-in fade-in duration-200 pointer-events-auto">
-          <section role="dialog" aria-modal="true" aria-labelledby="seene-create-title-heading" aria-describedby="seene-create-description" className="max-h-[calc(100dvh-2rem)] w-full max-w-md overflow-y-auto rounded-2xl border border-[var(--seene-border-text)] bg-[var(--seene-surface-2)] p-6 text-[var(--seene-text)] shadow-2xl space-y-5 relative z-[10001] pointer-events-auto">
-            <div className="flex items-start justify-between gap-4 border-b border-[var(--seene-border-text)] pb-4">
+          <section role="dialog" aria-modal="true" aria-labelledby="seene-create-title-heading" aria-describedby="seene-create-description" className="flex max-h-[calc(100dvh-2rem)] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-[var(--seene-border-text)] bg-[var(--seene-surface-2)] text-[var(--seene-text)] shadow-2xl relative z-[10001] pointer-events-auto">
+            <div className="flex items-start justify-between gap-4 border-b border-[var(--seene-border-text)] px-6 py-4 shrink-0">
               <div className="min-w-0">
                 <h2 id="seene-create-title-heading" className="text-lg font-semibold text-[var(--seene-text)]">Create new scene</h2>
-                <p id="seene-create-description" className="mt-1 text-xs leading-relaxed text-[var(--seene-text-muted)]">Name your scene. Seene will generate the recipe and component files in your project.</p>
+                <p id="seene-create-description" className="mt-0.5 text-xs text-[var(--seene-text-muted)]">Choose scene composition type and select project components.</p>
               </div>
-                <button
-                  type="button"
-                  onClick={() => { setIsCreating(false); setCreateError(""); }}
-                  className="text-[var(--seene-text-muted)] hover:text-[var(--seene-text)] text-sm p-1 cursor-pointer"
-                  aria-label="Close"
-                >
+              <button
+                type="button"
+                onClick={() => { setIsCreating(false); setCreateError(""); }}
+                className="text-[var(--seene-text-muted)] hover:text-[var(--seene-text)] text-sm p-1 cursor-pointer"
+                aria-label="Close"
+              >
                 ✕
               </button>
             </div>
 
-            <form onSubmit={handleCreateSubmit} className="space-y-4">
-              <div>
-                <label htmlFor="seene-create-title" className="block text-xs font-medium text-[var(--seene-text-muted)] uppercase tracking-wider mb-2">
-                  Scene Title
-                </label>
-                <input
-                  id="seene-create-title"
-                  type="text"
-                  required
-                  autoFocus
-                  placeholder="e.g. Dashboard Showcase"
-                   value={createTitle}
-                   onChange={(e) => setCreateTitle(e.target.value)}
-                   className="w-full rounded-lg border border-[var(--seene-border-text)] bg-[var(--seene-surface-2)] px-4 py-2.5 text-sm text-[var(--seene-text)] placeholder-[var(--seene-text-muted)] focus:border-[var(--seene-accent)] focus:outline-none"
-                />
-              </div>
+            <form onSubmit={handleCreateSubmit} className="flex flex-1 flex-col overflow-hidden">
+              <div className="flex-1 overflow-y-auto space-y-4 px-6 py-5">
+                {/* Composition Type Selector */}
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-medium uppercase tracking-wider text-[var(--seene-text-muted)]">
+                    Scene Composition Type
+                  </label>
+                  <div className="grid grid-cols-2 gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setCompositionType("scene")}
+                      className={`flex flex-col items-start gap-1 p-3 rounded-xl border text-left transition-all ${
+                        compositionType === "scene"
+                          ? "border-[var(--seene-accent)] bg-[var(--seene-surface)] shadow-md"
+                          : "border-[var(--seene-border-text)] bg-[var(--seene-surface-2)] hover:border-white/40"
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="text-base">🎥</span>
+                        <strong className="text-xs font-semibold text-[var(--seene-text)]">Single Scene</strong>
+                      </div>
+                      <p className="text-[11px] text-[var(--seene-text-muted)] leading-relaxed">
+                        3D spatial camera framing a single component or surface.
+                      </p>
+                    </button>
 
-              <div>
-                <label htmlFor="seene-create-desc" className="block text-xs font-medium text-[var(--seene-text-muted)] uppercase tracking-wider mb-2">
-                  Description <span className="text-[var(--seene-text-muted)] font-normal">(optional)</span>
-                </label>
-                <input
-                  id="seene-create-desc"
-                  type="text"
-                  placeholder="e.g. A cinematic overview of the analytics panel"
-                   value={createDescription}
-                   onChange={(e) => setCreateDescription(e.target.value)}
-                   className="w-full rounded-lg border border-[var(--seene-border-text)] bg-[var(--seene-surface-2)] px-4 py-2.5 text-sm text-[var(--seene-text)] placeholder-[var(--seene-text-muted)] focus:border-[var(--seene-accent)] focus:outline-none"
-                />
-              </div>
-
-              <div>
-                <label htmlFor="seene-create-host" className="block text-xs font-medium text-[var(--seene-text-muted)] uppercase tracking-wider mb-2">
-                  Component to present <span className="text-[var(--seene-text-muted)] font-normal">(optional)</span>
-                </label>
-                <input
-                  id="seene-create-host"
-                  type="text"
-                  placeholder="e.g. src/components/Hero.tsx"
-                  value={createHostPath}
-                  onChange={(e) => setCreateHostPath(e.target.value)}
-                  className="w-full rounded-lg border border-[var(--seene-border-text)] bg-[var(--seene-surface-2)] px-4 py-2.5 text-sm text-[var(--seene-text)] placeholder-[var(--seene-text-muted)] focus:border-[var(--seene-accent)] focus:outline-none"
-                />
-              </div>
-
-              {createError && (
-                <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-xs text-red-400" role="alert">
-                  {createError}
+                    <button
+                      type="button"
+                      onClick={() => setCompositionType("walkthrough")}
+                      className={`flex flex-col items-start gap-1 p-3 rounded-xl border text-left transition-all ${
+                        compositionType === "walkthrough"
+                          ? "border-[var(--seene-accent)] bg-[var(--seene-surface)] shadow-md"
+                          : "border-[var(--seene-border-text)] bg-[var(--seene-surface-2)] hover:border-white/40"
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="text-base">📜</span>
+                        <strong className="text-xs font-semibold text-[var(--seene-text)]">Website Walkthrough</strong>
+                      </div>
+                      <p className="text-[11px] text-[var(--seene-text-muted)] leading-relaxed">
+                        Full-page scroll walkthrough connecting page sections in sequence.
+                      </p>
+                    </button>
+                  </div>
                 </div>
-              )}
 
-              <div className="flex items-center justify-end gap-3 pt-2">
+                {/* Scene Name & Description Inputs */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label htmlFor="seene-create-title" className="block text-xs font-medium text-[var(--seene-text-muted)] uppercase tracking-wider">
+                      Scene Title
+                    </label>
+                    <input
+                      id="seene-create-title"
+                      type="text"
+                      required
+                      autoFocus
+                      placeholder={compositionType === "walkthrough" ? "e.g. Website Full Tour" : "e.g. Hero Showcase"}
+                      value={createTitle}
+                      onChange={(e) => setCreateTitle(e.target.value)}
+                      className="w-full rounded-lg border border-[var(--seene-border-text)] bg-[var(--seene-surface-2)] px-3 py-2 text-xs text-[var(--seene-text)] placeholder-[var(--seene-text-muted)] focus:border-[var(--seene-accent)] focus:outline-none"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label htmlFor="seene-create-desc" className="block text-xs font-medium text-[var(--seene-text-muted)] uppercase tracking-wider">
+                      Description <span className="font-normal opacity-60">(optional)</span>
+                    </label>
+                    <input
+                      id="seene-create-desc"
+                      type="text"
+                      placeholder="e.g. A cinematic overview of the analytics panel"
+                      value={createDescription}
+                      onChange={(e) => setCreateDescription(e.target.value)}
+                      className="w-full rounded-lg border border-[var(--seene-border-text)] bg-[var(--seene-surface-2)] px-3 py-2 text-xs text-[var(--seene-text)] placeholder-[var(--seene-text-muted)] focus:border-[var(--seene-accent)] focus:outline-none"
+                    />
+                  </div>
+                </div>
+
+                {/* Single Scene Canvas Dimensions */}
+                {compositionType === "scene" && (
+                  <div className="grid grid-cols-2 gap-3 p-3 rounded-xl border border-[var(--seene-border-text)] bg-[var(--seene-surface)]">
+                    <div className="space-y-1">
+                      <label htmlFor="seene-create-width" className="block text-[11px] text-[var(--seene-text-muted)] uppercase tracking-wider font-medium">
+                        Canvas Width (px)
+                      </label>
+                      <input
+                        id="seene-create-width"
+                        type="number"
+                        min="320"
+                        max="3840"
+                        value={createWidth}
+                        onChange={e => setCreateWidth(parseInt(e.target.value) || 1400)}
+                        className="w-full rounded-lg border border-[var(--seene-border-text)] bg-[var(--seene-surface-2)] px-3 py-1.5 text-xs text-[var(--seene-text)] font-mono"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label htmlFor="seene-create-height" className="block text-[11px] text-[var(--seene-text-muted)] uppercase tracking-wider font-medium">
+                        Canvas Height (px)
+                      </label>
+                      <input
+                        id="seene-create-height"
+                        type="number"
+                        min="320"
+                        max="3840"
+                        value={createHeight}
+                        onChange={e => setCreateHeight(parseInt(e.target.value) || 980)}
+                        className="w-full rounded-lg border border-[var(--seene-border-text)] bg-[var(--seene-surface-2)] px-3 py-1.5 text-xs text-[var(--seene-text)] font-mono"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* Ordered Walkthrough Sequence */}
+                {compositionType === "walkthrough" && selectedSections.length > 0 && (
+                  <div className="space-y-2 rounded-xl border border-[var(--seene-accent)]/40 bg-[var(--seene-surface)] p-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-semibold text-[var(--seene-text)] uppercase tracking-wider">
+                        Walkthrough Sequence ({selectedSections.length} sections)
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedSections([])}
+                        className="text-[11px] text-red-400 hover:underline cursor-pointer"
+                      >
+                        Clear All
+                      </button>
+                    </div>
+
+                    <div className="space-y-1.5 max-h-36 overflow-y-auto">
+                      {selectedSections.map((sec, idx) => (
+                        <div
+                          key={`${sec.file}-${idx}`}
+                          className="flex items-center justify-between gap-3 p-2 rounded-lg bg-[var(--seene-surface-2)] border border-[var(--seene-border-text)] text-xs"
+                        >
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <span className="font-mono text-[11px] text-[var(--seene-accent)] font-bold shrink-0">
+                              {String(idx + 1).padStart(2, "0")}
+                            </span>
+                            <div className="min-w-0">
+                              <strong className="block font-medium text-[var(--seene-text)] truncate">
+                                {sec.title || sec.file.split("/").pop()?.replace(/\.[jt]sx$/, "")}
+                              </strong>
+                              <span className="block font-mono text-[10px] text-[var(--seene-text-muted)] truncate">
+                                {sec.file}
+                              </span>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-1 shrink-0">
+                            <button
+                              type="button"
+                              disabled={idx === 0}
+                              onClick={() => moveSectionInSequence(idx, -1)}
+                              className="px-2 py-1 rounded bg-[var(--seene-surface)] border border-[var(--seene-border-text)] text-[10px] disabled:opacity-30 hover:bg-white/10"
+                              title="Move up"
+                            >
+                              ↑
+                            </button>
+                            <button
+                              type="button"
+                              disabled={idx === selectedSections.length - 1}
+                              onClick={() => moveSectionInSequence(idx, 1)}
+                              className="px-2 py-1 rounded bg-[var(--seene-surface)] border border-[var(--seene-border-text)] text-[10px] disabled:opacity-30 hover:bg-white/10"
+                              title="Move down"
+                            >
+                              ↓
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => removeSectionFromSequence(idx)}
+                              className="px-2 py-1 rounded bg-red-500/20 text-red-400 border border-red-500/30 text-[10px] hover:bg-red-500/30"
+                              title="Remove section"
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Component Browser & Selector */}
+                <div className="space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <label className="block text-xs font-medium uppercase tracking-wider text-[var(--seene-text-muted)]">
+                      {compositionType === "walkthrough"
+                        ? "Select Project Components to Add"
+                        : "Select Component to Present"}
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setShowCustomPath(!showCustomPath)}
+                      className="text-xs text-[var(--seene-accent)] hover:underline cursor-pointer"
+                    >
+                      {showCustomPath ? "Hide custom path" : "Enter path manually"}
+                    </button>
+                  </div>
+
+                  {(showCustomPath || compositionType === "scene") && (
+                    <div className="space-y-1 p-3 rounded-xl border border-[var(--seene-border-text)] bg-[var(--seene-surface)]">
+                      <label htmlFor="seene-create-custom" className="block text-[11px] font-medium uppercase tracking-wider text-[var(--seene-text-muted)]">
+                        Component Path <span className="font-normal opacity-60">(optional override)</span>
+                      </label>
+                      <input
+                        id="seene-create-custom"
+                        type="text"
+                        placeholder="e.g. src/components/Hero.tsx"
+                        value={createHostPath}
+                        onChange={(e) => { setCreateHostPath(e.target.value); if (e.target.value) setChoice(""); }}
+                        className="w-full rounded-lg border border-[var(--seene-border-text)] bg-[var(--seene-surface-2)] px-3 py-1.5 text-xs text-[var(--seene-text)] font-mono focus:border-[var(--seene-accent)] focus:outline-none"
+                      />
+                    </div>
+                  )}
+
+                  {/* Search and Category Tabs */}
+                  <div className="flex flex-col sm:flex-row items-center gap-2">
+                    <input
+                      type="text"
+                      placeholder="Search components, pages..."
+                      value={search}
+                      onChange={(e) => setSearch(e.target.value)}
+                      className="w-full sm:flex-1 rounded-lg border border-[var(--seene-border-text)] bg-[var(--seene-surface-2)] px-3 py-1.5 text-xs text-[var(--seene-text)] placeholder-[var(--seene-text-muted)] focus:border-[var(--seene-accent)] focus:outline-none"
+                    />
+
+                    <div className="flex items-center gap-1 bg-[var(--seene-surface)] border border-[var(--seene-border-text)] rounded-lg p-0.5 text-[11px] shrink-0">
+                      {(["all", "page", "section", "component"] as const).map(tab => (
+                        <button
+                          key={tab}
+                          type="button"
+                          onClick={() => setActiveTab(tab)}
+                          className={`px-2 py-0.5 rounded capitalize transition-colors ${
+                            activeTab === tab
+                              ? "bg-[var(--seene-surface-2)] text-white font-medium"
+                              : "text-[var(--seene-text-muted)] hover:text-white"
+                          }`}
+                        >
+                          {tab === "all" ? "All" : `${tab}s`}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Discovered Components List */}
+                  <div className="max-h-48 overflow-y-auto rounded-xl border border-[var(--seene-border-text)] bg-[var(--seene-surface)] p-2 space-y-1">
+                    {/* Blank canvas option */}
+                    <button
+                      type="button"
+                      onClick={() => { setChoice(""); setCreateHostPath(""); }}
+                      className={`w-full flex items-center justify-between gap-3 rounded-lg px-3 py-2 text-left text-xs transition-colors cursor-pointer ${
+                        !choice && !createHostPath && compositionType === "scene"
+                          ? "border border-[var(--seene-accent)] bg-[var(--seene-surface-2)] text-white"
+                          : "border border-transparent hover:bg-[var(--seene-surface-2)] text-[var(--seene-text-muted)] hover:text-white"
+                      }`}
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <span className="font-mono text-[11px] text-[var(--seene-accent)] font-semibold shrink-0">00</span>
+                        <div className="min-w-0">
+                          <strong className="block font-medium text-[var(--seene-text)] truncate">Blank Canvas</strong>
+                          <span className="block truncate font-mono text-[10px] opacity-60">Creates a clean scene container</span>
+                        </div>
+                      </div>
+                      {!choice && !createHostPath && compositionType === "scene" ? <span className="text-[var(--seene-accent)] font-bold text-xs">✓</span> : null}
+                    </button>
+
+                    {contentLoading ? (
+                      <div className="p-4 text-center text-xs text-[var(--seene-text-muted)] font-mono">
+                        Scanning project components…
+                      </div>
+                    ) : filteredContentFiles.length === 0 ? (
+                      <div className="p-4 text-center text-xs text-[var(--seene-text-muted)]">
+                        {search ? `No components match "${search}"` : contentError || "No project components discovered in src/, app/ or pages/"}
+                      </div>
+                    ) : (
+                      filteredContentFiles.map((file, idx) => {
+                        const val = file.path;
+                        const isSelected = compositionType === "scene" ? choice === val : selectedSections.some(s => s.file === val);
+                        const indexStr = String(idx + 1).padStart(2, "0");
+
+                        return (
+                          <button
+                            key={file.path}
+                            type="button"
+                            onClick={() => handleSelectComponent(file.path, undefined, file.title)}
+                            className={`w-full flex items-center justify-between gap-3 rounded-lg px-3 py-2 text-left text-xs transition-colors cursor-pointer ${
+                              isSelected
+                                ? "border border-[var(--seene-accent)] bg-[var(--seene-surface-2)] text-white"
+                                : "border border-transparent hover:bg-[var(--seene-surface-2)] text-[var(--seene-text-muted)] hover:text-white"
+                            }`}
+                          >
+                            <div className="flex items-center gap-2.5 min-w-0">
+                              <span className="font-mono text-[11px] text-[var(--seene-text-muted)] shrink-0">{indexStr}</span>
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center gap-1.5">
+                                  <strong className="font-medium text-[var(--seene-text)] truncate">
+                                    {file.title || file.path.split("/").pop()?.replace(/\.[jt]sx$/, "")}
+                                  </strong>
+                                  {file.kind ? (
+                                    <span className="rounded bg-[var(--seene-surface-2)] px-1.5 py-0.2 font-mono text-[9px] uppercase border border-[var(--seene-border-text)] shrink-0">
+                                      {file.kind}
+                                    </span>
+                                  ) : null}
+                                  {file.route ? (
+                                    <span className="rounded bg-blue-500/10 px-1.5 py-0.2 font-mono text-[9px] text-blue-400 border border-blue-500/20 shrink-0">
+                                      {file.route}
+                                    </span>
+                                  ) : null}
+                                </div>
+                                <span className="block truncate font-mono text-[10px] opacity-60">
+                                  {file.path}
+                                </span>
+                              </div>
+                            </div>
+
+                            {isSelected ? <span className="text-[var(--seene-accent)] font-bold text-xs shrink-0">{compositionType === "walkthrough" ? "+ Added" : "✓"}</span> : null}
+                          </button>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+
+                {createError && (
+                  <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-xs text-red-400" role="alert">
+                    {createError}
+                  </div>
+                )}
+              </div>
+
+              <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-[var(--seene-border-text)] bg-[var(--seene-surface)] shrink-0">
                 <button
                   type="button"
                   onClick={() => { setIsCreating(false); setCreateError(""); }}
-                   className="rounded-lg border border-[var(--seene-border-text)] px-4 py-2 text-xs font-medium text-[var(--seene-text-muted)] hover:border-[var(--seene-accent)] hover:text-white transition-colors cursor-pointer"
+                  className="rounded-lg border border-[var(--seene-border-text)] px-4 py-2 text-xs font-medium text-[var(--seene-text-muted)] hover:border-[var(--seene-accent)] hover:text-white transition-colors cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={createSubmitting || !createTitle.trim()}
-                   className="rounded-lg bg-[var(--seene-accent)] px-5 py-2 text-xs font-medium text-white hover:bg-[var(--seene-accent-hover)] disabled:opacity-50 transition-colors cursor-pointer"
+                  className="rounded-lg bg-[var(--seene-accent)] px-5 py-2 text-xs font-medium text-white hover:bg-[var(--seene-accent-hover)] disabled:opacity-50 transition-colors cursor-pointer"
                 >
                   {createSubmitting ? "Creating..." : "Create scene"}
                 </button>

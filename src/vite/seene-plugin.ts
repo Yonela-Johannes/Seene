@@ -4,10 +4,11 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import type { Plugin } from "vite";
 import { SceneRecipeSchema } from "../core/recipes";
 import { sceneComponentSource, validateHostComponent } from "../core/platform";
-import { PlatformFault, writeSceneSourcePair, componentImportSpecifier } from "./scene-files";
+import { PlatformFault, writeSceneSourcePair, removeSceneSourcePair, discoverApplicationContent, componentImportSpecifier } from "./scene-files";
 export { writeSceneSourcePair, removeSceneSourcePair, duplicateSceneSourcePair, syncCatalog } from "./scene-files";
 
 const route = "/__seene/create-scene";
+const contentRoute = "/__seene/content";
 const maxBodyBytes = 256_000;
 
 function send(response: ServerResponse, status: number, value: Record<string, unknown>): void {
@@ -37,7 +38,54 @@ export function seeneCreateScenePlugin(): Plugin {
     name: "seene-create-scene",
     configureServer(server) {
       server.middlewares.use((request, response, next) => {
-        if (request.method !== "POST" || request.url !== route) { next(); return; }
+        const requestUrl = request.url?.split("?")[0];
+        const isCreateRoute = requestUrl === route || requestUrl === route.replace(/\/create-scene$/, "/scene");
+        const isContentRoute = requestUrl === contentRoute || requestUrl === route.replace(/\/create-scene$/, "/content");
+
+        if (request.method === "GET" && isContentRoute) {
+          void (async () => {
+            try {
+              const root = path.resolve(server.config.root);
+              const content = await discoverApplicationContent(root);
+              send(response, 200, { success: true, content });
+            } catch (error) {
+              send(response, 500, { error: error instanceof Error ? error.message : "Unable to discover content." });
+            }
+          })();
+          return;
+        }
+
+        if (request.method === "DELETE" && isCreateRoute) {
+          void (async () => {
+            const text = await collect(request);
+            let payload: unknown;
+            try { payload = text ? JSON.parse(text) : undefined; } catch {}
+            const id = payload && typeof payload === "object" && "id" in payload && typeof (payload as any).id === "string"
+              ? (payload as { id: string }).id
+              : new URL(request.url ?? "", "http://127.0.0.1").searchParams.get("id") ?? undefined;
+
+            if (!id) { send(response, 400, { error: "Missing scene id." }); return; }
+
+            try {
+              const root = path.resolve(server.config.root);
+              const removed = await removeSceneSourcePair(root, id);
+              if (!removed) {
+                send(response, 404, { error: `Scene "${id}" not found.` });
+                return;
+              }
+              send(response, 200, { success: true, id });
+            } catch (error) {
+              if (error instanceof PlatformFault && error.code === "invalid-input") {
+                send(response, 400, { error: error.message });
+                return;
+              }
+              send(response, 500, { error: error instanceof Error ? error.message : "Unable to delete scene files." });
+            }
+          })();
+          return;
+        }
+
+        if (request.method !== "POST" || !isCreateRoute) { next(); return; }
         void (async () => {
           const text = await collect(request);
           if (text === undefined) { send(response, 413, { error: "Scene request is too large." }); return; }
@@ -48,7 +96,7 @@ export function seeneCreateScenePlugin(): Plugin {
             send(response, 400, { error: "Missing scene id or recipe." });
             return;
           }
-          const rawPayload = payload as { id: string; recipe: unknown; hostPath?: string; content?: { file: string; export?: string } };
+          const rawPayload = payload as { id: string; recipe: unknown; hostPath?: string; content?: { file: string; export?: string }; sections?: Array<{ file: string; export?: string; id?: string; title?: string }> };
           const parsed = SceneRecipeSchema.safeParse(rawPayload.recipe);
           if (!parsed.success || parsed.data.id !== rawPayload.id) {
             send(response, 400, {
@@ -60,29 +108,41 @@ export function seeneCreateScenePlugin(): Plugin {
           }
           try {
             const root = path.resolve(server.config.root);
-            let content: { importSpecifier: string; export?: string } | undefined = undefined;
             let warning: string | undefined = undefined;
 
-            const targetFile = rawPayload.content?.file?.trim() || rawPayload.hostPath?.trim();
-            const targetExport = rawPayload.content?.export?.trim();
+            const rawSections: Array<{ file: string; export?: string; id?: string; title?: string }> =
+              rawPayload.sections ?? (rawPayload.content ? [rawPayload.content] : rawPayload.hostPath ? [{ file: rawPayload.hostPath }] : []);
+            const resolvedSections: Array<{ importSpecifier: string; export?: string; id?: string; title?: string }> = [];
 
-            if (targetFile) {
-              const absolute = path.resolve(root, targetFile);
-              const stat = await lstat(absolute).catch(() => undefined);
-              if (!stat?.isFile()) return send(response, 400, { error: `Host component path "${targetFile}" does not exist.` });
-              const source = await readFile(absolute, "utf8").catch(() => undefined);
-              if (source === undefined) return send(response, 400, { error: `Host component path "${targetFile}" could not be read.` });
-              try {
-                const val = validateHostComponent(targetFile, source);
-                warning = val.warning;
-              } catch (err: any) {
-                return send(response, 400, { error: err?.message || String(err) });
+            for (const sec of rawSections) {
+              if (sec.file) {
+                const targetFile = sec.file.trim();
+                const absolute = path.resolve(root, targetFile);
+                const stat = await lstat(absolute).catch(() => undefined);
+                if (!stat?.isFile()) return send(response, 400, { error: `Host component path "${targetFile}" does not exist.` });
+                const source = await readFile(absolute, "utf8").catch(() => undefined);
+                if (source === undefined) return send(response, 400, { error: `Host component path "${targetFile}" could not be read.` });
+                try {
+                  const val = validateHostComponent(targetFile, source);
+                  if (val.warning) warning = val.warning;
+                } catch (err: any) {
+                  return send(response, 400, { error: err?.message || String(err) });
+                }
+                resolvedSections.push({
+                  importSpecifier: componentImportSpecifier(targetFile),
+                  ...(sec.export ? { export: sec.export.trim() } : {}),
+                  ...(sec.id ? { id: sec.id } : {}),
+                  ...(sec.title ? { title: sec.title } : {}),
+                });
               }
-              content = { importSpecifier: componentImportSpecifier(targetFile), ...(targetExport ? { export: targetExport } : {}) };
             }
 
-            const componentSource = sceneComponentSource({ id: parsed.data.id, content });
-            const outcome = await writeSceneSourcePair(root, parsed.data.id, parsed.data, componentSource);
+            const compSource = sceneComponentSource({
+              id: parsed.data.id,
+              compositionType: parsed.data.definition.compositionType,
+              sections: resolvedSections,
+            });
+            const outcome = await writeSceneSourcePair(root, parsed.data.id, parsed.data, compSource);
             if (outcome === "exists") {
               send(response, 409, { error: `Scene "${parsed.data.id}" already exists or has an incomplete source pair.` });
               return;

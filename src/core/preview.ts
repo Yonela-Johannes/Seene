@@ -34,6 +34,15 @@ export const TRANSITION_PRESETS = {
 } as const;
 export type TransitionPresetName = keyof typeof TRANSITION_PRESETS;
 
+export const WalkthroughSectionSchema = z.strictObject({
+  id: z.string().trim().min(1).max(120),
+  title: z.string().trim().min(1).max(120),
+  file: z.string().trim().min(1).max(400),
+  export: z.string().trim().min(1).max(120).optional(),
+  durationMs: z.number().finite().nonnegative().optional(),
+  pauseMs: z.number().finite().nonnegative().optional(),
+});
+
 export const PreviewDefinitionSchema = z.strictObject({
   scene: SceneSchema.refine(scene => scene.nodes.length > 0, {
     message: "Preview scenes must contain at least one surface node.",
@@ -44,6 +53,8 @@ export const PreviewDefinitionSchema = z.strictObject({
   sizingMode: z.enum(["fixed", "viewport", "content"]).optional(),
   minHeight: z.string().trim().min(1).max(64).optional(),
   backdrop: z.string().trim().min(1).max(64).optional(),
+  compositionType: z.enum(["scene", "walkthrough"]).optional(),
+  sections: z.array(WalkthroughSectionSchema).optional(),
 });
 export type PreviewDefinitionInput = z.input<typeof PreviewDefinitionSchema>;
 export type PreviewDefinition = z.output<typeof PreviewDefinitionSchema>;

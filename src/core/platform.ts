@@ -81,7 +81,11 @@ export const SceneDraftSchema = z.strictObject({
   id: SceneRecipeIdSchema,
   title: z.string().trim().min(1).max(120),
   description: z.string().trim().max(500).optional(),
+  compositionType: z.enum(["scene", "walkthrough"]).optional(),
   content: PlatformContentSelectionSchema.optional(),
+  sections: z.array(PlatformContentSelectionSchema).optional(),
+  width: z.number().positive().optional(),
+  height: z.number().positive().optional(),
 });
 export const CreateSceneRequestSchema = z.strictObject({ path: RegisterProjectSchema.shape.path, ...SceneDraftSchema.shape });
 export const DuplicateSceneRequestSchema = z.strictObject({
@@ -168,23 +172,102 @@ export function defaultSceneDefinition(): PreviewDefinitionInput {
   };
 }
 
-export function createSceneRecipe(input: { id: string; title: string; description?: string; applicationRoute?: string }): SceneRecipe {
+export function createSceneRecipe(input: {
+  id: string;
+  title: string;
+  description?: string;
+  applicationRoute?: string;
+  compositionType?: "scene" | "walkthrough";
+  sections?: Array<{ id: string; title: string; file: string; export?: string; durationMs?: number }>;
+  width?: number;
+  height?: number;
+}): SceneRecipe {
+  const isWalkthrough = input.compositionType === "walkthrough";
+  const def = defaultSceneDefinition();
   return SceneRecipeSchema.parse({
     version: 1,
     id: input.id,
     title: input.title,
     ...(input.description ? { description: input.description } : {}),
     ...(input.applicationRoute ? { application: { route: input.applicationRoute } } : {}),
-    definition: defaultSceneDefinition(),
+    definition: {
+      ...def,
+      ...(input.width ? { width: input.width } : {}),
+      ...(input.height ? { height: input.height } : {}),
+      compositionType: isWalkthrough ? "walkthrough" : "scene",
+      ...(isWalkthrough ? { sizingMode: "viewport", minHeight: "100vh" } : {}),
+      ...(input.sections ? { sections: input.sections } : {}),
+    },
   });
 }
 
 export function sceneComponentSource(input: {
   id: string;
-  content?: { importSpecifier: string; export?: string } | Array<{ importSpecifier: string; export?: string }>;
+  compositionType?: "scene" | "walkthrough";
+  content?: { importSpecifier: string; export?: string; id?: string; title?: string } | Array<{ importSpecifier: string; export?: string; id?: string; title?: string }>;
+  sections?: Array<{ importSpecifier: string; export?: string; id?: string; title?: string }>;
 }): string {
   const name = sceneComponentName(input.id);
-  if (!input.content || (Array.isArray(input.content) && input.content.length === 0)) {
+  const isWalkthrough = input.compositionType === "walkthrough";
+
+  const rawSections: Array<{ importSpecifier: string; export?: string; id?: string; title?: string }> =
+    input.sections ?? (Array.isArray(input.content) ? input.content : input.content ? [input.content] : []);
+
+  if (isWalkthrough) {
+    if (rawSections.length === 0) {
+      return `// @seene-scaffold-version 1
+"use client";
+import { Surface } from "@thatg33k/seene";
+import { WebsiteWalkthrough } from "@thatg33k/seene/preview";
+
+export default function ${name}() {
+  return (
+    <Surface id="host" style={{ width: "100%", height: "100%" }}>
+      <WebsiteWalkthrough>
+        <div style={{ padding: "4rem", textAlign: "center" }}>
+          <h1 style={{ fontSize: 32, fontWeight: 700, marginBottom: 12 }}>Website Walkthrough</h1>
+          <p style={{ opacity: 0.7 }}>Edit src/seene/scenes/${input.id}.tsx to add your page sections.</p>
+        </div>
+      </WebsiteWalkthrough>
+    </Surface>
+  );
+}
+`;
+    }
+
+    const imports: string[] = [];
+    const sectionConfigs: string[] = [];
+
+    rawSections.forEach((sec, idx) => {
+      const compName = `SectionComponent${idx + 1}`;
+      const binding = sec.export ? `{ ${sec.export} as ${compName} }` : compName;
+      imports.push(`import ${binding} from ${JSON.stringify(sec.importSpecifier)};`);
+      const secId = sec.id || `section-${idx + 1}`;
+      const secLabel = sec.title || `Section ${idx + 1}`;
+      sectionConfigs.push(`          { id: ${JSON.stringify(secId)}, label: ${JSON.stringify(secLabel)}, children: <${compName} /> }`);
+    });
+
+    return `// @seene-scaffold-version 1
+"use client";
+import { Surface } from "@thatg33k/seene";
+import { WebsiteWalkthrough } from "@thatg33k/seene/preview";
+${imports.join("\n")}
+
+export default function ${name}() {
+  return (
+    <Surface id="host" style={{ width: "100%", height: "100%" }}>
+      <WebsiteWalkthrough
+        sections={[
+${sectionConfigs.join(",\n")}
+        ]}
+      />
+    </Surface>
+  );
+}
+`;
+  }
+
+  if (rawSections.length === 0) {
     return `// @seene-scaffold-version 1
 "use client";
 import { Surface } from "@thatg33k/seene";
@@ -202,12 +285,11 @@ export default function ${name}() {
 `;
   }
 
-  const items = Array.isArray(input.content) ? input.content : [input.content];
   const imports: string[] = [];
   const elements: string[] = [];
 
-  items.forEach((item, idx) => {
-    const compName = items.length === 1 ? "HostComponent" : `HostComponent${idx + 1}`;
+  rawSections.forEach((item, idx) => {
+    const compName = rawSections.length === 1 ? "HostComponent" : `HostComponent${idx + 1}`;
     const binding = item.export ? `{ ${item.export} as ${compName} }` : compName;
     imports.push(`import ${binding} from ${JSON.stringify(item.importSpecifier)};`);
     elements.push(`<${compName} />`);

@@ -161,11 +161,17 @@ export async function writeSceneSourcePair(root: string, id: string, recipe: Sce
 }
 
 export async function removeSceneSourcePair(root: string, id: string): Promise<boolean> {
+  if (!id || typeof id !== "string" || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(id)) {
+    throw new PlatformFault("invalid-input", `Invalid scene ID: "${id}". Scene IDs must be lowercase alphanumeric with hyphens.`);
+  }
   const directory = await resolveProjectTarget(root, SCENE_RECIPE_DIRECTORY);
   const recipePath = path.join(directory, `${id}.scene.json`);
+  const tsxPath = path.join(directory, `${id}.tsx`);
+  const jsxPath = path.join(directory, `${id}.jsx`);
   const removed = await lstat(recipePath).then(() => true, () => false);
   await rm(recipePath, { force: true });
-  await rm(path.join(directory, `${id}.tsx`), { force: true });
+  await rm(tsxPath, { force: true });
+  await rm(jsxPath, { force: true });
   if (removed) await syncCatalog(root);
   return removed;
 }

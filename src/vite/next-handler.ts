@@ -3,10 +3,10 @@ import { readFile, lstat } from "node:fs/promises";
 import path from "node:path";
 import { SceneRecipeSchema, SceneUpdateSchema } from "../core/recipes";
 import { sceneComponentSource, validateHostComponent } from "../core/platform";
-import { PlatformFault, writeSceneSourcePair, updateSceneRecipe, componentImportSpecifier } from "./scene-files";
+import { PlatformFault, writeSceneSourcePair, removeSceneSourcePair, discoverApplicationContent, updateSceneRecipe, componentImportSpecifier } from "./scene-files";
 
 const maxBodyBytes = 256_000;
-type Result = { status: number; body: { success?: true; id?: string; error?: string; warning?: string } };
+type Result = { status: number; body: { success?: true; id?: string; error?: string; warning?: string; content?: unknown } };
 type ReadResult = { kind: "ok"; text: string } | { kind: "too-large" } | { kind: "unreadable" };
 
 function json(response: ServerResponse, status: number, body: unknown): void {
@@ -55,41 +55,74 @@ async function createScene(payload: unknown, root: string): Promise<Result> {
   if (process.env.NODE_ENV !== "development") return jsonError(404, "Scene creation is available only in development.");
   if (!payload || typeof payload !== "object" || !("id" in payload) || !("recipe" in payload) || typeof payload.id !== "string")
     return jsonError(400, "Missing scene id or recipe.");
-  const input = payload as { id: string; recipe: unknown; hostPath?: string; content?: { file: string; export?: string } };
+  const input = payload as { id: string; recipe: unknown; hostPath?: string; content?: { file: string; export?: string }; sections?: Array<{ file: string; export?: string; id?: string; title?: string }> };
   const parsed = SceneRecipeSchema.safeParse(input.recipe);
   if (!parsed.success || parsed.data.id !== input.id)
     return jsonError(400, parsed.success
       ? `Scene id "${input.id}" does not match recipe id "${parsed.data.id}".`
       : parsed.error.issues.map(issue => `${issue.path.join(".")}: ${issue.message}`).join("; "));
   try {
-    let content: { importSpecifier: string; export?: string } | undefined = undefined;
     let warning: string | undefined = undefined;
 
-    const targetFile = input.content?.file?.trim() || input.hostPath?.trim();
-    const targetExport = input.content?.export?.trim();
+    const rawSections: Array<{ file: string; export?: string; id?: string; title?: string }> =
+      input.sections ?? (input.content ? [input.content] : input.hostPath ? [{ file: input.hostPath }] : []);
+    const resolvedSections: Array<{ importSpecifier: string; export?: string; id?: string; title?: string }> = [];
 
-    if (targetFile) {
-      const absolute = path.resolve(root, targetFile);
-      const stat = await lstat(absolute).catch(() => undefined);
-      if (!stat?.isFile()) return jsonError(400, `Host component path "${targetFile}" does not exist.`);
-      const source = await readFile(absolute, "utf8").catch(() => undefined);
-      if (source === undefined) return jsonError(400, `Host component path "${targetFile}" could not be read.`);
-      try {
-        const val = validateHostComponent(targetFile, source);
-        warning = val.warning;
-      } catch (err: any) {
-        return jsonError(400, err?.message || String(err));
+    for (const sec of rawSections) {
+      if (sec.file) {
+        const targetFile = sec.file.trim();
+        const absolute = path.resolve(root, targetFile);
+        const stat = await lstat(absolute).catch(() => undefined);
+        if (!stat?.isFile()) return jsonError(400, `Host component path "${targetFile}" does not exist.`);
+        const source = await readFile(absolute, "utf8").catch(() => undefined);
+        if (source === undefined) return jsonError(400, `Host component path "${targetFile}" could not be read.`);
+        try {
+          const val = validateHostComponent(targetFile, source);
+          if (val.warning) warning = val.warning;
+        } catch (err: any) {
+          return jsonError(400, err?.message || String(err));
+        }
+        resolvedSections.push({
+          importSpecifier: componentImportSpecifier(targetFile),
+          ...(sec.export ? { export: sec.export.trim() } : {}),
+          ...(sec.id ? { id: sec.id } : {}),
+          ...(sec.title ? { title: sec.title } : {}),
+        });
       }
-      content = { importSpecifier: componentImportSpecifier(targetFile), ...(targetExport ? { export: targetExport } : {}) };
     }
 
-    const componentSource = sceneComponentSource({ id: parsed.data.id, content });
-    const outcome = await writeSceneSourcePair(root, parsed.data.id, parsed.data, componentSource);
+    const compSource = sceneComponentSource({
+      id: parsed.data.id,
+      compositionType: parsed.data.definition.compositionType,
+      sections: resolvedSections,
+    });
+    const outcome = await writeSceneSourcePair(root, parsed.data.id, parsed.data, compSource);
     if (outcome === "exists") return jsonError(409, `Scene "${parsed.data.id}" already exists or has an incomplete source pair.`);
     return { status: 200, body: { success: true, id: parsed.data.id, ...(warning ? { warning } : {}) } };
   } catch (error) {
     if (error instanceof PlatformFault && error.code === "denied-path") return jsonError(400, error.message);
     return jsonError(500, error instanceof Error ? error.message : "Unable to create scene files.");
+  }
+}
+
+async function deleteScene(payload: unknown, url?: string, root = process.cwd()): Promise<Result> {
+  if (process.env.NODE_ENV !== "development") return jsonError(404, "Scene deletion is available only in development.");
+  let id = payload && typeof payload === "object" && "id" in payload && typeof (payload as any).id === "string"
+    ? (payload as { id: string }).id
+    : undefined;
+
+  if (!id && url) {
+    try { id = new URL(url, "http://127.0.0.1").searchParams.get("id") ?? undefined; } catch {}
+  }
+
+  if (!id) return jsonError(400, "Missing scene id.");
+  try {
+    const removed = await removeSceneSourcePair(root, id);
+    if (!removed) return jsonError(404, `Scene "${id}" not found.`);
+    return { status: 200, body: { success: true, id } };
+  } catch (error) {
+    if (error instanceof PlatformFault && error.code === "invalid-input") return jsonError(400, error.message);
+    return jsonError(500, error instanceof Error ? error.message : "Unable to delete scene files.");
   }
 }
 
@@ -130,6 +163,38 @@ export async function handleNextScenePost(request: Request, root = process.cwd()
 
 export async function POST(request: Request): Promise<Response> {
   return handleNextScenePost(request);
+}
+
+export async function handleNextSceneDelete(request: Request, root = process.cwd()): Promise<Response> {
+  try {
+    if (request.method !== "DELETE") return Response.json({ error: "Use DELETE to remove a scene." }, { status: 405, headers: { Allow: "DELETE" } });
+    const origin = request.headers.get("origin");
+    const host = request.headers.get("host") ?? new URL(request.url).host;
+    if (origin && !isSameOrigin(origin, host, new URL(request.url).origin)) return Response.json({ error: "Cross-origin scene deletion is not allowed." }, { status: 403 });
+    const read = await readWebBody(request);
+    const parsed = read.kind === "ok" ? parseJson(read.text) : { ok: false as const };
+    const result = await deleteScene(parsed.ok ? parsed.value : undefined, request.url, root);
+    return Response.json(result.body, { status: result.status });
+  } catch (err: any) {
+    return Response.json({ error: err?.message || String(err) }, { status: 500 });
+  }
+}
+
+export async function DELETE(request: Request): Promise<Response> {
+  return handleNextSceneDelete(request);
+}
+
+export async function handleNextSceneGetContent(request: Request, root = process.cwd()): Promise<Response> {
+  try {
+    const content = await discoverApplicationContent(root);
+    return Response.json({ success: true, content });
+  } catch (err: any) {
+    return Response.json({ error: err?.message || String(err) }, { status: 500 });
+  }
+}
+
+export async function GET(request: Request): Promise<Response> {
+  return handleNextSceneGetContent(request);
 }
 
 async function updateScene(payload: unknown, root: string): Promise<Result> {
@@ -173,8 +238,12 @@ export function createPagesHandler(request: IncomingMessage, response: ServerRes
     handlePagesScenePost(request, response, root);
   } else if (request.method === "PUT") {
     handlePagesScenePut(request, response, root);
+  } else if (request.method === "DELETE") {
+    handlePagesSceneDelete(request, response, root);
+  } else if (request.method === "GET") {
+    handlePagesSceneGetContent(request, response, root);
   } else {
-    json(response, 405, { error: "Use POST to create a scene or PUT to update one." });
+    json(response, 405, { error: "Use POST to create a scene, PUT to update one, or DELETE to remove one." });
   }
 }
 
@@ -188,6 +257,27 @@ function handlePagesScenePost(request: IncomingMessage, response: ServerResponse
     if (!parsed.ok) { json(response, 400, { error: "Scene request must contain valid JSON." }); return; }
     const result = await createScene(parsed.value, root);
     json(response, result.status, result.body);
+  })();
+}
+
+function handlePagesSceneDelete(request: IncomingMessage, response: ServerResponse, root: string): void {
+  if (request.headers.origin && request.headers.host && !isSameOrigin(request.headers.origin, request.headers.host, request.headers.origin)) { json(response, 403, { error: "Cross-origin scene deletion is not allowed." }); return; }
+  void (async () => {
+    const read = await readNodeBody(request);
+    const parsed = read.kind === "ok" ? parseJson(read.text) : { ok: false as const };
+    const result = await deleteScene(parsed.ok ? parsed.value : undefined, request.url, root);
+    json(response, result.status, result.body);
+  })();
+}
+
+function handlePagesSceneGetContent(request: IncomingMessage, response: ServerResponse, root: string): void {
+  void (async () => {
+    try {
+      const content = await discoverApplicationContent(root);
+      json(response, 200, { success: true, content });
+    } catch (err: any) {
+      json(response, 500, { error: err?.message || String(err) });
+    }
   })();
 }
 

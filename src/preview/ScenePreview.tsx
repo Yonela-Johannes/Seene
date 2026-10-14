@@ -203,6 +203,12 @@ export function ScenePreview({
 
   const [compositionMode, setCompositionMode] = useState<"scene" | "walkthrough">("scene");
 
+  useEffect(() => {
+    if (localDef?.compositionType === "walkthrough") {
+      setCompositionMode("walkthrough");
+    }
+  }, [localDef?.compositionType]);
+
   const session = usePreviewSession(localDef, revision);
   const connection = usePreviewConnection(hot, session.pause);
   const [renderError, setRenderError] = useState("");
@@ -369,16 +375,26 @@ export function ScenePreview({
                   >
                     {compositionMode === "walkthrough" ? (
                       <div className="w-full h-full overflow-y-auto">
-                        <WebsiteWalkthrough
-                          enableTimeline={true}
-                          seekTime={session.timeMs}
-                          duration={session.durationMs}
-                          isPlaying={session.playing}
-                          onSeek={ms => session.seek(ms)}
-                          onPlayPause={p => (p ? (session.playing ? undefined : session.toggle()) : session.pause())}
+                        <Scene
+                          camera={definition.scene.camera}
+                          focus={definition.scene.focus}
+                          motion={definition.motion}
+                          recipeNodes={definition.scene.nodes}
+                          timeMs={session.timeMs}
+                          onDiagnostics={session.onDiagnostics}
+                          style={{ width: "100%", height: "100%" }}
                         >
-                          {children}
-                        </WebsiteWalkthrough>
+                          <WebsiteWalkthrough
+                            enableTimeline={true}
+                            seekTime={session.timeMs}
+                            duration={session.durationMs}
+                            isPlaying={session.playing}
+                            onSeek={ms => session.seek(ms)}
+                            onPlayPause={p => (p ? (session.playing ? undefined : session.toggle()) : session.pause())}
+                          >
+                            {children}
+                          </WebsiteWalkthrough>
+                        </Scene>
                       </div>
                     ) : (
                       <>
