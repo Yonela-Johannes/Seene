@@ -48,7 +48,7 @@ export function seeneCreateScenePlugin(): Plugin {
             send(response, 400, { error: "Missing scene id or recipe." });
             return;
           }
-          const rawPayload = payload as { id: string; recipe: unknown; hostPath?: string };
+          const rawPayload = payload as { id: string; recipe: unknown; hostPath?: string; content?: { file: string; export?: string } };
           const parsed = SceneRecipeSchema.safeParse(rawPayload.recipe);
           if (!parsed.success || parsed.data.id !== rawPayload.id) {
             send(response, 400, {
@@ -63,20 +63,22 @@ export function seeneCreateScenePlugin(): Plugin {
             let content: { importSpecifier: string; export?: string } | undefined = undefined;
             let warning: string | undefined = undefined;
 
-            if (rawPayload.hostPath) {
-              const hostRel = rawPayload.hostPath.trim();
-              const absolute = path.resolve(root, hostRel);
+            const targetFile = rawPayload.content?.file?.trim() || rawPayload.hostPath?.trim();
+            const targetExport = rawPayload.content?.export?.trim();
+
+            if (targetFile) {
+              const absolute = path.resolve(root, targetFile);
               const stat = await lstat(absolute).catch(() => undefined);
-              if (!stat?.isFile()) return send(response, 400, { error: `Host component path "${hostRel}" does not exist.` });
+              if (!stat?.isFile()) return send(response, 400, { error: `Host component path "${targetFile}" does not exist.` });
               const source = await readFile(absolute, "utf8").catch(() => undefined);
-              if (source === undefined) return send(response, 400, { error: `Host component path "${hostRel}" could not be read.` });
+              if (source === undefined) return send(response, 400, { error: `Host component path "${targetFile}" could not be read.` });
               try {
-                const val = validateHostComponent(hostRel, source);
+                const val = validateHostComponent(targetFile, source);
                 warning = val.warning;
               } catch (err: any) {
                 return send(response, 400, { error: err?.message || String(err) });
               }
-              content = { importSpecifier: componentImportSpecifier(hostRel) };
+              content = { importSpecifier: componentImportSpecifier(targetFile), ...(targetExport ? { export: targetExport } : {}) };
             }
 
             const componentSource = sceneComponentSource({ id: parsed.data.id, content });

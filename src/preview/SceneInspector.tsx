@@ -62,21 +62,31 @@ export type SceneInspectorProps = {
   onSaveDefinition?: (definition: PreviewDefinitionInput) => void;
   isOpen?: boolean;
   onToggle?: () => void;
+  compositionMode?: "scene" | "walkthrough";
+  onCompositionModeChange?: (mode: "scene" | "walkthrough") => void;
 };
 
-export function SceneInspector({definition, onChange, onSaveDefinition, isOpen, onToggle}: SceneInspectorProps) {
+export function SceneInspector({
+  definition,
+  onChange,
+  onSaveDefinition,
+  isOpen,
+  onToggle,
+  compositionMode = "scene",
+  onCompositionModeChange,
+}: SceneInspectorProps) {
   const [internalIsOpen, setInternalIsOpen] = useState(false);
   const open = isOpen !== undefined ? isOpen : internalIsOpen;
   const toggle = onToggle || (() => setInternalIsOpen(!open));
 
   useEffect(() => {
     const handleEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && open) {
+      if (event.key === "Escape" && open) {
         toggle();
       }
     };
-    document.addEventListener('keydown', handleEscape);
-    return () => document.removeEventListener('keydown', handleEscape);
+    document.addEventListener("keydown", handleEscape);
+    return () => document.removeEventListener("keydown", handleEscape);
   }, [open, toggle]);
 
   if (!definition) return null;
@@ -86,6 +96,7 @@ export function SceneInspector({definition, onChange, onSaveDefinition, isOpen, 
   const sceneInfo = definition.scene;
   const durMs = definition.motion?.durationMs ?? 0;
   const { mode, color } = parseBackdropMode(definition.backdrop);
+  const sizingMode = definition.sizingMode ?? "fixed";
 
   const updateCamera = (key: string, val: number) => {
     if (!onChange) return;
@@ -93,8 +104,8 @@ export function SceneInspector({definition, onChange, onSaveDefinition, isOpen, 
       ...definition,
       scene: {
         ...definition.scene,
-        camera: { ...camera, [key]: val }
-      }
+        camera: { ...camera, [key]: val },
+      },
     });
   };
 
@@ -104,8 +115,8 @@ export function SceneInspector({definition, onChange, onSaveDefinition, isOpen, 
       ...definition,
       scene: {
         ...definition.scene,
-        focus: { ...focus, [key]: val }
-      }
+        focus: { ...focus, [key]: val },
+      },
     });
   };
 
@@ -113,7 +124,24 @@ export function SceneInspector({definition, onChange, onSaveDefinition, isOpen, 
     if (!onChange) return;
     onChange({
       ...definition,
-      motion: { ...(definition.motion || {durationMs: 2000, tracks: []}), durationMs: val }
+      motion: { ...(definition.motion || { durationMs: 2000, tracks: [] }), durationMs: val },
+    });
+  };
+
+  const updateSizingMode = (nextMode: "fixed" | "viewport" | "content") => {
+    if (!onChange) return;
+    onChange({
+      ...definition,
+      sizingMode: nextMode,
+      minHeight: nextMode === "viewport" ? "100vh" : undefined,
+    });
+  };
+
+  const updateMinHeight = (val: string) => {
+    if (!onChange) return;
+    onChange({
+      ...definition,
+      minHeight: val.trim() || undefined,
     });
   };
 
@@ -128,8 +156,8 @@ export function SceneInspector({definition, onChange, onSaveDefinition, isOpen, 
       ...definition,
       scene: {
         ...definition.scene,
-        camera: { x: 0, y: 0, z: 0, rotateX: 0, rotateY: 0, rotateZ: 0, perspective: 1800 }
-      }
+        camera: { x: 0, y: 0, z: 0, rotateX: 0, rotateY: 0, rotateZ: 0, perspective: 1800 },
+      },
     });
   };
 
@@ -152,61 +180,138 @@ export function SceneInspector({definition, onChange, onSaveDefinition, isOpen, 
   return (
     <div className="relative">
       <button
-        className="appearance-none border border-white/20 rounded-full px-4 py-2.5 bg-[var(--seene-surface-2)] text-[var(--seene-text)] text-xs font-medium inline-flex items-center justify-center gap-2 cursor-pointer hover:bg-[var(--seene-border-text)] transition-all duration-200"
+        type="button"
+        className={`appearance-none border rounded-full px-4 py-2 text-xs font-medium inline-flex items-center gap-2 cursor-pointer transition-all duration-200 ${
+          open
+            ? "border-[var(--seene-accent)] bg-[var(--seene-accent)] text-[var(--seene-surface)] shadow-md"
+            : "border-white/20 bg-[var(--seene-surface-2)] text-[var(--seene-text)] hover:bg-[var(--seene-border-text)]"
+        }`}
         onClick={toggle}
         aria-expanded={open}
         aria-controls="scene-inspector-panel"
       >
-        {open ? "Close Inspector" : "Scene Inspector"}
+        <span aria-hidden="true">⚙</span>
+        <span>{open ? "Close Inspector" : "Scene Inspector"}</span>
       </button>
 
-      {open && (
-        <div
+      {open ? (
+        <aside
           id="scene-inspector-panel"
-          className="fixed inset-y-0 right-0 w-96 max-w-sm bg-[var(--seene-surface-2)] border-l border-[var(--seene-border-text)] shadow-2xl z-50 transform transition-transform duration-300 ease-in-out overflow-y-auto"
+          className="seene-inspector-panel fixed inset-y-0 right-0 w-96 max-w-full bg-[#121215]/95 border-l border-zinc-800/80 shadow-2xl z-50 transform transition-transform duration-300 ease-in-out overflow-y-auto backdrop-blur-xl text-zinc-200 font-sans"
         >
-          <div className="p-5 space-y-5">
+          <div className="p-5 space-y-6">
             {/* Header */}
-            <div className="flex items-center justify-between pb-3 border-b border-[var(--seene-border-text)]">
-              <h3 className="text-lg font-semibold text-[var(--seene-text)]">Scene Inspector</h3>
+            <div className="flex items-center justify-between pb-4 border-b border-zinc-800">
+              <div>
+                <h3 className="text-base font-semibold text-white tracking-tight">Studio Inspector</h3>
+                <p className="text-[11px] text-zinc-400">Camera, lens, composition & playback</p>
+              </div>
               <button
+                type="button"
                 onClick={toggle}
-                className="text-[var(--seene-text-muted)] hover:text-[var(--seene-text)] transition-colors"
+                className="rounded-lg p-1.5 text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors text-sm"
                 aria-label="Close inspector"
               >
-                ×
+                ✕
               </button>
             </div>
 
-            {/* Scene Info */}
-            <div className="bg-[var(--seene-surface)] rounded-lg p-3 space-y-2">
-              <h4 className="text-sm font-medium text-[var(--seene-text)]">Scene Information</h4>
-              <div className="text-xs text-[var(--seene-text-muted)] space-y-1">
-                <div className="flex justify-between">
-                  <span>ID:</span>
-                  <span>{sceneInfo?.nodes?.[0]?.id || "home"}</span>
+            {/* Mode Selection: Scene vs Full-Page Walkthrough */}
+            {onCompositionModeChange ? (
+              <div className="space-y-2 bg-zinc-900/80 rounded-xl p-3 border border-zinc-800">
+                <h4 className="text-xs font-medium uppercase tracking-wider text-zinc-400">Composition Mode</h4>
+                <div className="grid grid-cols-2 gap-1.5 p-1 bg-zinc-950 rounded-lg border border-zinc-800 text-xs">
+                  <button
+                    type="button"
+                    onClick={() => onCompositionModeChange("scene")}
+                    className={`py-1.5 px-3 rounded-md font-medium text-center transition-all ${
+                      compositionMode === "scene"
+                        ? "bg-zinc-800 text-white shadow-sm font-semibold"
+                        : "text-zinc-400 hover:text-zinc-200"
+                    }`}
+                  >
+                    Focused Scene
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onCompositionModeChange("walkthrough")}
+                    className={`py-1.5 px-3 rounded-md font-medium text-center transition-all ${
+                      compositionMode === "walkthrough"
+                        ? "bg-zinc-800 text-white shadow-sm font-semibold"
+                        : "text-zinc-400 hover:text-zinc-200"
+                    }`}
+                  >
+                    Full-Page Scroll
+                  </button>
                 </div>
-                <div className="flex justify-between">
-                  <span>Dimensions:</span>
-                  <span>{definition.width || 1400}×{definition.height || 980}</span>
+                <p className="text-[11px] text-zinc-400">
+                  {compositionMode === "scene"
+                    ? "3D spatial scene camera framing a single target surface."
+                    : "Scroll-through presentation animating from page hero to footer."}
+                </p>
+              </div>
+            ) : null}
+
+            {/* Scene Info & Sizing */}
+            <div className="bg-zinc-900/80 rounded-xl p-3.5 space-y-3 border border-zinc-800">
+              <h4 className="text-xs font-medium uppercase tracking-wider text-zinc-400">Sizing & Layout</h4>
+              <div className="text-xs text-zinc-400 space-y-2">
+                <div className="flex justify-between items-center">
+                  <span>Surface ID</span>
+                  <span className="font-mono text-zinc-200 bg-zinc-800 px-2 py-0.5 rounded text-[11px]">
+                    {sceneInfo?.nodes?.[0]?.id || "host"}
+                  </span>
                 </div>
-                <div className="flex justify-between">
-                  <span>Duration:</span>
-                  <span>{Math.floor((durMs || 0) / 1000)}s</span>
+                <div className="flex justify-between items-center">
+                  <span>Virtual Dimensions</span>
+                  <span className="font-mono text-zinc-200">{definition.width || 1400} × {definition.height || 980} px</span>
+                </div>
+
+                <div className="pt-2 border-t border-zinc-800 space-y-2">
+                  <label className="block text-[11px] text-zinc-400 uppercase tracking-wider font-medium">Sizing Mode</label>
+                  <div className="grid grid-cols-3 gap-1 bg-zinc-950 p-1 rounded-lg border border-zinc-800">
+                    {(["fixed", "viewport", "content"] as const).map(m => (
+                      <button
+                        key={m}
+                        type="button"
+                        onClick={() => updateSizingMode(m)}
+                        className={`py-1 rounded text-[11px] capitalize transition-all ${
+                          sizingMode === m
+                            ? "bg-zinc-800 text-white font-medium shadow-sm"
+                            : "text-zinc-400 hover:text-zinc-200"
+                        }`}
+                      >
+                        {m}
+                      </button>
+                    ))}
+                  </div>
+
+                  {sizingMode === "viewport" || sizingMode === "content" ? (
+                    <div className="pt-1 flex items-center justify-between gap-2">
+                      <span className="text-[11px] text-zinc-400">Min Height</span>
+                      <input
+                        type="text"
+                        value={definition.minHeight ?? "100vh"}
+                        placeholder="100vh or 100dvh"
+                        onChange={e => updateMinHeight(e.target.value)}
+                        className="w-28 rounded border border-zinc-700 bg-zinc-950 px-2 py-1 font-mono text-xs text-zinc-100 focus:border-indigo-500 focus:outline-none"
+                      />
+                    </div>
+                  ) : null}
                 </div>
               </div>
             </div>
 
             {/* Presentation Presets */}
             <div className="space-y-3">
-              <h4 className="text-sm font-medium text-[var(--seene-text)]">Presentation Presets</h4>
-              <div className="grid grid-cols-2 gap-2">
+              <h4 className="text-xs font-medium uppercase tracking-wider text-zinc-400">Camera Presets</h4>
+              <div className="grid grid-cols-3 gap-1.5">
                 {(Object.keys(PRESENTATION_PRESETS) as PresentationPresetName[]).map(key => (
                   <button
                     key={key}
                     type="button"
                     onClick={() => selectPreset(key)}
-                    className="rounded-lg border border-[var(--seene-border-text)] bg-[var(--seene-surface)] px-3 py-2 text-center text-xs font-medium text-[var(--seene-text)] transition-all hover:bg-[var(--seene-surface-2)] hover:text-[var(--seene-accent)]"
+                    className="rounded-lg border border-zinc-800 bg-zinc-900/60 px-2.5 py-1.5 text-center text-xs font-medium text-zinc-300 hover:bg-zinc-800 hover:text-white transition-all"
                   >
                     {PRESENTATION_PRESETS[key].name}
                   </button>
@@ -214,193 +319,208 @@ export function SceneInspector({definition, onChange, onSaveDefinition, isOpen, 
               </div>
             </div>
 
-            {/* Camera Controls */}
+            {/* Camera & Lens */}
             <div className="space-y-3">
-              <h4 className="text-sm font-medium text-[var(--seene-text)]">Camera & Lens</h4>
+              <h4 className="text-xs font-medium uppercase tracking-wider text-zinc-400">Camera & Lens</h4>
 
               <div className="grid grid-cols-3 gap-2">
                 <label className="space-y-1">
-                  <span className="text-xs text-[var(--seene-text-muted)]">Cam X</span>
+                  <span className="text-[11px] text-zinc-400">Cam X</span>
                   <input
                     type="number"
                     value={camera.x ?? 0}
                     onChange={(e) => updateCamera("x", parseFloat(e.target.value) || 0)}
-                    className="w-full rounded border border-[var(--seene-border-text)] bg-[var(--seene-surface)] px-2 py-1 text-xs text-[var(--seene-text)] focus:border-[var(--seene-accent)] focus:outline-none"
+                    className="w-full rounded border border-zinc-800 bg-zinc-900 px-2 py-1 font-mono text-xs text-zinc-100 focus:border-indigo-500 focus:outline-none"
                   />
                 </label>
                 <label className="space-y-1">
-                  <span className="text-xs text-[var(--seene-text-muted)]">Cam Y</span>
+                  <span className="text-[11px] text-zinc-400">Cam Y</span>
                   <input
                     type="number"
                     value={camera.y ?? 0}
                     onChange={(e) => updateCamera("y", parseFloat(e.target.value) || 0)}
-                    className="w-full rounded border border-[var(--seene-border-text)] bg-[var(--seene-surface)] px-2 py-1 text-xs text-[var(--seene-text)] focus:border-[var(--seene-accent)] focus:outline-none"
+                    className="w-full rounded border border-zinc-800 bg-zinc-900 px-2 py-1 font-mono text-xs text-zinc-100 focus:border-indigo-500 focus:outline-none"
                   />
                 </label>
                 <label className="space-y-1">
-                  <span className="text-xs text-[var(--seene-text-muted)]">Cam Z</span>
+                  <span className="text-[11px] text-zinc-400">Cam Z</span>
                   <input
                     type="number"
                     value={camera.z ?? 0}
                     onChange={(e) => updateCamera("z", parseFloat(e.target.value) || 0)}
-                    className="w-full rounded border border-[var(--seene-border-text)] bg-[var(--seene-surface)] px-2 py-1 text-xs text-[var(--seene-text)] focus:border-[var(--seene-accent)] focus:outline-none"
+                    className="w-full rounded border border-zinc-800 bg-zinc-900 px-2 py-1 font-mono text-xs text-zinc-100 focus:border-indigo-500 focus:outline-none"
                   />
                 </label>
               </div>
 
               <div className="grid grid-cols-3 gap-2">
                 <label className="space-y-1">
-                  <span className="text-xs text-[var(--seene-text-muted)]">Rot X</span>
+                  <span className="text-[11px] text-zinc-400">Rot X°</span>
                   <input
                     type="number"
                     value={camera.rotateX ?? 0}
                     onChange={(e) => updateCamera("rotateX", parseFloat(e.target.value) || 0)}
-                    className="w-full rounded border border-[var(--seene-border-text)] bg-[var(--seene-surface)] px-2 py-1 text-xs text-[var(--seene-text)] focus:border-[var(--seene-accent)] focus:outline-none"
+                    className="w-full rounded border border-zinc-800 bg-zinc-900 px-2 py-1 font-mono text-xs text-zinc-100 focus:border-indigo-500 focus:outline-none"
                   />
                 </label>
                 <label className="space-y-1">
-                  <span className="text-xs text-[var(--seene-text-muted)]">Rot Y</span>
+                  <span className="text-[11px] text-zinc-400">Rot Y°</span>
                   <input
                     type="number"
                     value={camera.rotateY ?? 0}
                     onChange={(e) => updateCamera("rotateY", parseFloat(e.target.value) || 0)}
-                    className="w-full rounded border border-[var(--seene-border-text)] bg-[var(--seene-surface)] px-2 py-1 text-xs text-[var(--seene-text)] focus:border-[var(--seene-accent)] focus:outline-none"
+                    className="w-full rounded border border-zinc-800 bg-zinc-900 px-2 py-1 font-mono text-xs text-zinc-100 focus:border-indigo-500 focus:outline-none"
                   />
                 </label>
                 <label className="space-y-1">
-                  <span className="text-xs text-[var(--seene-text-muted)]">Rot Z</span>
+                  <span className="text-[11px] text-zinc-400">Rot Z°</span>
                   <input
                     type="number"
                     value={camera.rotateZ ?? 0}
                     onChange={(e) => updateCamera("rotateZ", parseFloat(e.target.value) || 0)}
-                    className="w-full rounded border border-[var(--seene-border-text)] bg-[var(--seene-surface)] px-2 py-1 text-xs text-[var(--seene-text)] focus:border-[var(--seene-accent)] focus:outline-none"
+                    className="w-full rounded border border-zinc-800 bg-zinc-900 px-2 py-1 font-mono text-xs text-zinc-100 focus:border-indigo-500 focus:outline-none"
                   />
                 </label>
               </div>
 
-              <div className="space-y-2">
+              {/* Sliders */}
+              <div className="space-y-3 pt-2">
                 <label className="block space-y-1">
-                  <span className="text-xs text-[var(--seene-text-muted)]">Perspective</span>
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-[var(--seene-text)]">{camera.perspective ?? 1400}</span>
-                    <input
-                      type="range"
-                      min="100"
-                      max="5000"
-                      step="50"
-                      value={camera.perspective ?? 1400}
-                      onChange={(e) => updateCamera("perspective", parseFloat(e.target.value))}
-                      className="flex-1 ml-3 accent-[var(--seene-accent)]"
-                    />
+                  <div className="flex justify-between text-[11px] text-zinc-400">
+                    <span>Perspective</span>
+                    <span className="font-mono text-zinc-200">{camera.perspective ?? 1400}px</span>
                   </div>
+                  <input
+                    type="range"
+                    min="100"
+                    max="5000"
+                    step="50"
+                    value={camera.perspective ?? 1400}
+                    onChange={(e) => updateCamera("perspective", parseFloat(e.target.value))}
+                    className="w-full h-1.5 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-indigo-500"
+                  />
                 </label>
 
                 <label className="block space-y-1">
-                  <span className="text-xs text-[var(--seene-text-muted)]">Focal Length</span>
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-[var(--seene-text)]">{focus.focalLength ?? 50}</span>
-                    <input
-                      type="range"
-                      min="10"
-                      max="300"
-                      step="5"
-                      value={focus.focalLength ?? 50}
-                      onChange={(e) => updateFocus("focalLength", parseFloat(e.target.value))}
-                      className="flex-1 ml-3 accent-[var(--seene-accent)]"
-                    />
+                  <div className="flex justify-between text-[11px] text-zinc-400">
+                    <span>Focal Length</span>
+                    <span className="font-mono text-zinc-200">{focus.focalLength ?? 50}mm</span>
                   </div>
+                  <input
+                    type="range"
+                    min="10"
+                    max="300"
+                    step="5"
+                    value={focus.focalLength ?? 50}
+                    onChange={(e) => updateFocus("focalLength", parseFloat(e.target.value))}
+                    className="w-full h-1.5 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-indigo-500"
+                  />
                 </label>
 
                 <label className="block space-y-1">
-                  <span className="text-xs text-[var(--seene-text-muted)]">F-Stop</span>
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-[var(--seene-text)]">{focus.fStop ?? 8}</span>
-                    <input
-                      type="range"
-                      min="0.7"
-                      max="22"
-                      step="0.5"
-                      value={focus.fStop ?? 8}
-                      onChange={(e) => updateFocus("fStop", parseFloat(e.target.value))}
-                      className="flex-1 ml-3 accent-[var(--seene-accent)]"
-                    />
+                  <div className="flex justify-between text-[11px] text-zinc-400">
+                    <span>F-Stop / Aperture</span>
+                    <span className="font-mono text-zinc-200">f/{focus.fStop ?? 8}</span>
                   </div>
+                  <input
+                    type="range"
+                    min="0.7"
+                    max="22"
+                    step="0.5"
+                    value={focus.fStop ?? 8}
+                    onChange={(e) => updateFocus("fStop", parseFloat(e.target.value))}
+                    className="w-full h-1.5 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-indigo-500"
+                  />
                 </label>
 
                 <label className="block space-y-1">
-                  <span className="text-xs text-[var(--seene-text-muted)]">Focus Distance</span>
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-[var(--seene-text)]">{focus.distance ?? 1400}</span>
-                    <input
-                      type="range"
-                      min="0"
-                      max="3000"
-                      step="50"
-                      value={focus.distance ?? 1400}
-                      onChange={(e) => updateFocus("distance", parseFloat(e.target.value))}
-                      className="flex-1 ml-3 accent-[var(--seene-accent)]"
-                    />
+                  <div className="flex justify-between text-[11px] text-zinc-400">
+                    <span>Focus Distance</span>
+                    <span className="font-mono text-zinc-200">{focus.distance ?? 1400}px</span>
                   </div>
+                  <input
+                    type="range"
+                    min="0"
+                    max="3000"
+                    step="50"
+                    value={focus.distance ?? 1400}
+                    onChange={(e) => updateFocus("distance", parseFloat(e.target.value))}
+                    className="w-full h-1.5 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-indigo-500"
+                  />
                 </label>
               </div>
             </div>
 
             {/* Backdrop */}
-            <div className="space-y-3">
-              <h4 className="text-sm font-medium text-[var(--seene-text)]">Backdrop</h4>
-              <div className="flex items-center gap-4 text-xs">
-                <label className="flex items-center gap-2">
-                  <input type="radio" name="seene-backdrop" value="site"
+            <div className="space-y-2.5 pt-2 border-t border-zinc-800">
+              <h4 className="text-xs font-medium uppercase tracking-wider text-zinc-400">Backdrop</h4>
+              <div className="flex items-center gap-4 text-xs text-zinc-300">
+                <label className="flex items-center gap-1.5 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="seene-backdrop"
+                    value="site"
                     checked={mode === "site"}
-                    onChange={() => updateBackdrop("site")} />
-                  <span className="text-[var(--seene-text)]">Use site background</span>
+                    onChange={() => updateBackdrop("site")}
+                    className="accent-indigo-500"
+                  />
+                  <span>Site BG</span>
                 </label>
-                <label className="flex items-center gap-2">
-                  <input type="radio" name="seene-backdrop" value="transparent"
+                <label className="flex items-center gap-1.5 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="seene-backdrop"
+                    value="transparent"
                     checked={mode === "transparent"}
-                    onChange={() => updateBackdrop("transparent")} />
-                  <span className="text-[var(--seene-text)]">Transparent</span>
+                    onChange={() => updateBackdrop("transparent")}
+                    className="accent-indigo-500"
+                  />
+                  <span>Transparent</span>
                 </label>
-                <label className="flex items-center gap-2">
-                  <input type="radio" name="seene-backdrop" value="custom"
+                <label className="flex items-center gap-1.5 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="seene-backdrop"
+                    value="custom"
                     checked={mode === "custom"}
-                    onChange={() => updateBackdrop(color ?? "#000000")} />
-                  <span className="text-[var(--seene-text)]">Custom</span>
+                    onChange={() => updateBackdrop(color ?? "#000000")}
+                    className="accent-indigo-500"
+                  />
+                  <span>Custom</span>
                 </label>
               </div>
-              {mode === "custom" && (
-                <div className="flex items-center gap-3">
-                  <label className="text-xs text-[var(--seene-text-muted)]">Color</label>
+              {mode === "custom" ? (
+                <div className="flex items-center gap-2 pt-1">
                   <input
                     type="color"
                     aria-label="Custom backdrop color"
                     value={color ?? "#000000"}
                     onChange={(e) => updateBackdrop(e.target.value)}
-                    className="h-8 w-12 cursor-pointer rounded border border-[var(--seene-border-text)] bg-transparent p-0 outline-none"
+                    className="h-7 w-10 cursor-pointer rounded border border-zinc-800 bg-transparent p-0"
                   />
                   <input
                     type="text"
                     aria-label="Custom backdrop color value"
                     value={color ?? "#000000"}
                     onChange={(e) => updateCustomBackdrop(e.target.value)}
-                    className="flex-1 rounded border border-[var(--seene-border-text)] bg-[var(--seene-surface)] px-2 py-1 text-xs text-[var(--seene-text)] focus:border-[var(--seene-accent)] focus:outline-none"
+                    className="flex-1 rounded border border-zinc-800 bg-zinc-900 px-2.5 py-1 font-mono text-xs text-zinc-100 focus:border-indigo-500 focus:outline-none"
                   />
                 </div>
-              )}
+              ) : null}
             </div>
 
             {/* Camera Motion Presets */}
-            <div className="space-y-3">
-              <h4 className="text-xs font-medium text-[var(--seene-text-muted)] uppercase tracking-wider">
+            <div className="space-y-2.5 pt-2 border-t border-zinc-800">
+              <h4 className="text-xs font-medium uppercase tracking-wider text-zinc-400">
                 Camera Motion Presets
               </h4>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-2 gap-1.5">
                 {Object.entries(CAMERA_MOTION_PRESETS).map(([key, preset]) => (
                   <button
                     key={key}
                     type="button"
                     onClick={() => onChange?.(applyCameraMotionPreset(definition, key as keyof typeof CAMERA_MOTION_PRESETS))}
-                    className="rounded-lg border border-[var(--seene-border-text)] bg-[var(--seene-surface)] px-3 py-2 text-center text-xs font-medium text-[var(--seene-text)] transition-all hover:bg-[var(--seene-surface-2)] hover:text-[var(--seene-accent)]"
+                    className="rounded-lg border border-zinc-800 bg-zinc-900/60 px-3 py-2 text-center text-xs font-medium text-zinc-300 hover:bg-zinc-800 hover:text-white transition-all"
                     title={preset.description}
                   >
                     {preset.name}
@@ -409,28 +529,28 @@ export function SceneInspector({definition, onChange, onSaveDefinition, isOpen, 
               </div>
             </div>
 
-            {/* Motion Controls */}
-            <div className="space-y-3">
-              <h4 className="text-xs font-medium text-[var(--seene-text-muted)] uppercase tracking-wider">
-                Motion
-              </h4>
-              <label className="block space-y-2">
-                <span className="text-xs text-[var(--seene-text-muted)]">Motion Duration (ms):</span>
-                <input
-                  type="number"
-                  step="500"
-                  value={durMs}
-                  onChange={(e) => updateDuration(parseFloat(e.target.value) || 2000)}
-                  className="w-full rounded border border-[var(--seene-border-text)] bg-[var(--seene-surface)] px-3 py-2 text-xs text-[var(--seene-text)] focus:border-[var(--seene-accent)] focus:outline-none"
-                />
-              </label>
+            {/* Motion Duration */}
+            <div className="space-y-2 pt-2 border-t border-zinc-800">
+              <div className="flex justify-between items-center text-xs">
+                <span className="font-medium uppercase tracking-wider text-zinc-400">Motion Duration</span>
+                <span className="font-mono text-zinc-200">{(durMs / 1000).toFixed(1)}s</span>
+              </div>
+              <input
+                type="number"
+                step="500"
+                min="0"
+                value={durMs}
+                onChange={(e) => updateDuration(parseFloat(e.target.value) || 2000)}
+                className="w-full rounded border border-zinc-800 bg-zinc-900 px-3 py-1.5 font-mono text-xs text-zinc-100 focus:border-indigo-500 focus:outline-none"
+              />
             </div>
 
-            {/* Reset Button */}
-            <div className="pt-3 border-t border-[var(--seene-border-text)] space-y-3">
+            {/* Action Buttons */}
+            <div className="pt-4 border-t border-zinc-800 space-y-2">
               <button
+                type="button"
                 onClick={resetCamera}
-                className="w-full rounded-lg border border-[var(--seene-border-text)] bg-[var(--seene-surface)] px-3 py-2 text-xs font-medium text-[var(--seene-text)] transition-all hover:bg-[var(--seene-surface-2)]"
+                className="w-full rounded-xl border border-zinc-800 bg-zinc-900 px-3 py-2 text-xs font-medium text-zinc-300 hover:bg-zinc-800 hover:text-white transition-all"
               >
                 Reset Camera
               </button>
@@ -439,14 +559,14 @@ export function SceneInspector({definition, onChange, onSaveDefinition, isOpen, 
                 data-testid="seene-inspector-save"
                 onClick={handleSave}
                 disabled={!onSaveDefinition}
-                className="w-full rounded-lg border border-[var(--seene-accent)] bg-[var(--seene-accent)] px-3 py-2 text-xs font-medium text-[var(--seene-surface)] transition-all hover:bg-[var(--seene-accent-hover)] disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full rounded-xl border border-indigo-500/30 bg-indigo-600 px-3 py-2 text-xs font-medium text-white hover:bg-indigo-500 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-md"
               >
-                Save Backdrop
+                Save Scene Settings
               </button>
             </div>
           </div>
-        </div>
-      )}
+        </aside>
+      ) : null}
     </div>
   );
 }

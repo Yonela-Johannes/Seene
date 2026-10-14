@@ -204,8 +204,70 @@ export async function duplicateSceneSourcePair(root: string, id: string, newId: 
   return "created";
 }
 
+async function loadTsconfigPaths(root: string): Promise<Record<string, string[]>> {
+  const text = await readScoped(root, "tsconfig.json", 64_000)
+    ?? await readScoped(root, "jsconfig.json", 64_000);
+  if (!text) return {};
+  try {
+    const cleaned = text.replace(/\/\*[\s\S]*?\*\/|\/\/.*/g, "");
+    const parsed = JSON.parse(cleaned) as { compilerOptions?: { paths?: Record<string, string[]> } };
+    return parsed.compilerOptions?.paths ?? {};
+  } catch {
+    return {};
+  }
+}
+
+export function resolveAliasSpecifier(specifier: string, paths: Record<string, string[]>): string | undefined {
+  for (const [pattern, targets] of Object.entries(paths)) {
+    const prefix = pattern.replace(/\*$/, "");
+    if (specifier.startsWith(prefix) && targets.length > 0) {
+      const remainder = specifier.slice(prefix.length);
+      const targetPrefix = targets[0].replace(/^\.\//, "").replace(/\*$/, "");
+      return `${targetPrefix}${remainder}`;
+    }
+  }
+  if (specifier.startsWith("@/")) {
+    return `src/${specifier.slice(2)}`;
+  }
+  return undefined;
+}
+
 export async function discoverApplicationContent(root: string, limit = 400): Promise<PlatformContent> {
   const files: PlatformContent["files"] = [];
+  const addedPaths = new Set<string>();
+  const tsconfigPaths = await loadTsconfigPaths(root);
+
+  const addFile = (child: string, text: string) => {
+    if (addedPaths.has(child) || files.length >= limit) return;
+    const analysis = analyzeApplicationModule(text);
+    if (!analysis.default && !analysis.exports.length) return;
+    const { kind, title, route } = classifyApplicationUnit(child);
+    addedPaths.add(child);
+    files.push({
+      path: child,
+      default: analysis.default,
+      exports: analysis.exports,
+      kind,
+      title,
+      route,
+    });
+  };
+
+  const checkAndAddResolved = async (candidatePath: string) => {
+    if (addedPaths.has(candidatePath)) return;
+    for (const ext of ["", ".tsx", ".jsx", ".ts", ".js", "/index.tsx", "/index.jsx"]) {
+      const target = candidatePath + ext;
+      const absolute = await resolveProjectTarget(root, target).catch(() => undefined);
+      if (absolute) {
+        const text = await readScoped(root, target, maxSourceBytes);
+        if (text !== undefined) {
+          addFile(target, text);
+          break;
+        }
+      }
+    }
+  };
+
   const walk = async (relative: string) => {
     if (files.length >= limit) return;
     const absolute = await resolveProjectTarget(root, relative).catch(() => undefined);
@@ -225,17 +287,19 @@ export async function discoverApplicationContent(root: string, limit = 400): Pro
       if (isIconOrPrimitive(child)) continue;
       const text = await readScoped(root, child, maxSourceBytes);
       if (text === undefined) continue;
-      const analysis = analyzeApplicationModule(text);
-      if (!analysis.default && !analysis.exports.length) continue;
-      const { kind, title, route } = classifyApplicationUnit(child);
-      files.push({
-        path: child,
-        default: analysis.default,
-        exports: analysis.exports,
-        kind,
-        title,
-        route,
-      });
+      addFile(child, text);
+
+      // Check imports inside page files
+      if (child.includes("page.") || child.includes("index.")) {
+        const importMatches = text.matchAll(/(?:import|from)\s*["']([^"']+)["']/g);
+        for (const match of importMatches) {
+          const spec = match[1];
+          const resolved = resolveAliasSpecifier(spec, tsconfigPaths);
+          if (resolved) {
+            await checkAndAddResolved(resolved);
+          }
+        }
+      }
     }
   };
   await walk("src");

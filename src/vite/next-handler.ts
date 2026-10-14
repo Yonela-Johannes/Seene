@@ -55,7 +55,7 @@ async function createScene(payload: unknown, root: string): Promise<Result> {
   if (process.env.NODE_ENV !== "development") return jsonError(404, "Scene creation is available only in development.");
   if (!payload || typeof payload !== "object" || !("id" in payload) || !("recipe" in payload) || typeof payload.id !== "string")
     return jsonError(400, "Missing scene id or recipe.");
-  const input = payload as { id: string; recipe: unknown; hostPath?: string };
+  const input = payload as { id: string; recipe: unknown; hostPath?: string; content?: { file: string; export?: string } };
   const parsed = SceneRecipeSchema.safeParse(input.recipe);
   if (!parsed.success || parsed.data.id !== input.id)
     return jsonError(400, parsed.success
@@ -65,20 +65,22 @@ async function createScene(payload: unknown, root: string): Promise<Result> {
     let content: { importSpecifier: string; export?: string } | undefined = undefined;
     let warning: string | undefined = undefined;
 
-    if (input.hostPath) {
-      const hostRel = input.hostPath.trim();
-      const absolute = path.resolve(root, hostRel);
+    const targetFile = input.content?.file?.trim() || input.hostPath?.trim();
+    const targetExport = input.content?.export?.trim();
+
+    if (targetFile) {
+      const absolute = path.resolve(root, targetFile);
       const stat = await lstat(absolute).catch(() => undefined);
-      if (!stat?.isFile()) return jsonError(400, `Host component path "${hostRel}" does not exist.`);
+      if (!stat?.isFile()) return jsonError(400, `Host component path "${targetFile}" does not exist.`);
       const source = await readFile(absolute, "utf8").catch(() => undefined);
-      if (source === undefined) return jsonError(400, `Host component path "${hostRel}" could not be read.`);
+      if (source === undefined) return jsonError(400, `Host component path "${targetFile}" could not be read.`);
       try {
-        const val = validateHostComponent(hostRel, source);
+        const val = validateHostComponent(targetFile, source);
         warning = val.warning;
       } catch (err: any) {
         return jsonError(400, err?.message || String(err));
       }
-      content = { importSpecifier: componentImportSpecifier(hostRel) };
+      content = { importSpecifier: componentImportSpecifier(targetFile), ...(targetExport ? { export: targetExport } : {}) };
     }
 
     const componentSource = sceneComponentSource({ id: parsed.data.id, content });

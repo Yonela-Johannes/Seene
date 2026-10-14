@@ -10,6 +10,7 @@ import { GettingStarted } from "./GettingStarted";
 import { PresentationPicker } from "./PresentationPicker";
 import { TransitionPicker } from "./TransitionPicker";
 import { SceneInspector } from "./SceneInspector";
+import { WebsiteWalkthrough } from "./WebsiteWalkthrough";
 import { previewTheme } from "./theme";
 import { useSceneBackdrop } from "./backdrop";
 
@@ -27,7 +28,6 @@ export type ScenePreviewProps = {
   onPresentationChange?: (id: string) => void;
   transition?: TransitionPresetName;
   onTransitionChange?: (id: TransitionPresetName | undefined) => void;
-  // New duration/timeline controls
   duration?: number;
   seekTime?: number;
   isPlaying?: boolean;
@@ -38,92 +38,207 @@ export type ScenePreviewProps = {
   formatTime?: (ms: number) => string;
   onSaveDefinition?: (definition: PreviewDefinitionInput) => Promise<void> | void;
 };
-const timeLabel = (ms: number) => `${Math.floor(ms / 60000)}:${String(Math.floor(ms / 1000) % 60).padStart(2,"0")}`;
-function Glyph({kind}: {kind: "play" | "pause" | "restart" | "export"}) {
-  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
-    {kind === "play" ? <path d="m9 5 11 7-11 7Z" fill="currentColor" stroke="none"/> :
-      kind === "pause" ? <path d="M8 5v14M16 5v14" strokeWidth="4"/> :
-      kind === "restart" ? <path d="M5 9a8 8 0 1 1 0 7M5 3v6h6"/> : <path d="M12 3v12m-5-5 5 5 5-5M5 17v4h14v-4"/>}
-  </svg>;
+
+const timeLabel = (ms: number) => `${Math.floor(ms / 60000)}:${String(Math.floor(ms / 1000) % 60).padStart(2, "0")}`;
+
+function Glyph({ kind }: { kind: "play" | "pause" | "restart" | "export" }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true" className="w-4 h-4">
+      {kind === "play" ? (
+        <path d="m9 5 11 7-11 7Z" fill="currentColor" stroke="none" />
+      ) : kind === "pause" ? (
+        <path d="M8 5v14M16 5v14" strokeWidth="4" />
+      ) : kind === "restart" ? (
+        <path d="M5 9a8 8 0 1 1 0 7M5 3v6h6" />
+      ) : (
+        <path d="M12 3v12m-5-5 5 5 5-5M5 17v4h14v-4" />
+      )}
+    </svg>
+  );
 }
-function Capture({durationMs, seek}: {durationMs: number; seek: (ms: number) => void}) {
-  useSceneCapture({durationMs, seek});
+
+function Capture({ durationMs, seek }: { durationMs: number; seek: (ms: number) => void }) {
+  useSceneCapture({ durationMs, seek });
   return null;
 }
-function ExportMenu({disabled, panelHost}: {disabled: boolean; panelHost: HTMLDivElement | null}) {
+
+function ExportMenu({ disabled, panelHost }: { disabled: boolean; panelHost: HTMLDivElement | null }) {
   const [open, setOpen] = useState(false);
   const panelId = useId();
+
   useEffect(() => {
     if (disabled) setOpen(false);
     else if (open) panelHost?.querySelector("select")?.focus();
   }, [disabled, open, panelHost]);
+
   const details = useRef<HTMLDetailsElement>(null);
   const [fps, setFps] = useState(60);
   const [crf, setCrf] = useState(18);
   const [copied, setCopied] = useState(false);
   const [copyError, setCopyError] = useState(false);
+
   const quote = (value: string) => "'" + value.replaceAll("'", "'\\''") + "'";
   const command = `pnpm exec seene export --url ${quote(typeof location === "undefined" ? "http://localhost:5173" : location.href)} --output scene-${fps}.mp4 --fps ${fps} --quality ${crf}`;
-  return disabled ? <button className="seene-control" disabled><Glyph kind="export"/>Export</button> :
-    <details className="seene-export" ref={details} onToggle={event => setOpen(event.currentTarget.open)}><summary className="seene-control seene-primary" aria-controls={panelId}><Glyph kind="export"/>Export</summary>
-      {open && panelHost && createPortal(<div id={panelId} role="region" aria-label="Export your scene" className="seene-export-panel seene-chrome" onKeyDown={event => {
-        if (event.key === "Escape" && details.current) {
-          details.current.open = false;
-          setOpen(false);
-          details.current.querySelector("summary")?.focus();
-        }
-      }}><strong>Export your scene</strong>
-        <p>Run this in your project to save an MP4. Use a new filename for each export.</p>
-        <label>Frame rate<select aria-label="Export frame rate" value={fps} onChange={event => {setFps(ExportFrameRateSchema.parse(Number(event.target.value)));setCopied(false);}}>
-          {SUPPORTED_EXPORT_FPS.map(value => <option key={value} value={value}>{value} fps</option>)}
-        </select></label>
-        <label>Quality<select aria-label="Export quality (CRF)" value={crf} onChange={event => {setCrf(Number(event.target.value));setCopied(false);}}>
-          <option value={18}>High (CRF 18)</option>
-          <option value={23}>Standard (CRF 23)</option>
-          <option value={28}>Compact (CRF 28)</option>
-        </select></label><code>{command}</code>
-        <button className="seene-control seene-primary" onClick={async () => {
-          try { await navigator.clipboard.writeText(command);setCopied(true);setCopyError(false); }
-          catch { setCopyError(true); }
-        }}>{copied ? "Copied" : "Copy command"}</button>
-        <p role="status">{copyError ? "Select and copy the command above." : "Requires Chromium and FFmpeg on your machine."}</p>
-      </div>, panelHost)}
-    </details>;
+
+  return disabled ? (
+    <button className="seene-control opacity-50 cursor-not-allowed" disabled>
+      <Glyph kind="export" />
+      <span>Export</span>
+    </button>
+  ) : (
+    <details className="seene-export relative" ref={details} onToggle={event => setOpen(event.currentTarget.open)}>
+      <summary className="seene-control seene-primary cursor-pointer" aria-controls={panelId}>
+        <Glyph kind="export" />
+        <span>Export</span>
+      </summary>
+      {open && panelHost
+        ? createPortal(
+            <div
+              id={panelId}
+              role="region"
+              aria-label="Export your scene"
+              className="seene-export-panel seene-chrome bg-zinc-900 border border-zinc-800 rounded-xl p-4 shadow-2xl space-y-3 text-xs text-zinc-200"
+              onKeyDown={event => {
+                if (event.key === "Escape" && details.current) {
+                  details.current.open = false;
+                  setOpen(false);
+                  details.current.querySelector("summary")?.focus();
+                }
+              }}
+            >
+              <strong className="text-sm font-semibold text-white block">Export Scene Video</strong>
+              <p className="text-zinc-400">Run this command in your project terminal to render a frame-accurate MP4 video.</p>
+              <div className="grid grid-cols-2 gap-2">
+                <label className="space-y-1 block">
+                  <span className="text-zinc-400">Frame Rate</span>
+                  <select
+                    aria-label="Export frame rate"
+                    value={fps}
+                    onChange={event => {
+                      setFps(ExportFrameRateSchema.parse(Number(event.target.value)));
+                      setCopied(false);
+                    }}
+                    className="w-full rounded border border-zinc-700 bg-zinc-950 px-2 py-1 text-xs text-zinc-100"
+                  >
+                    {SUPPORTED_EXPORT_FPS.map(value => (
+                      <option key={value} value={value}>
+                        {value} fps
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="space-y-1 block">
+                  <span className="text-zinc-400">Quality</span>
+                  <select
+                    aria-label="Export quality (CRF)"
+                    value={crf}
+                    onChange={event => {
+                      setCrf(Number(event.target.value));
+                      setCopied(false);
+                    }}
+                    className="w-full rounded border border-zinc-700 bg-zinc-950 px-2 py-1 text-xs text-zinc-100"
+                  >
+                    <option value={18}>High (CRF 18)</option>
+                    <option value={23}>Standard (CRF 23)</option>
+                    <option value={28}>Compact (CRF 28)</option>
+                  </select>
+                </label>
+              </div>
+              <code className="block bg-zinc-950 p-2.5 rounded font-mono text-[11px] text-zinc-300 break-all select-all border border-zinc-800">
+                {command}
+              </code>
+              <button
+                type="button"
+                className="w-full rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-medium py-2 transition-colors cursor-pointer"
+                onClick={async () => {
+                  try {
+                    await navigator.clipboard.writeText(command);
+                    setCopied(true);
+                    setCopyError(false);
+                  } catch {
+                    setCopyError(true);
+                  }
+                }}
+              >
+                {copied ? "Copied Command!" : "Copy Command"}
+              </button>
+              <p role="status" className="text-[11px] text-zinc-500">
+                {copyError ? "Select and copy the command above manually." : "Requires Chromium and FFmpeg installed locally."}
+              </p>
+            </div>,
+            panelHost,
+          )
+        : null}
+    </details>
+  );
 }
 
-export function ScenePreview({definition: input, children, title = "Untitled scene", backHref, onBack, revision, hot, presentation, onPresentationChange, transition, onTransitionChange, duration, seekTime, isPlaying, onDurationChange, onPlayPause, onSeek, timelineRef, formatTime, onSaveDefinition}: ScenePreviewProps) {
-  const presented = useMemo(
-    () => (input === undefined ? undefined : resolvePresentation(input, presentation)),
-    [input, presentation],
-  );
+export function ScenePreview({
+  definition: input,
+  children,
+  title = "Untitled scene",
+  backHref,
+  onBack,
+  revision,
+  hot,
+  presentation,
+  onPresentationChange,
+  transition,
+  onTransitionChange,
+  duration,
+  seekTime,
+  isPlaying,
+  onDurationChange,
+  onPlayPause,
+  onSeek,
+  timelineRef,
+  formatTime,
+  onSaveDefinition,
+}: ScenePreviewProps) {
+  const presented = useMemo(() => (input === undefined ? undefined : resolvePresentation(input, presentation)), [input, presentation]);
   const [localDef, setLocalDef] = useState<PreviewDefinitionInput | undefined>(presented);
-  useEffect(() => { setLocalDef(presented); }, [presented]);
+  useEffect(() => {
+    setLocalDef(presented);
+  }, [presented]);
+
+  const [compositionMode, setCompositionMode] = useState<"scene" | "walkthrough">("scene");
 
   const session = usePreviewSession(localDef, revision);
   const connection = usePreviewConnection(hot, session.pause);
   const [renderError, setRenderError] = useState("");
-  const [size, setSize] = useState({width: 0, height: 0});
+  const [size, setSize] = useState({ width: 0, height: 0 });
   const [viewport, setViewport] = useState<HTMLDivElement | null>(null);
   const [exportPanel, setExportPanel] = useState<HTMLDivElement | null>(null);
-  const resetKey = useMemo(() => ({revision, input: localDef, generation: connection.generation}), [revision, localDef, connection.generation]);
-  const failure = useCallback((error: unknown) => {
-    session.pause(); setRenderError(error instanceof Error ? error.message : String(error));
-  }, [session.pause]);
+
+  const resetKey = useMemo(() => ({ revision, input: localDef, generation: connection.generation }), [revision, localDef, connection.generation]);
+
+  const failure = useCallback(
+    (error: unknown) => {
+      session.pause();
+      setRenderError(error instanceof Error ? error.message : String(error));
+    },
+    [session.pause],
+  );
+
   useEffect(() => {
     const element = viewport;
     if (!element) return;
-    const measure = () => setSize({width: element.clientWidth, height: element.clientHeight});
+    const measure = () => setSize({ width: element.clientWidth, height: element.clientHeight });
     const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(measure);
-    observer?.observe(element); measure();
+    observer?.observe(element);
+    measure();
     return () => observer?.disconnect();
   }, [viewport]);
+
   const definition = session.definition;
-  const sceneBackdrop = useSceneBackdrop(definition?.backdrop);
+  const sceneBackdrop = useSceneBackdrop(definition?.backdrop, viewport);
   const blocked = !session.valid || !connection.connected || !!connection.error || !!renderError;
+
   const [prevDefinition, setPrevDefinition] = useState<PreviewDefinition | undefined>(undefined);
   const [transitionProgress, setTransitionProgress] = useState(0);
   const prevDefinitionRef = useRef<PreviewDefinition | undefined>(undefined);
   const sceneSignature = definition ? JSON.stringify(definition.scene.nodes) : "";
+
   useEffect(() => {
     if (definition && definition !== prevDefinitionRef.current) {
       const prevSignature = prevDefinitionRef.current ? JSON.stringify(prevDefinitionRef.current.scene.nodes) : "";
@@ -152,6 +267,7 @@ export function ScenePreview({definition: input, children, title = "Untitled sce
       prevDefinitionRef.current = definition;
     }
   }, [definition, sceneSignature]);
+
   useEffect(() => {
     if (transitionProgress >= 1 && prevDefinition) {
       const timer = setTimeout(() => {
@@ -161,100 +277,285 @@ export function ScenePreview({definition: input, children, title = "Untitled sce
       return () => clearTimeout(timer);
     }
   }, [transitionProgress, prevDefinition]);
-  const captureSeek = useCallback((ms: number) => {
-    if (blocked) throw new Error("Correct the scene before exporting.");
-    session.seek(ms);
-  }, [blocked, session.seek]);
-  const scale = definition && size.width && size.height ? Math.max(size.width / definition.width, size.height / definition.height) : 1;
-  const stateText = !connection.connected ? "Reconnecting to your app…" : connection.error ? "Source needs a correction" :
-    connection.updating ? "Updating scene…" : renderError || session.issues.length ? "Scene needs a correction" :
-    !definition ? "Waiting for a scene" : session.playing ? "Playing" : "Live preview";
+
+  const captureSeek = useCallback(
+    (ms: number) => {
+      if (blocked) throw new Error("Correct the scene before exporting.");
+      session.seek(ms);
+    },
+    [blocked, session.seek],
+  );
+
+  const isViewportSizing = definition?.sizingMode === "viewport" || definition?.sizingMode === "content";
+  const scale = definition && size.width && size.height && !isViewportSizing
+    ? Math.max(size.width / definition.width, size.height / definition.height)
+    : 1;
+
+  const stateText = !connection.connected
+    ? "Reconnecting to your app…"
+    : connection.error
+      ? "Source needs a correction"
+      : connection.updating
+        ? "Updating scene…"
+        : renderError || session.issues.length
+          ? "Scene needs a correction"
+          : !definition
+            ? "Waiting for a scene"
+            : session.playing
+              ? "Playing"
+              : "Live preview";
+
   return (
-    <main data-seene-preview="" data-seene-state={blocked ? "unavailable" : "ready"} style={{ "--seene-scene-backdrop": sceneBackdrop } as CSSProperties}>
-    <style>{previewTheme}</style>
-    <div className="seene-viewport" ref={setViewport} aria-label="Scene preview">
-      {!definition && <div className="seene-empty seene-chrome">
-        <span className="seene-empty-symbol" aria-hidden="true">↗</span>
-        <h1>A new perspective<br/>on your product.</h1>
-        <p>Your live scene will appear here. Open Seene inside your app, then use the studio inspector to compose its motion.</p>
-      </div>}
-    </div>
-    <div className="seene-bottom-blur" data-seene-preview-chrome="" aria-hidden="true"><i/><i/><i/></div>
-    <footer className="seene-footer seene-chrome" data-seene-preview-chrome="" aria-label="Scene controls">
-      <div className="seene-controls">
-        <div className="seene-export-slot" ref={setExportPanel}/>
-        {(session.issues.length > 0 || connection.error || !connection.connected) && <section className="seene-message seene-chrome" role="alert">
-          <strong>{stateText}</strong>
-          {session.issues.length > 0 && <><p>Your last valid scene settings are retained. Correct the source to continue.</p>
-            <ul>{session.issues.map((issue,index) => <li key={index}>{issue.path}: {issue.message}</li>)}</ul></>}
-          {connection.error && <p>{connection.error}</p>}
-          {!connection.connected && <p>Keep your development server running. The preview reconnects automatically.</p>}
-        </section>}
-        <SceneErrorBoundary resetKey={resetKey} onError={failure} onReset={() => setRenderError("")}>
-          {definition && viewport && createPortal(
-            <div className="seene-canvas" data-seene-capture="scene" data-seene-valid={blocked ? "false" : "true"}
-              style={{width: "100%", height: "100%", position: "relative"}}>
-            {prevDefinition && transitionProgress < 1 && (
-              <div style={{
-                position: "absolute", left: "50%", top: "50%",
-                width: prevDefinition.width, height: prevDefinition.height,
-                transform: `translate(-50%, -50%) scale(${scale})`, transformOrigin: "center",
-                opacity: 1 - easeInOut(transitionProgress),
-                transition: `opacity ${SCENE_TRANSITION_DURATION}ms ease-out`,
-                pointerEvents: "none",
-              }}>
-                <Scene camera={prevDefinition.scene.camera} focus={prevDefinition.scene.focus} motion={prevDefinition.motion}
-                  recipeNodes={prevDefinition.scene.nodes}
-                  timeMs={session.timeMs} onDiagnostics={session.onDiagnostics} style={{width: prevDefinition.width, height: prevDefinition.height}}>
-                  {children}
-                </Scene>
-              </div>
-            )}
-            <div style={{
-              position: "absolute", left: "50%", top: "50%",
-              width: definition.width, height: definition.height,
-              transform: `translate(-50%, -50%) scale(${scale})`, transformOrigin: "center",
-              opacity: prevDefinition && transitionProgress < 1 ? easeInOut(transitionProgress) : 1,
-              transition: `opacity ${SCENE_TRANSITION_DURATION}ms ease-out`,
-            }}>
-              <Scene camera={definition.scene.camera} focus={definition.scene.focus} motion={definition.motion}
-                recipeNodes={definition.scene.nodes}
-                timeMs={session.timeMs} onDiagnostics={session.onDiagnostics} style={{width: definition.width, height: definition.height}}>
-                {children}
-              </Scene>
-            </div>
-            <Capture durationMs={session.durationMs} seek={captureSeek}/>
-          </div>, viewport)}
-        </SceneErrorBoundary>
-        <div className="seene-header">
-          <div className="seene-heading">
-            {backHref ? <a className="seene-control" href={backHref} onClick={event => {
-              if (onBack && event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey) {
-                event.preventDefault(); onBack();
-              }
-            }}>{onBack ? "Back to scenes" : "Back to app"}</a> : onBack && <button className="seene-control" onClick={onBack}>Back to scenes</button>}
-            <h1 className="seene-title">{title}</h1>
+    <main
+      data-seene-preview=""
+      data-seene-state={blocked ? "unavailable" : "ready"}
+      style={{ "--seene-scene-backdrop": sceneBackdrop } as CSSProperties}
+    >
+      <style>{previewTheme}</style>
+      <div className="seene-viewport" ref={setViewport} aria-label="Scene preview">
+        {!definition && (
+          <div className="seene-empty seene-chrome">
+            <span className="seene-empty-symbol" aria-hidden="true">
+              ↗
+            </span>
+            <h1>
+              A new perspective
+              <br />
+              on your product.
+            </h1>
+            <p>Your live scene will appear here. Open Seene inside your app, then use the studio inspector to compose its motion.</p>
           </div>
-          <SceneInspector definition={localDef} onChange={updated => setLocalDef(updated)} onSaveDefinition={onSaveDefinition} />
-          <ExportMenu disabled={blocked || !session.durationMs} panelHost={exportPanel}/>
-        </div>
-        {onPresentationChange && <PresentationPicker value={presentation} onChange={onPresentationChange} />}
-        {onTransitionChange && <TransitionPicker value={transition} onChange={onTransitionChange} />}
-        {!definition && <GettingStarted/>}
-        <div className="seene-dock">
-          <button className="seene-control seene-primary seene-icon" disabled={blocked || !session.durationMs}
-            aria-label={session.playing ? "Pause" : session.timeMs >= session.durationMs && session.durationMs ? "Replay" : "Play"} onClick={session.toggle}>
-            <Glyph kind={session.playing ? "pause" : "play"}/>
-          </button>
-          <button className="seene-control seene-icon" aria-label="Restart" disabled={!definition} onClick={() => session.seek(0)}><Glyph kind="restart"/></button>
-          <input className="seene-timeline" aria-label="Scene time" aria-valuetext={timeLabel(session.timeMs)} type="range"
-            min={0} max={session.durationMs || 1} step={10} value={session.timeMs} disabled={blocked || !session.durationMs}
-            onChange={event => session.seek(Number(event.target.value))}/>
-          <output className="seene-time" data-testid="scene-time">{timeLabel(session.timeMs)} / {timeLabel(session.durationMs)}</output>
-        </div>
-        <div className="seene-preview-meta"><span className="seene-status" role="status"><span className="seene-status-dot"/>{stateText}</span><BrandAttribution/></div>
+        )}
       </div>
-    </footer>
+
+      <div className="seene-bottom-blur" data-seene-preview-chrome="" aria-hidden="true">
+        <i />
+        <i />
+        <i />
+      </div>
+
+      <footer className="seene-footer seene-chrome" data-seene-preview-chrome="" aria-label="Scene controls">
+        <div className="seene-controls">
+          <div className="seene-export-slot" ref={setExportPanel} />
+
+          {session.issues.length > 0 || connection.error || !connection.connected ? (
+            <section className="seene-message seene-chrome" role="alert">
+              <strong>{stateText}</strong>
+              {session.issues.length > 0 && (
+                <>
+                  <p>Your last valid scene settings are retained. Correct the source to continue.</p>
+                  <ul>
+                    {session.issues.map((issue, index) => (
+                      <li key={index}>
+                        {issue.path}: {issue.message}
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              )}
+              {connection.error && <p>{connection.error}</p>}
+              {!connection.connected && <p>Keep your development server running. The preview reconnects automatically.</p>}
+            </section>
+          ) : null}
+
+          <SceneErrorBoundary resetKey={resetKey} onError={failure} onReset={() => setRenderError("")}>
+            {definition && viewport
+              ? createPortal(
+                  <div
+                    className="seene-canvas"
+                    data-seene-capture="scene"
+                    data-seene-valid={blocked ? "false" : "true"}
+                    style={{ width: "100%", height: "100%", position: "relative" }}
+                  >
+                    {compositionMode === "walkthrough" ? (
+                      <div className="w-full h-full overflow-y-auto">
+                        <WebsiteWalkthrough
+                          enableTimeline={true}
+                          seekTime={session.timeMs}
+                          duration={session.durationMs}
+                          isPlaying={session.playing}
+                          onSeek={ms => session.seek(ms)}
+                          onPlayPause={p => (p ? (session.playing ? undefined : session.toggle()) : session.pause())}
+                        >
+                          {children}
+                        </WebsiteWalkthrough>
+                      </div>
+                    ) : (
+                      <>
+                        {prevDefinition && transitionProgress < 1 ? (
+                          <div
+                            style={{
+                              position: "absolute",
+                              left: "50%",
+                              top: "50%",
+                              width: isViewportSizing ? "100%" : prevDefinition.width,
+                              height: isViewportSizing ? "100%" : prevDefinition.height,
+                              minHeight: isViewportSizing ? prevDefinition.minHeight || "100vh" : undefined,
+                              transform: isViewportSizing ? "none" : `translate(-50%, -50%) scale(${scale})`,
+                              transformOrigin: "center",
+                              opacity: 1 - easeInOut(transitionProgress),
+                              transition: `opacity ${SCENE_TRANSITION_DURATION}ms ease-out`,
+                              pointerEvents: "none",
+                            }}
+                          >
+                            <Scene
+                              camera={prevDefinition.scene.camera}
+                              focus={prevDefinition.scene.focus}
+                              motion={prevDefinition.motion}
+                              recipeNodes={prevDefinition.scene.nodes}
+                              timeMs={session.timeMs}
+                              onDiagnostics={session.onDiagnostics}
+                              style={{ width: "100%", height: "100%" }}
+                            >
+                              {children}
+                            </Scene>
+                          </div>
+                        ) : null}
+
+                        <div
+                          style={{
+                            position: "absolute",
+                            left: "50%",
+                            top: "50%",
+                            width: isViewportSizing ? "100%" : definition.width,
+                            height: isViewportSizing ? "100%" : definition.height,
+                            minHeight: isViewportSizing ? definition.minHeight || "100vh" : undefined,
+                            transform: isViewportSizing ? "none" : `translate(-50%, -50%) scale(${scale})`,
+                            transformOrigin: "center",
+                            opacity: prevDefinition && transitionProgress < 1 ? easeInOut(transitionProgress) : 1,
+                            transition: `opacity ${SCENE_TRANSITION_DURATION}ms ease-out`,
+                          }}
+                        >
+                          <Scene
+                            camera={definition.scene.camera}
+                            focus={definition.scene.focus}
+                            motion={definition.motion}
+                            recipeNodes={definition.scene.nodes}
+                            timeMs={session.timeMs}
+                            onDiagnostics={session.onDiagnostics}
+                            style={{ width: "100%", height: "100%" }}
+                          >
+                            {children}
+                          </Scene>
+                        </div>
+                      </>
+                    )}
+                    <Capture durationMs={session.durationMs} seek={captureSeek} />
+                  </div>,
+                  viewport,
+                )
+              : null}
+          </SceneErrorBoundary>
+
+          {/* Editor Header Bar */}
+          <div className="seene-header flex items-center justify-between gap-4">
+            <div className="seene-heading flex items-center gap-3">
+              {backHref ? (
+                <a
+                  className="seene-control"
+                  href={backHref}
+                  onClick={event => {
+                    if (onBack && event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey) {
+                      event.preventDefault();
+                      onBack();
+                    }
+                  }}
+                >
+                  {onBack ? "Back to scenes" : "Back to app"}
+                </a>
+              ) : onBack ? (
+                <button type="button" className="seene-control" onClick={onBack}>
+                  Back to scenes
+                </button>
+              ) : null}
+
+              <h1 className="seene-title">{title}</h1>
+
+              {/* Mode indicator pill */}
+              <div className="flex items-center gap-1 bg-zinc-900 border border-zinc-800 rounded-full p-0.5 text-[11px]">
+                <button
+                  type="button"
+                  onClick={() => setCompositionMode("scene")}
+                  className={`px-2.5 py-0.5 rounded-full font-medium transition-colors ${
+                    compositionMode === "scene" ? "bg-zinc-800 text-white font-semibold" : "text-zinc-400 hover:text-zinc-200"
+                  }`}
+                >
+                  Scene
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCompositionMode("walkthrough")}
+                  className={`px-2.5 py-0.5 rounded-full font-medium transition-colors ${
+                    compositionMode === "walkthrough" ? "bg-zinc-800 text-white font-semibold" : "text-zinc-400 hover:text-zinc-200"
+                  }`}
+                >
+                  Scroll
+                </button>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <SceneInspector
+                definition={localDef}
+                onChange={updated => setLocalDef(updated)}
+                onSaveDefinition={onSaveDefinition}
+                compositionMode={compositionMode}
+                onCompositionModeChange={setCompositionMode}
+              />
+              <ExportMenu disabled={blocked || !session.durationMs} panelHost={exportPanel} />
+            </div>
+          </div>
+
+          {onPresentationChange ? <PresentationPicker value={presentation} onChange={onPresentationChange} /> : null}
+          {onTransitionChange ? <TransitionPicker value={transition} onChange={onTransitionChange} /> : null}
+          {!definition ? <GettingStarted /> : null}
+
+          {/* Playback Dock & Timeline */}
+          <div className="seene-dock">
+            <button
+              type="button"
+              className="seene-control seene-primary seene-icon cursor-pointer"
+              disabled={blocked || !session.durationMs}
+              aria-label={session.playing ? "Pause" : session.timeMs >= session.durationMs && session.durationMs ? "Replay" : "Play"}
+              onClick={session.toggle}
+            >
+              <Glyph kind={session.playing ? "pause" : "play"} />
+            </button>
+            <button
+              type="button"
+              className="seene-control seene-icon cursor-pointer"
+              aria-label="Restart"
+              disabled={!definition}
+              onClick={() => session.seek(0)}
+            >
+              <Glyph kind="restart" />
+            </button>
+            <input
+              className="seene-timeline"
+              aria-label="Scene time"
+              aria-valuetext={timeLabel(session.timeMs)}
+              type="range"
+              min={0}
+              max={session.durationMs || 1}
+              step={10}
+              value={session.timeMs}
+              disabled={blocked || !session.durationMs}
+              onChange={event => session.seek(Number(event.target.value))}
+            />
+            <output className="seene-time font-mono" data-testid="scene-time">
+              {timeLabel(session.timeMs)} / {timeLabel(session.durationMs)}
+            </output>
+          </div>
+
+          <div className="seene-preview-meta">
+            <span className="seene-status" role="status">
+              <span className="seene-status-dot" />
+              {stateText}
+            </span>
+            <BrandAttribution />
+          </div>
+        </div>
+      </footer>
     </main>
   );
 }

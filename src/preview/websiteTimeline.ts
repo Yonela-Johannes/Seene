@@ -93,82 +93,43 @@ export interface DiscoveredSection {
  * @returns Target scroll position in pixels
  */
 export function evaluateTimeline(time: number, options: TimelineOptions, boundaries: SectionBoundary[]): number {
-  // Clamp invalid timestamps if requested
+  if (boundaries.length === 0) return 0;
+
   if (options.clamp) {
     time = Math.max(0, Math.min(time, options.duration));
   }
 
-  // Find active section for the given time
-  const activeBoundary = boundaries.find(boundary => 
-    time >= boundary.startTime && time < boundary.endTime
-  );
+  const lastBoundary = boundaries[boundaries.length - 1];
 
-  if (!activeBoundary) {
-    // No active section (before first section, between sections, or after last)
-    return 0;
+  if (time >= lastBoundary.endTime || (options.duration > 0 && time >= options.duration)) {
+    return lastBoundary.endPosition + (lastBoundary.scrollOffset || 0);
   }
 
-  // Calculate progress through active section
+  const activeBoundary = boundaries.find(boundary =>
+    time >= boundary.startTime && time < boundary.endTime
+  ) || lastBoundary;
+
   const sectionDuration = activeBoundary.endTime - activeBoundary.startTime;
   if (sectionDuration <= 0) {
-    return activeBoundary.startPosition;
-  }
-
-  const progress = (time - activeBoundary.startTime) / sectionDuration;
-
-  // Calculate target scroll position based on section progress
-  const sectionHeight = activeBoundary.endPosition - activeBoundary.startPosition;
-  if (sectionHeight <= 0) {
     return activeBoundary.startPosition + (activeBoundary.scrollOffset || 0);
   }
 
-  // Use height-weighted timing by default
-  if (options.useHeightWeightedTiming !== false) {
-    const scrollPosition = activeBoundary.startPosition + 
-      (progress * sectionHeight) + 
-      (activeBoundary.scrollOffset || 0);
-    return scrollPosition;
-  }
+  const progress = Math.max(0, Math.min(1, (time - activeBoundary.startTime) / sectionDuration));
+  const sectionHeight = activeBoundary.endPosition - activeBoundary.startPosition;
 
-  // Custom duration-based timing
-  const duration = activeBoundary.duration || sectionDuration;
-  const customProgress = (time - activeBoundary.startTime) / duration;
-  const customScrollPosition = activeBoundary.startPosition + 
-    (Math.min(customProgress, 1) * sectionHeight) + 
-    (activeBoundary.scrollOffset || 0);
-  
-  return customScrollPosition;
+  return activeBoundary.startPosition + (progress * sectionHeight) + (activeBoundary.scrollOffset || 0);
 }
 
-/**
- * Pure function that maps timestamps to active sections.
- * 
- * Given a timeline and section boundaries, returns the active section
- * for the specified timestamp.
- * 
- * @param time - Timestamp in milliseconds
- * @param boundaries - Section boundaries
- * @returns Active section ID or null if no active section
- */
 export function getActiveSection(time: number, boundaries: SectionBoundary[]): string | null {
-  const activeBoundary = boundaries.find(boundary => 
+  if (boundaries.length === 0) return null;
+  const lastBoundary = boundaries[boundaries.length - 1];
+  if (time >= lastBoundary.endTime) return lastBoundary.id;
+  const activeBoundary = boundaries.find(boundary =>
     time >= boundary.startTime && time < boundary.endTime
   );
-
-  return activeBoundary?.id || null;
+  return activeBoundary?.id || boundaries[0].id;
 }
 
-/**
- * Pure function that maps sections and progress to deterministic timestamps.
- * 
- * Given a section ID and progress (0-1), returns the corresponding timestamp
- * in the timeline that will produce that progress through the section.
- * 
- * @param sectionId - Section ID
- * @param progress - Progress through section (0-1)
- * @param boundaries - Section boundaries
- * @returns Deterministic timestamp in milliseconds
- */
 export function getTimestampForSection(sectionId: string, progress: number, boundaries: SectionBoundary[]): number {
   const boundary = boundaries.find(b => b.id === sectionId);
   
@@ -176,58 +137,40 @@ export function getTimestampForSection(sectionId: string, progress: number, boun
     throw new Error(`Section with ID "${sectionId}" not found in timeline`);
   }
 
-  // Ensure progress is within valid range
   const clampedProgress = Math.max(0, Math.min(progress, 1));
-
-  // Calculate timestamp based on section duration
-  const sectionDuration = boundary.duration || 
-    (boundary.endTime - boundary.startTime);
+  const sectionDuration = boundary.duration || (boundary.endTime - boundary.startTime);
 
   return boundary.startTime + (clampedProgress * sectionDuration);
 }
 
-/**
- * Pure function that evaluates timeline state for a given timestamp.
- * 
- * Provides complete timeline evaluation including scroll position,
- * active section, and section progress.
- * 
- * @param time - Timestamp in milliseconds
- * @param options - Timeline configuration
- * @param boundaries - Section boundaries with positions
- * @returns Complete timeline state
- */
 export function evaluateTimelineState(time: number, options: TimelineOptions, boundaries: SectionBoundary[]): TimelineState {
-  // Clamp invalid timestamps if requested
-  const clampedTime = options.clamp ? Math.max(0, Math.min(time, options.duration)) : time;
+  if (boundaries.length === 0) {
+    return { time: 0, scrollPosition: 0, activeSectionId: null, sectionProgress: 0 };
+  }
 
-  // Find active section for the given time
-  const activeBoundary = boundaries.find(boundary => 
+  const clampedTime = options.clamp ? Math.max(0, Math.min(time, options.duration)) : time;
+  const lastBoundary = boundaries[boundaries.length - 1];
+
+  let activeBoundary = boundaries.find(boundary =>
     clampedTime >= boundary.startTime && clampedTime < boundary.endTime
   );
 
-  let scrollPosition = 0;
-  let activeSectionId: string | null = null;
-  let sectionProgress = 0;
-
-  if (activeBoundary) {
-    activeSectionId = activeBoundary.id;
-    
-    const sectionDuration = activeBoundary.endTime - activeBoundary.startTime;
-    if (sectionDuration > 0) {
-      sectionProgress = (clampedTime - activeBoundary.startTime) / sectionDuration;
-    }
-
-    // Calculate scroll position
-    const sectionHeight = activeBoundary.endPosition - activeBoundary.startPosition;
-    if (sectionHeight > 0) {
-      scrollPosition = activeBoundary.startPosition + 
-        (sectionProgress * sectionHeight) + 
-        (activeBoundary.scrollOffset || 0);
-    } else {
-      scrollPosition = activeBoundary.startPosition + (activeBoundary.scrollOffset || 0);
-    }
+  if (!activeBoundary && (clampedTime >= lastBoundary.endTime || (options.duration > 0 && clampedTime >= options.duration))) {
+    activeBoundary = lastBoundary;
   }
+
+  if (!activeBoundary) {
+    activeBoundary = boundaries[0];
+  }
+
+  const activeSectionId = activeBoundary.id;
+  const sectionDuration = activeBoundary.endTime - activeBoundary.startTime;
+  const sectionProgress = sectionDuration > 0
+    ? Math.max(0, Math.min(1, (clampedTime - activeBoundary.startTime) / sectionDuration))
+    : 1;
+
+  const sectionHeight = activeBoundary.endPosition - activeBoundary.startPosition;
+  const scrollPosition = activeBoundary.startPosition + (sectionProgress * sectionHeight) + (activeBoundary.scrollOffset || 0);
 
   return {
     time: clampedTime,

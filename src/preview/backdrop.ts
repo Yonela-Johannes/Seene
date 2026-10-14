@@ -34,20 +34,28 @@ function isValidCssColor(value: string): boolean {
   return probe.style.color !== "";
 }
 
-export function resolveHostBackdropColor(): string {
+export function resolveHostBackdropColor(startingNode?: HTMLElement | null): string {
   if (typeof window === "undefined" || typeof document === "undefined") return FALLBACK_LIGHT;
   const root = document.documentElement;
-  let element: HTMLElement | null = document.body;
+  let element: HTMLElement | null = startingNode || document.body;
   while (element && element !== root) {
     let computed: string | null = null;
+    let varVal: string | null = null;
     try {
-      computed = window.getComputedStyle(element).backgroundColor;
+      varVal = element.style?.getPropertyValue("--seene-scene-backdrop")?.trim()
+        || window.getComputedStyle(element)?.getPropertyValue("--seene-scene-backdrop")?.trim()
+        || null;
+      computed = window.getComputedStyle(element)?.backgroundColor;
     } catch {
       computed = null;
     }
+    if (varVal && isValidCssColor(varVal)) return varVal;
     if (computed && !isTransparentComputed(computed)) return computed;
     element = element.parentElement;
   }
+  const rootVar = root.style?.getPropertyValue("--seene-scene-backdrop")?.trim()
+    || window.getComputedStyle(root)?.getPropertyValue("--seene-scene-backdrop")?.trim();
+  if (rootVar && isValidCssColor(rootVar)) return rootVar;
   if (root.classList.contains("dark")) return FALLBACK_DARK;
   if (root.classList.contains("light")) return FALLBACK_LIGHT;
   const theme = root.getAttribute("data-theme");
@@ -63,21 +71,21 @@ export function resolveHostBackdropColor(): string {
   return FALLBACK_LIGHT;
 }
 
-export function resolveBackdrop(backdrop: string | undefined): string {
+export function resolveBackdrop(backdrop: string | undefined, node?: HTMLElement | null): string {
   const { mode, color } = parseBackdropMode(backdrop);
   if (mode === "transparent") return "transparent";
-  if (mode === "custom") return isValidCssColor(color ?? "") ? color! : resolveHostBackdropColor();
-  return resolveHostBackdropColor();
+  if (mode === "custom") return isValidCssColor(color ?? "") ? color! : resolveHostBackdropColor(node);
+  return resolveHostBackdropColor(node);
 }
 
 const OBSERVED_ATTRIBUTES = ["class", "style", "data-theme"];
 
-export function useSceneBackdrop(backdrop: string | undefined): string {
-  const [color, setColor] = useState<string>(() => resolveBackdrop(backdrop));
+export function useSceneBackdrop(backdrop: string | undefined, node?: HTMLElement | null): string {
+  const [color, setColor] = useState<string>(() => resolveBackdrop(backdrop, node));
 
   useEffect(() => {
-    setColor(resolveBackdrop(backdrop));
-  }, [backdrop]);
+    setColor(resolveBackdrop(backdrop, node));
+  }, [backdrop, node]);
 
   useEffect(() => {
     const isSite = !backdrop || backdrop === "site";

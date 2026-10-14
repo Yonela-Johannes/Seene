@@ -179,34 +179,49 @@ export function createSceneRecipe(input: { id: string; title: string; descriptio
   });
 }
 
-export function sceneComponentSource(input: { id: string; content?: { importSpecifier: string; export?: string } }): string {
+export function sceneComponentSource(input: {
+  id: string;
+  content?: { importSpecifier: string; export?: string } | Array<{ importSpecifier: string; export?: string }>;
+}): string {
   const name = sceneComponentName(input.id);
-  if (!input.content) {
+  if (!input.content || (Array.isArray(input.content) && input.content.length === 0)) {
     return `// @seene-scaffold-version 1
 "use client";
 import { Surface } from "@thatg33k/seene";
 
 export default function ${name}() {
   return (
-    <Surface id="host" style={{ width: 1400, height: 980, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", background: "#18181b", color: "#f4f4f5", fontFamily: "system-ui, sans-serif", borderRadius: 16, border: "1px solid #27272a" }}>
-      <h1 style={{ fontSize: 24, fontWeight: 600, marginBottom: 8, color: "#ffffff" }}>Scene Preview</h1>
-      <p style={{ fontSize: 14, color: "#a1a1aa" }}>Edit src/seene/scenes/${input.id}.tsx to add your component.</p>
+    <Surface id="host" style={{ width: 1400, height: 980 }}>
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", width: "100%", height: "100%" }}>
+        <h1 style={{ fontSize: 24, fontWeight: 600, marginBottom: 8 }}>Scene Preview</h1>
+        <p style={{ fontSize: 14, opacity: 0.7 }}>Edit src/seene/scenes/${input.id}.tsx to add your component.</p>
+      </div>
     </Surface>
   );
 }
 `;
   }
-  const componentName = "HostComponent";
-  const binding = input.content.export ? `{ ${input.content.export} as HostComponent }` : "HostComponent";
+
+  const items = Array.isArray(input.content) ? input.content : [input.content];
+  const imports: string[] = [];
+  const elements: string[] = [];
+
+  items.forEach((item, idx) => {
+    const compName = items.length === 1 ? "HostComponent" : `HostComponent${idx + 1}`;
+    const binding = item.export ? `{ ${item.export} as ${compName} }` : compName;
+    imports.push(`import ${binding} from ${JSON.stringify(item.importSpecifier)};`);
+    elements.push(`<${compName} />`);
+  });
+
   return `// @seene-scaffold-version 1
 "use client";
 import { Surface } from "@thatg33k/seene";
-import ${binding} from ${JSON.stringify(input.content.importSpecifier)};
+${imports.join("\n")}
 
 export default function ${name}() {
   return (
     <Surface id="host" style={{ width: 1400, height: 980 }}>
-      <${componentName} />
+      ${elements.join("\n      ")}
     </Surface>
   );
 }

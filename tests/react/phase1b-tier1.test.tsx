@@ -72,7 +72,7 @@ describe("Tier 1: Canonical Scene Pattern Rendering (jsdom)", () => {
     const generatedSource = sceneComponentSource({ id: "no-host" });
     expect(generatedSource.trim().startsWith("// @seene-scaffold-version 1\n\"use client\";")).toBe(true);
     expect(generatedSource).toContain('Edit src/seene/scenes/no-host.tsx to add your component.');
-    expect(generatedSource).toContain('<Surface id="host" style={{ width: 1400, height: 980,');
+    expect(generatedSource).toContain('<Surface id="host" style={{ width: 1400, height: 980 }}>');
     expect(generatedSource).not.toContain('{children}');
 
     function SceneWithoutHost() {

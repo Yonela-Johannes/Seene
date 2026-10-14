@@ -582,11 +582,37 @@ it("applies deterministic camera, focus and surface tracks without replacing liv
   expect(screen.queryByRole("alert")).toBeNull();
 });
 
-it('keeps the scene void black without recoloring the live UI',()=>{
- render(<Scene style={{background:'pink',backgroundImage:'linear-gradient(red, blue)'}}><Surface id="host"><button style={{backgroundColor:'white',color:'black'}}>Original host</button></Surface></Scene>);
- const scene=document.querySelector('[data-seene-scene]') as HTMLElement;
- expect(scene.style.backgroundColor).toBe('rgb(0, 0, 0)');expect(scene.style.backgroundImage).toBe('none');
- expect(screen.getByRole('button',{name:'Original host'}).style.backgroundColor).toBe('white');
+it('scene backdrop comes from --seene-scene-backdrop / host resolution without user style.background recoloring scene or live UI', () => {
+  render(
+    <Scene style={{ background: 'pink', backgroundImage: 'linear-gradient(red, blue)' }}>
+      <Surface id="host">
+        <button style={{ backgroundColor: 'white', color: 'black' }}>Original host</button>
+      </Surface>
+    </Scene>
+  );
+  const scene = document.querySelector('[data-seene-scene]') as HTMLElement;
+  expect(scene.style.backgroundColor).toBe('var(--seene-scene-backdrop, transparent)');
+  expect(scene.style.backgroundImage).toBe('none');
+  expect(screen.getByRole('button', { name: 'Original host' }).style.backgroundColor).toBe('white');
+  expect(screen.getByRole('button', { name: 'Original host' }).style.color).toBe('black');
+});
+
+it('resolves backdrop to light host or dark host via CSS variable when no recipe backdrop is saved', () => {
+  const { container: lightContainer } = render(
+    <div style={{ '--seene-scene-backdrop': '#ffffff' } as React.CSSProperties}>
+      <Scene><Surface id="host"><span>Light Host</span></Surface></Scene>
+    </div>
+  );
+  const lightScene = lightContainer.querySelector('[data-seene-scene]') as HTMLElement;
+  expect(lightScene.style.backgroundColor).toBe('var(--seene-scene-backdrop, transparent)');
+
+  const { container: darkContainer } = render(
+    <div style={{ '--seene-scene-backdrop': '#0a0a0c' } as React.CSSProperties}>
+      <Scene><Surface id="host"><span>Dark Host</span></Surface></Scene>
+    </div>
+  );
+  const darkScene = darkContainer.querySelector('[data-seene-scene]') as HTMLElement;
+  expect(darkScene.style.backgroundColor).toBe('var(--seene-scene-backdrop, transparent)');
 });
 
   it("diagnoses mixed group content and recovers when each region has a focus owner", async () => {

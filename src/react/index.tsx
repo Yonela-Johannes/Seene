@@ -198,7 +198,7 @@ export function Scene({
           data-seene-valid={result.evaluation.issues.length===0 ? "true" : "false"}
           style={{
             ...style,
-            background: "var(--seene-scene-backdrop, #000000)",
+            backgroundColor: "var(--seene-scene-backdrop, transparent)",
             backgroundImage: "none",
             position: style?.position ?? "relative",
             pointerEvents: "none",
