@@ -80,12 +80,12 @@ export function CreateSceneDialog({ project, onClose, onCreated }: { project: st
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-md animate-in fade-in duration-200">
+    <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/70 p-4 backdrop-blur-md animate-in fade-in duration-200 pointer-events-auto">
       <div
         role="dialog"
         aria-modal="true"
         aria-labelledby="create-scene-modal-title"
-        className="flex max-h-[calc(100dvh-2rem)] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-[var(--seene-border)] bg-[var(--seene-surface-2)] text-[var(--seene-text)] shadow-2xl"
+        className="flex max-h-[calc(100dvh-2rem)] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-[var(--seene-border)] bg-[var(--seene-surface-2)] text-[var(--seene-text)] shadow-2xl relative z-[10001] pointer-events-auto"
       >
         {/* Header */}
         <header className="flex items-center justify-between border-b border-[var(--seene-border)] px-6 py-4 shrink-0">

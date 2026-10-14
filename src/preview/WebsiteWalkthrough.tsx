@@ -263,12 +263,49 @@ export function WebsiteWalkthrough(props: WebsiteWalkthroughProps): ReactNode {
     };
   }, [enableTimeline, isPlayingValue, sectionBoundaries, durationValue, seekTimeValue, onSeek, onPlayPause]);
 
-  // Control handlers
+  // Synchronize timeline time to viewport scroll position
+  useEffect(() => {
+    if (!viewportRef.current || sectionBoundaries.length === 0) return;
+    const options: TimelineOptions = { duration: durationValue || 5000, clamp: true };
+    const state = evaluateTimelineState(seekTimeValue, options, sectionBoundaries);
+    if (Math.abs(viewportRef.current.scrollTop - state.scrollPosition) > 2) {
+      viewportRef.current.scrollTop = state.scrollPosition;
+    }
+  }, [seekTimeValue, durationValue, sectionBoundaries]);
+
+  // Synchronize manual user scrolling to timeline time
+  const handleViewportScroll = useCallback(() => {
+    if (!viewportRef.current || sectionBoundaries.length === 0 || isPlayingValue) return;
+    const currentScroll = viewportRef.current.scrollTop;
+    const options: TimelineOptions = { duration: durationValue || 5000, clamp: true };
+    
+    let bestTime = 0;
+    let minDiff = Infinity;
+    const totalDuration = durationValue || 5000;
+    const step = 50;
+    
+    for (let t = 0; t <= totalDuration; t += step) {
+      const pos = evaluateTimeline(t, options, sectionBoundaries);
+      const diff = Math.abs(pos - currentScroll);
+      if (diff < minDiff) {
+        minDiff = diff;
+        bestTime = t;
+      }
+    }
+
+    if (Math.abs(seekTimeValue - bestTime) > 100) {
+      if (seekTime !== undefined) {
+        onSeek?.(bestTime);
+      } else {
+        setInternalSeekTime(bestTime);
+        onSeek?.(bestTime);
+      }
+    }
+  }, [sectionBoundaries, durationValue, isPlayingValue, seekTimeValue, seekTime, onSeek]);
+
   const handlePlayPause = useCallback(() => {
     if (!enableTimeline) return;
-    
     const newPlayingState = !isPlayingValue;
-    
     if (isPlaying !== undefined) {
       onPlayPause?.(newPlayingState);
     } else {
@@ -328,6 +365,7 @@ export function WebsiteWalkthrough(props: WebsiteWalkthroughProps): ReactNode {
         ref={viewportRef}
         className="website-walkthrough-viewport"
         style={{ position: 'relative', overflowY: 'auto' }}
+        onScroll={handleViewportScroll}
       >
         {/* Render sections from explicit definitions */}
         {combinedSections?.map((section) => (

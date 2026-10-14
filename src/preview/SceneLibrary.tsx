@@ -53,9 +53,9 @@ const camera = {
 
 const focus = {
   distance: 1400,
-  fStop: 4,
-  focalLength: 220,
-  maxBlur: 7,
+  fStop: 16,
+  focalLength: 50,
+  maxBlur: 0,
 };
 
 const view = matrixFor(
@@ -717,7 +717,7 @@ export function SceneLibrary({
                             </span>
 
                             <span className="flex items-center gap-2 font-mono text-xs text-[var(--seene-text-muted)] group-hover:text-[var(--seene-text)]">
-                              {duration}s<span aria-hidden="true">↗</span>
+                              {duration > 0 ? `${duration}s` : "Static"}<span aria-hidden="true">↗</span>
                             </span>
                           </a>
                         </Surface>
@@ -740,8 +740,8 @@ export function SceneLibrary({
       )}
 
       {isCreating && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm animate-in fade-in duration-200 pointer-events-auto">
-          <section role="dialog" aria-modal="true" aria-labelledby="seene-create-title-heading" aria-describedby="seene-create-description" className="max-h-[calc(100dvh-2rem)] w-full max-w-md overflow-y-auto rounded-2xl border border-[var(--seene-border-text)] bg-[var(--seene-surface-2)] p-6 text-[var(--seene-text)] shadow-2xl space-y-5">
+        <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/75 p-4 backdrop-blur-md animate-in fade-in duration-200 pointer-events-auto">
+          <section role="dialog" aria-modal="true" aria-labelledby="seene-create-title-heading" aria-describedby="seene-create-description" className="max-h-[calc(100dvh-2rem)] w-full max-w-md overflow-y-auto rounded-2xl border border-[var(--seene-border-text)] bg-[var(--seene-surface-2)] p-6 text-[var(--seene-text)] shadow-2xl space-y-5 relative z-[10001] pointer-events-auto">
             <div className="flex items-start justify-between gap-4 border-b border-[var(--seene-border-text)] pb-4">
               <div className="min-w-0">
                 <h2 id="seene-create-title-heading" className="text-lg font-semibold text-[var(--seene-text)]">Create new scene</h2>
