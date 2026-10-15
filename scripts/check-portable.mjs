@@ -29,10 +29,10 @@ try{
  const counter='"use client";\nimport React,{createContext,useContext,useState} from "react";\nconst Context=createContext("missing");\nexport function Provider({children}) {return <Context.Provider value="existing provider">{children}</Context.Provider>}\nexport default function Counter(){const value=useContext(Context);const [count,setCount]=useState(0);return <article style={{background:"#fafafa",color:"#111",padding:40,width:700,height:400}}><h1>{value}</h1><button onClick={()=>setCount(c=>c+1)}>Count {count}</button></article>}';
  await put('src/Counter.jsx',counter);
  if(kind==='app'){
-  await put('app/layout.jsx','import React from "react"; import {Provider} from "../src/Counter"; export default function Layout({children}){return <html><body><Provider>{children}</Provider></body></html>}');
+    await put('app/layout.jsx','import React from "react"; import {Provider} from "../src/Counter"; export default function Layout({children}){return <html><body><Provider><header data-testid="host-header" style={{position:"fixed",top:0,left:0,right:0,zIndex:999999,background:"red",height:32}}>Host header</header>{children}<footer data-testid="host-footer" style={{position:"fixed",bottom:0,left:0,right:0,zIndex:999999,background:"lime",height:32}}>Host footer</footer></Provider></body></html>}');
   await put('app/page.jsx','import React from "react"; import Counter from "../src/Counter"; export default function Page(){return <Counter/>}');
  }else if(kind==='pages'){
-  await put('pages/_app.jsx','import React from "react"; import {Provider} from "../src/Counter"; export default function App({Component,pageProps}){return <Provider><Component {...pageProps}/></Provider>}');
+    await put('pages/_app.jsx','import React from "react"; import {Provider} from "../src/Counter"; export default function App({Component,pageProps}){return <Provider><header data-testid="host-header" style={{position:"fixed",top:0,left:0,right:0,zIndex:999999,background:"red",height:32}}>Host header</header><Component {...pageProps}/><footer data-testid="host-footer" style={{position:"fixed",bottom:0,left:0,right:0,zIndex:999999,background:"lime",height:32}}>Host footer</footer></Provider>}');
   await put('pages/index.jsx','export {default} from "../src/Counter";');
  }
  const cli=path.join(host,'node_modules/@thatg33k/seene/dist/cli/seene.js');
@@ -62,12 +62,18 @@ try{
   assert.equal(created.headers.get('content-type')?.includes('application/json'),true,'scene creation must return JSON');
   assert.equal(created.status,200,await created.clone().text());assert.deepEqual(await created.json(),{success:true,id:'created-from-studio'});
   assert.ok((await readFile(path.join(host,'src/seene/catalog.js'),'utf8')).includes('created-from-studio.scene.json'));
-  await page.goto(url);await expect(page.getByRole('button',{name:'Count 0'})).toBeVisible();
+    await page.goto(url);await expect(page.getByTestId('host-header')).toBeVisible();await expect(page.getByTestId('host-footer')).toBeVisible();await expect(page.getByRole('button',{name:'Count 0'})).toBeVisible();
   await page.getByRole('button',{name:'Count 0'}).click();await expect(page.getByRole('button',{name:'Count 1'})).toBeVisible();
   const opened=JSON.parse(await run(process.execPath,[cli,'open','--url',url,'--no-open','--json']));assert.equal(opened.data.url,url+'/seene?seene-preview=1');
   url=opened.data.url;
  }
  await page.goto(url);
+ if(kind!=='react') {
+  await page.locator('[data-seene-studio-root]').waitFor({state:'attached',timeout:30000});
+  const shell=await page.evaluate(()=>{const root=document.querySelector('[data-seene-studio-root]');const top=document.elementFromPoint(4,4);const bottom=document.elementFromPoint(4,innerHeight-4);return {root:root&&{rect:root.getBoundingClientRect().toJSON(),style:root.getAttribute('style')},top:top&&{tag:top.tagName,id:top.id,testid:top.getAttribute('data-testid'),studio:!!top.closest('[data-seene-studio-root]')},bottom:bottom&&{tag:bottom.tagName,id:bottom.id,testid:bottom.getAttribute('data-testid'),studio:!!bottom.closest('[data-seene-studio-root]')},htmlStyle:document.documentElement.getAttribute('style'),bodyStyle:document.body.getAttribute('style'),htmlOverflow:getComputedStyle(document.documentElement).overflow,bodyOverflow:getComputedStyle(document.body).overflow}});
+  const isolated=!!shell.top?.studio&&!!shell.bottom?.studio&&shell.htmlOverflow==='hidden'&&shell.bodyOverflow==='hidden';
+  assert.equal(isolated,true,`The Next Studio route must cover host chrome and lock host-page scrolling: ${JSON.stringify(shell)}`);
+ }
  await expect(page.getByText('Host survey',{exact:true})).toBeVisible({timeout:30000});
  await page.getByText('Host survey',{exact:true}).click();
  await expect(page.getByRole('button',{name:'Count 0'})).toBeVisible();
@@ -92,6 +98,45 @@ try{
   assert.equal(probe.streams[0].r_frame_rate,'30/1');assert.ok(Number(probe.streams[0].nb_frames)>0);
  }
  if(kind!=='react'){
+  const disposable={version:1,id:'delete-through-studio',title:'Delete through Studio',definition:{scene:{version:3,nodes:[{id:'host'}]}}};
+  await put('src/seene/scenes/delete-through-studio.scene.json',JSON.stringify(disposable));
+  await put('src/seene/scenes/delete-through-studio.jsx','"use client"; import React from "react"; import {Surface} from "@thatg33k/seene"; export default function Disposable(){return <Surface id="host">Disposable scene</Surface>}');
+  await run(process.execPath,[cli,'sync']);
+  await page.goto(dev.url+'/seene?seene-preview=1');
+  const disposableRow=page.locator('[data-scene-id="delete-through-studio"]');
+  await expect(disposableRow).toHaveCount(1);
+  let deletePayload;
+  page.on('request',request=>{if(request.method()==='DELETE'&&request.url().endsWith('/api/seene/create-scene'))deletePayload=JSON.parse(request.postData()||'{}')});
+  const apiPattern='**/api/seene/create-scene';
+  await page.route(apiPattern,route=>route.request().method()==='DELETE'?route.fulfill({status:500,contentType:'application/json',body:JSON.stringify({error:'Simulated delete failure'})}):route.continue());
+  await page.getByRole('button',{name:'Delete Delete through Studio'}).click();
+  await expect(page.getByRole('dialog',{name:'Delete Scene'})).toBeVisible();
+  await page.getByRole('button',{name:'Confirm Delete'}).click();
+  await expect(page.getByText('Simulated delete failure',{exact:true})).toBeVisible();
+  await expect(disposableRow).toHaveCount(1);
+  await page.getByRole('button',{name:'Cancel'}).click();
+  await expect(disposableRow).toHaveCount(1);
+  await page.unroute(apiPattern);
+  await page.getByRole('button',{name:'Delete Delete through Studio'}).click();
+  await page.getByRole('button',{name:'Confirm Delete'}).click();
+  await expect(disposableRow).toHaveCount(0);
+  assert.equal(deletePayload?.id,'delete-through-studio','DELETE body identifies exactly the chosen scene');
+  const disposableRecipe=path.join(host,'src/seene/scenes/delete-through-studio.scene.json');
+  const disposableComponent=path.join(host,'src/seene/scenes/delete-through-studio.jsx');
+  await expect.poll(async()=>Promise.all([readFile(disposableRecipe,'utf8').catch(()=>undefined),readFile(disposableComponent,'utf8').catch(()=>undefined)])).toEqual([undefined,undefined]);
+  await page.reload();
+  await expect(page.locator('[data-scene-id="delete-through-studio"]')).toHaveCount(0);
+
+  for(const [id,title] of [['survey','Revised host survey'],['created-from-studio','Created from Studio']]){
+   await page.getByRole('button',{name:`Delete ${title}`}).click();
+   await page.getByRole('button',{name:'Confirm Delete'}).click();
+   await expect(page.locator(`[data-scene-id="${id}"]`)).toHaveCount(0);
+  }
+  await expect(page.getByRole('heading',{name:'Your scenes will show up here.'})).toBeVisible();
+  await page.reload();
+  await expect(page.getByRole('heading',{name:'Your scenes will show up here.'})).toBeVisible();
+ }
+ if(kind!=='react'){
   dev.child.kill();await new Promise(r=>dev.child.once('exit',r));
   await run(process.execPath,['node_modules/next/dist/bin/next','build','--webpack']);
   for(const entry of await readdir(path.join(host,'.next/static'),{recursive:true}))if(entry.endsWith('.js')){
@@ -104,4 +149,4 @@ try{
  }
  console.log(kind+' passed.');
 }catch(error){console.error(error);process.exitCode=1}
-finally{await browser?.close();for(const child of children)child.kill();await rm(scratch,{recursive:true,force:true})}
+finally{await browser?.close();for(const child of children){if(typeof child.once==='function'){if(child.exitCode===null)await new Promise(resolve=>{child.once('exit',resolve);child.kill()})}else child.kill()}await rm(scratch,{recursive:true,force:true})}

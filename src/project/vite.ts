@@ -14,6 +14,7 @@ export function generatedPreview(entry: string) {
   const specifier = (directory.length ? "../".repeat(directory.length) : "./") + target.join("/");
   const typed = entry.endsWith(".tsx");
   const text = `import { ProjectPreview } from "@thatg33k/seene/preview";
+import "@thatg33k/seene/style.css";
 ${typed ? 'import type { ComponentProps } from "react";\n' : ''}
 const sceneModules = import.meta.env.DEV ? import.meta.glob("/src/seene/scenes/*.{scene.json,tsx,jsx}") : undefined;
 

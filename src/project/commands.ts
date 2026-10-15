@@ -137,7 +137,7 @@ export async function detectPackageManager(root: string, pkg?: z.output<typeof P
     if (lockManagers.length === 0 || lockManagers.includes(declared)) return declared;
     throw fault("unsupported-project", "The packageManager field and lockfile identify different package managers.");
   }
-  if (lockManagers.length === 0) return active ?? "npm";
+  if (lockManagers.length === 0) return "npm";
   if (lockManagers.length === 1) return lockManagers[0];
   if (active && lockManagers.includes(active)) return active;
   if (lockManagers.includes("pnpm")) return "pnpm";

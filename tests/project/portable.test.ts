@@ -37,8 +37,13 @@ describe("portable host connections",()=>{
   expect(wrapper).not.toMatch(/import\.meta|process\.|next\//);
   expect(wrapper).toContain('from "@thatg33k/seene/preview"');
   if(kind==="next-app") {
-   expect(await readFile(path.join(root,"app/api/seene/create-scene/route.js"),"utf8")).toContain('from "@thatg33k/seene/next"');
-   expect(await readFile(path.join(root,"src/seene/Studio.jsx"),"utf8")).toContain('createSceneEndpoint="/api/seene/create-scene"');
+    const apiRoute=await readFile(path.join(root,"app/api/seene/create-scene/route.js"),"utf8");
+    expect(apiRoute).toContain('from "@thatg33k/seene/next"');
+    expect(apiRoute).toContain("DELETE");
+   const studio=await readFile(path.join(root,"src/seene/Studio.jsx"),"utf8");
+   expect(studio).toContain('createSceneEndpoint="/api/seene/create-scene"');
+   expect(studio).toContain("createPortal");
+   expect(studio).toContain("data-seene-studio-root");
   }
   if(kind==="next-pages") {
    expect(await readFile(path.join(root,"pages/api/seene/create-scene.js"),"utf8")).toContain("createPagesHandler");
