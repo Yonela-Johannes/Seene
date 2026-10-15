@@ -73,6 +73,8 @@ export function WebsiteWalkthrough(props: WebsiteWalkthroughProps): ReactNode {
   const [internalSeekTime, setInternalSeekTime] = useState(0);
   const [internalIsPlaying, setInternalIsPlaying] = useState(false);
   const [internalDuration, setInternalDuration] = useState(0);
+  const [maxScrollDistance, setMaxScrollDistance] = useState(0);
+  const maxScrollDistanceRef = useRef(0);
   
   // Use external state if provided, otherwise internal
   const seekTimeValue = seekTime !== undefined ? seekTime : internalSeekTime;
@@ -250,35 +252,63 @@ export function WebsiteWalkthrough(props: WebsiteWalkthroughProps): ReactNode {
     };
   }, [enableTimeline, isPlayingValue, sectionBoundaries, durationValue, seekTimeValue, onSeek, onPlayPause]);
 
+  const syncScrollMetrics = useCallback(() => {
+    const viewport = viewportRef.current;
+    if (!viewport) return;
+    const max = Math.max(0, viewport.scrollHeight - viewport.clientHeight);
+    maxScrollDistanceRef.current = max;
+    setMaxScrollDistance(max);
+    if (max <= 0 && viewport.scrollTop !== 0) {
+      viewport.scrollTop = 0;
+    }
+  }, []);
+
+  useEffect(() => {
+    syncScrollMetrics();
+    const viewport = viewportRef.current;
+    if (!viewport) return;
+    const observer = typeof ResizeObserver !== "undefined" ? new ResizeObserver(syncScrollMetrics) : null;
+    observer?.observe(viewport);
+    return () => observer?.disconnect();
+  }, [syncScrollMetrics, children, explicitSections]);
+
   // Synchronize timeline time to viewport scroll position
   useEffect(() => {
-    if (!viewportRef.current || sectionBoundaries.length === 0) return;
+    if (!viewportRef.current) return;
     const options: TimelineOptions = { duration: durationValue || 5000, clamp: true };
-    const state = evaluateTimelineState(seekTimeValue, options, sectionBoundaries);
-    if (Math.abs(viewportRef.current.scrollTop - state.scrollPosition) > 2) {
-      viewportRef.current.scrollTop = state.scrollPosition;
+    const max = maxScrollDistanceRef.current;
+
+    if (sectionBoundaries.length > 0) {
+      const state = evaluateTimelineState(seekTimeValue, options, sectionBoundaries);
+      const nextScroll = max > 0 ? Math.min(Math.max(0, state.scrollPosition), max) : state.scrollPosition;
+      if (Math.abs(viewportRef.current.scrollTop - nextScroll) > 2) {
+        viewportRef.current.scrollTop = nextScroll;
+      }
+      return;
     }
-  }, [seekTimeValue, durationValue, sectionBoundaries]);
+
+    if (durationValue > 0 && max > 0) {
+      const progress = Math.min(Math.max(seekTimeValue / durationValue, 0), 1);
+      const eased = progress < 0.5
+        ? 4 * progress * progress * progress
+        : 1 - Math.pow(-2 * progress + 2, 3) / 2;
+      const nextScroll = eased * max;
+      if (Math.abs(viewportRef.current.scrollTop - nextScroll) > 2) {
+        viewportRef.current.scrollTop = nextScroll;
+      }
+    } else if (viewportRef.current.scrollTop !== 0) {
+      viewportRef.current.scrollTop = 0;
+    }
+  }, [seekTimeValue, durationValue, sectionBoundaries, maxScrollDistance]);
 
   // Synchronize manual user scrolling to timeline time
   const handleViewportScroll = useCallback(() => {
-    if (!viewportRef.current || sectionBoundaries.length === 0 || isPlayingValue) return;
+    if (!viewportRef.current || isPlayingValue) return;
     const currentScroll = viewportRef.current.scrollTop;
-    const options: TimelineOptions = { duration: durationValue || 5000, clamp: true };
-    
-    let bestTime = 0;
-    let minDiff = Infinity;
     const totalDuration = durationValue || 5000;
-    const step = 50;
-    
-    for (let t = 0; t <= totalDuration; t += step) {
-      const pos = evaluateTimeline(t, options, sectionBoundaries);
-      const diff = Math.abs(pos - currentScroll);
-      if (diff < minDiff) {
-        minDiff = diff;
-        bestTime = t;
-      }
-    }
+    const range = maxScrollDistanceRef.current || 1;
+    const progress = Math.min(Math.max(currentScroll / range, 0), 1);
+    const bestTime = progress * totalDuration;
 
     if (Math.abs(seekTimeValue - bestTime) > 100) {
       if (seekTime !== undefined) {
@@ -288,7 +318,7 @@ export function WebsiteWalkthrough(props: WebsiteWalkthroughProps): ReactNode {
         onSeek?.(bestTime);
       }
     }
-  }, [sectionBoundaries, durationValue, isPlayingValue, seekTimeValue, seekTime, onSeek]);
+  }, [durationValue, isPlayingValue, seekTimeValue, seekTime, onSeek]);
 
   const handlePlayPause = useCallback(() => {
     if (!enableTimeline) return;
@@ -347,12 +377,16 @@ export function WebsiteWalkthrough(props: WebsiteWalkthroughProps): ReactNode {
     </div>
   ) : null;
 
+  const scrollDiagnostic = enableTimeline && maxScrollDistance <= 0 && durationValue > 0
+    ? "Walkthrough content isn't taller than the viewport"
+    : "";
+
   return (
     <div className={`website-walkthrough ${combinedSections ? 'website-walkthrough-sections' : 'website-walkthrough-full-page'} ${className || ''}`.trim()}>
       <div 
         ref={viewportRef}
         className="website-walkthrough-viewport"
-        style={{ position: 'relative', overflowY: 'auto' }}
+        style={{ position: 'relative', overflowY: 'auto', height: '100%', minHeight: '100%', width: '100%' }}
         onScroll={handleViewportScroll}
       >
         {/* Render sections from explicit definitions */}
@@ -375,6 +409,7 @@ export function WebsiteWalkthrough(props: WebsiteWalkthroughProps): ReactNode {
         {combinedSections === undefined && children}
       </div>
       
+      {scrollDiagnostic ? <div role="status" className="website-walkthrough-diagnostic">{scrollDiagnostic}</div> : null}
       {timelineControls}
     </div>
   );

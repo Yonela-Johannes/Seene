@@ -396,30 +396,28 @@ export function ScenePreview({
                     style={{ width: "100%", height: "100%", position: "relative" }}
                   >
                     {compositionMode === "walkthrough" ? (
-                      <div className="w-full h-full overflow-y-auto">
-                        <Scene
-                          camera={definition.scene.camera}
-                          focus={definition.scene.focus}
-                          motion={definition.motion}
-                          recipeNodes={definition.scene.nodes}
-                          timeMs={session.timeMs}
-                          onDiagnostics={session.onDiagnostics}
-                          style={{ width: "100%", height: "100%" }}
-                        >
-                          {containsWebsiteWalkthrough(children) ? children : (
-                            <WebsiteWalkthrough
-                              enableTimeline={true}
-                              seekTime={session.timeMs}
-                              duration={session.durationMs}
-                              isPlaying={session.playing}
-                              onSeek={ms => session.seek(ms)}
-                              onPlayPause={p => (p ? (session.playing ? undefined : session.toggle()) : session.pause())}
-                            >
-                              {children}
-                            </WebsiteWalkthrough>
-                          )}
-                        </Scene>
-                      </div>
+                      <Scene
+                        camera={definition.scene.camera}
+                        focus={definition.scene.focus}
+                        motion={definition.motion}
+                        recipeNodes={definition.scene.nodes}
+                        timeMs={session.timeMs}
+                        onDiagnostics={session.onDiagnostics}
+                        style={{ width: "100%", height: "100%" }}
+                      >
+                        {containsWebsiteWalkthrough(children) ? children : (
+                          <WebsiteWalkthrough
+                            enableTimeline={true}
+                            seekTime={session.timeMs}
+                            duration={session.durationMs}
+                            isPlaying={session.playing}
+                            onSeek={ms => session.seek(ms)}
+                            onPlayPause={p => (p ? (session.playing ? undefined : session.toggle()) : session.pause())}
+                          >
+                            {children}
+                          </WebsiteWalkthrough>
+                        )}
+                      </Scene>
                     ) : (
                       <>
                         {prevDefinition && transitionProgress < 1 ? (

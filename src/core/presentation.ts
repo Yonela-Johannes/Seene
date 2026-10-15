@@ -318,11 +318,29 @@ export function applyPresentation(
   };
 }
 
+function flatWalkthroughPresentation(definition: PreviewDefinitionInput): PreviewDefinitionInput {
+  if (definition.compositionType !== "walkthrough") return definition;
+  return {
+    ...definition,
+    scene: {
+      ...definition.scene,
+      camera: {
+        ...definition.scene.camera,
+        perspective: Math.max(2000, definition.scene.camera?.perspective ?? 2000),
+        rotateX: 0,
+        rotateY: 0,
+        rotateZ: 0,
+      },
+    },
+  };
+}
+
 export function resolvePresentation(
   definition: PreviewDefinitionInput,
   id: string | undefined,
 ): PreviewDefinitionInput {
-  return id && isPresentationId(id) ? applyPresentation(definition, id) : definition;
+  if (id && isPresentationId(id)) return applyPresentation(definition, id);
+  return flatWalkthroughPresentation(definition);
 }
 
 export const PresentationListSchema = z.strictObject({

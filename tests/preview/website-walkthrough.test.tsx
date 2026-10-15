@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { expect, it, describe, vi } from "vitest";
+import { resolvePresentation } from "../../src/core/presentation";
 import { WebsiteWalkthrough, WebsiteSection } from "../../src/preview";
 
 describe("WebsiteWalkthrough Phase 1 Functionality", () => {
@@ -80,6 +81,62 @@ describe("WebsiteWalkthrough Phase 1 Functionality", () => {
 
     const viewport = container.querySelector(".website-walkthrough-viewport") as HTMLElement;
     await waitFor(() => expect(viewport.scrollTop).toBe(900));
+  });
+
+  it("maps scroll progress to start, midpoint and end positions for tall content", async () => {
+    const { container, rerender } = render(
+      <WebsiteWalkthrough enableTimeline duration={4000}>
+        <div style={{ height: 2000 }}>Tall content</div>
+      </WebsiteWalkthrough>,
+    );
+
+    const viewport = container.querySelector(".website-walkthrough-viewport") as HTMLElement;
+    Object.defineProperty(viewport, "scrollHeight", { value: 2000, configurable: true });
+    Object.defineProperty(viewport, "clientHeight", { value: 400, configurable: true });
+
+    rerender(
+      <WebsiteWalkthrough enableTimeline duration={4000} seekTime={0}>
+        <div style={{ height: 2000 }}>Tall content</div>
+      </WebsiteWalkthrough>,
+    );
+    await waitFor(() => expect(viewport.scrollTop).toBe(0));
+
+    rerender(
+      <WebsiteWalkthrough enableTimeline duration={4000} seekTime={2000}>
+        <div style={{ height: 2000 }}>Tall content</div>
+      </WebsiteWalkthrough>,
+    );
+    await waitFor(() => expect(viewport.scrollTop).toBeGreaterThan(700));
+    await waitFor(() => expect(viewport.scrollTop).toBeLessThan(1200));
+
+    rerender(
+      <WebsiteWalkthrough enableTimeline duration={4000} seekTime={4000}>
+        <div style={{ height: 2000 }}>Tall content</div>
+      </WebsiteWalkthrough>,
+    );
+    await waitFor(() => expect(viewport.scrollTop).toBeGreaterThan(1550));
+  });
+
+  it("defaults walkthrough scenes to a flat camera when no preset is supplied", () => {
+    const definition = {
+      compositionType: "walkthrough" as const,
+      scene: {
+        version: 3 as const,
+        camera: { perspective: 1800, rotateX: 4, rotateY: -7, rotateZ: 0 },
+        focus: { distance: 1800, fStop: 8, focalLength: 50, maxBlur: 6 },
+        nodes: [{ id: "host" }],
+      },
+      motion: { durationMs: 5000, speed: 1, tracks: [] },
+      width: 1400,
+      height: 980,
+    };
+
+    const resolved = resolvePresentation(definition, undefined);
+    const camera = resolved.scene.camera!;
+    expect(camera.rotateX).toBe(0);
+    expect(camera.rotateY).toBe(0);
+    expect(camera.rotateZ).toBe(0);
+    expect(camera.perspective).toBeGreaterThanOrEqual(2000);
   });
 
   it("renders empty sections gracefully", () => {
