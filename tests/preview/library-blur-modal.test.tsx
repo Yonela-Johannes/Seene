@@ -80,7 +80,7 @@ describe("Requirement 4: Library Blur Fix, Stacking Context & Modal Controls Reg
     const library = container.querySelector("[data-seene-library]") || container;
     const allElements = library.querySelectorAll("*");
     allElements.forEach(el => {
-      const filter = (el as HTMLElement).style?.filter || "";
+      const filter = window.getComputedStyle(el).filter;
       expect(filter).not.toContain("blur(");
     });
   });

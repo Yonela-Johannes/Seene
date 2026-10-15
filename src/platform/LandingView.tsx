@@ -83,8 +83,8 @@ function CopyButton({ value, label }: { value: string; label?: string }) {
 
 function CommandLine({ value, copy = true }: { value: string; copy?: boolean }) {
   return (
-    <div className="flex flex-col gap-2 rounded-xl border border-[var(--seene-border)] bg-[var(--seene-surface)] p-3.5 sm:flex-row sm:items-center justify-between">
-      <div className="flex items-center gap-2 min-w-0">
+    <div className="flex w-full min-w-0 flex-col gap-2 rounded-xl border border-[var(--seene-border)] bg-[var(--seene-surface)] p-3.5 sm:flex-row sm:items-center justify-between">
+      <div className="flex w-full min-w-0 items-center gap-2">
         <span className="text-[var(--seene-text-muted)] font-mono">$</span>
         <code className="min-w-0 max-w-full flex-1 overflow-x-auto whitespace-nowrap px-1 font-mono text-xs sm:text-sm text-[var(--seene-text)]">
           {value}
@@ -309,13 +309,13 @@ export function LandingView() {
               <div className="grid gap-3 md:grid-cols-2">
                 <div className="min-w-0">
                   <p className="mb-2 font-mono text-xs text-[var(--seene-text-muted)]">hero-showcase.scene.json</p>
-                  <pre className="overflow-x-auto rounded-xl border border-[var(--seene-border)] bg-[var(--seene-surface)] p-4 font-mono text-xs leading-relaxed text-[var(--seene-text)]">
+                  <pre className="max-w-full overflow-x-auto rounded-xl border border-[var(--seene-border)] bg-[var(--seene-surface)] p-4 font-mono text-xs leading-relaxed text-[var(--seene-text)]">
                     <code>{RECIPE_EXAMPLE}</code>
                   </pre>
                 </div>
                 <div className="min-w-0">
                   <p className="mb-2 font-mono text-xs text-[var(--seene-text-muted)]">hero-showcase.tsx</p>
-                  <pre className="overflow-x-auto rounded-xl border border-[var(--seene-border)] bg-[var(--seene-surface)] p-4 font-mono text-xs leading-relaxed text-[var(--seene-text)]">
+                  <pre className="max-w-full overflow-x-auto rounded-xl border border-[var(--seene-border)] bg-[var(--seene-surface)] p-4 font-mono text-xs leading-relaxed text-[var(--seene-text)]">
                     <code>{COMPONENT_EXAMPLE}</code>
                   </pre>
                 </div>

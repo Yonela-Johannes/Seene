@@ -224,12 +224,10 @@ export function calculateSectionBoundaries(
   // Ensure total duration matches options.duration if provided
   if (options.duration && boundaries.length > 0) {
     const lastBoundary = boundaries[boundaries.length - 1];
-    const lastBoundaryDuration = lastBoundary.endTime - lastBoundary.startTime;
-    
-    if (Math.abs(lastBoundaryDuration - options.duration) > 1) {
-      // Scale the last section to match desired duration
-      const timeToAllocate = options.duration - (currentTime - (lastBoundary.pause || 0));
-      lastBoundary.duration = timeToAllocate > 0 ? timeToAllocate : 0;
+    if (Math.abs(currentTime - options.duration) > 1) {
+      const lastBoundaryDuration = lastBoundary.endTime - lastBoundary.startTime;
+      const adjustedDuration = lastBoundaryDuration + options.duration - currentTime;
+      lastBoundary.duration = Math.max(0, adjustedDuration);
       lastBoundary.endTime = lastBoundary.startTime + lastBoundary.duration;
     }
   }

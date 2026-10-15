@@ -101,40 +101,26 @@ export function WebsiteWalkthrough(props: WebsiteWalkthroughProps): ReactNode {
 
     const container = viewportRef.current;
     
-    // Discover sections from explicit definitions
+    // Discover rendered sections from explicit definitions
     let discovered: DiscoveredSection[] = [];
     
     if (explicitSections) {
-      // Create elements from explicit sections for discovery
-      const sectionElements: DiscoveredSection[] = explicitSections.map((section) => {
-        const element = document.createElement('div');
-        element.setAttribute('data-seene-section', '');
-        element.setAttribute('data-seene-section-id', section.id);
-        element.setAttribute('data-seene-section-label', section.label);
-        if (section.duration !== undefined) {
-          element.setAttribute('data-seene-section-duration', section.duration.toString());
-        }
-        if (section.pause !== undefined) {
-          element.setAttribute('data-seene-section-pause', section.pause.toString());
-        }
-        if (section.scrollOffset !== undefined) {
-          element.setAttribute('data-seene-section-scroll-offset', section.scrollOffset.toString());
-        }
-        
-        return {
+      const elements = Array.from(container.querySelectorAll<HTMLElement>('[data-section-id]'));
+      discovered = explicitSections.flatMap((section) => {
+        const element = elements.find(candidate => candidate.dataset.sectionId === section.id);
+        if (!element) return [];
+        return [{
           id: section.id,
           label: section.label,
           element,
-          startPosition: 0, // Will be measured
-          endPosition: 0,   // Will be measured
-          height: 0,        // Will be measured
+          startPosition: 0,
+          endPosition: 0,
+          height: 0,
           duration: section.duration,
           pause: section.pause,
           scrollOffset: section.scrollOffset,
-        };
+        }];
       });
-      
-      discovered = sectionElements;
     } else if (children) {
       // Discover sections from DOM when children are provided
       const explicit = discoverExplicitSections(container);
@@ -170,6 +156,7 @@ export function WebsiteWalkthrough(props: WebsiteWalkthroughProps): ReactNode {
     const observer = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(measureSections) : null;
     if (observer && container) {
       observer.observe(container);
+      discovered.forEach(section => observer.observe(section.element));
     }
     
     // Setup mutation observer for content changes

@@ -2,9 +2,9 @@ import path from "node:path";
 import { readFile, lstat } from "node:fs/promises";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { Plugin } from "vite";
-import { SceneRecipeSchema } from "../core/recipes";
+import { SceneRecipeSchema, SceneUpdateSchema } from "../core/recipes";
 import { sceneComponentSource, validateHostComponent } from "../core/platform";
-import { PlatformFault, writeSceneSourcePair, removeSceneSourcePair, discoverApplicationContent, componentImportSpecifier } from "./scene-files";
+import { PlatformFault, writeSceneSourcePair, removeSceneSourcePair, discoverApplicationContent, updateSceneRecipe, componentImportSpecifier } from "./scene-files";
 export { writeSceneSourcePair, removeSceneSourcePair, duplicateSceneSourcePair, syncCatalog } from "./scene-files";
 
 const route = "/__seene/create-scene";
@@ -80,6 +80,30 @@ export function seeneCreateScenePlugin(): Plugin {
                 return;
               }
               send(response, 500, { error: error instanceof Error ? error.message : "Unable to delete scene files." });
+            }
+          })();
+          return;
+        }
+
+        if (request.method === "PUT" && isCreateRoute) {
+          void (async () => {
+            const text = await collect(request);
+            if (text === undefined) { send(response, 413, { error: "Scene update request is too large." }); return; }
+            let payload: unknown;
+            try { payload = JSON.parse(text); }
+            catch { send(response, 400, { error: "Scene update request must contain valid JSON." }); return; }
+            const parsed = SceneUpdateSchema.safeParse(payload);
+            if (!parsed.success) {
+              send(response, 400, { error: parsed.error.issues.map(issue => `${issue.path.join(".")}: ${issue.message}`).join("; ") });
+              return;
+            }
+            try {
+              const outcome = await updateSceneRecipe(path.resolve(server.config.root), parsed.data.id, parsed.data.recipe.definition);
+              if (outcome === "not-found") { send(response, 404, { error: `Scene "${parsed.data.id}" not found.` }); return; }
+              send(response, 200, { success: true, id: parsed.data.id });
+            } catch (error) {
+              if (error instanceof PlatformFault && error.code === "denied-path") { send(response, 400, { error: error.message }); return; }
+              send(response, 400, { error: error instanceof Error ? error.message : "Unable to update scene recipe." });
             }
           })();
           return;

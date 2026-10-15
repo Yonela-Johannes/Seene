@@ -1,4 +1,4 @@
-import { useCallback, createElement, useEffect, useMemo, useRef, useState, type ComponentType, type FormEvent, type MouseEvent, type ReactNode } from "react";
+ import { useCallback, createElement, useEffect, useMemo, useRef, useState, type ComponentType, type FormEvent, type MouseEvent, type ReactNode } from "react";
 import { SCENE_TRANSITION_DURATION } from "../core";
 
 import {
@@ -48,7 +48,7 @@ const HEADING_HEIGHT = 110;
 
 const camera = {
   perspective: 1800,
-  rotateX: -22,
+  rotateX: 34,
 };
 
 const focus = {
@@ -113,11 +113,11 @@ function getVisibleRows(scroll: number, height: number, count: number) {
 
   const lastVisible =
     Math.ceil((scroll + bottom - (height / 2 - ROW_HEIGHT / 2)) / ROW_HEIGHT) +
-    2;
+    3;
 
   return {
-    start: Math.max(0, firstVisible),
-    end: Math.min(count, Math.max(Math.max(0, firstVisible) + 6, lastVisible)),
+    start: Math.min(Math.max(0, firstVisible), Math.max(0, count - 6)),
+    end: Math.min(count, Math.max(Math.min(Math.max(0, firstVisible), Math.max(0, count - 6)) + 6, lastVisible)),
   };
 }
 
@@ -588,7 +588,10 @@ export function SceneLibrary({
     void fetch(createSceneEndpoint, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id: selectedScene.id, recipe: { definition: { backdrop: definition.backdrop ?? "site" } } }),
+      body: JSON.stringify({
+        id: selectedScene.id,
+        recipe: { definition: { ...definition, backdrop: definition.backdrop ?? "site" } },
+      }),
     }).then((res) => {
       void res;
     });
@@ -781,7 +784,7 @@ export function SceneLibrary({
               height: contentHeight,
             }}
           >
-            <div className="absolute inset-0 pointer-events-none">
+            <div className="sticky top-0 overflow-clip pointer-events-none" style={{ height }}>
               <SceneErrorBoundary>
                 <Scene
                   camera={camera}
@@ -851,7 +854,7 @@ export function SceneLibrary({
                             height: ROW_HEIGHT,
                           }}
                         >
-                          <div className="group relative flex items-center justify-between gap-6 border-b border-[var(--seene-border)] py-6 transition-colors hover:border-[var(--seene-border-text)]">
+                          <div className="group absolute inset-0 flex items-center justify-between gap-6 border-b border-[var(--seene-border)] transition-colors hover:border-[var(--seene-border-text)]">
                             <a
                               className="flex flex-1 items-center gap-6 min-w-0 pointer-events-auto focus-visible:outline-2 focus-visible:outline-white"
                               data-scene-id={scene.id}

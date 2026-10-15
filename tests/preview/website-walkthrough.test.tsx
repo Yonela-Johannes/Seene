@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
-import { render, screen, fireEvent } from "@testing-library/react";
-import { expect, it, describe } from "vitest";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { expect, it, describe, vi } from "vitest";
 import { WebsiteWalkthrough, WebsiteSection } from "../../src/preview";
 
 describe("WebsiteWalkthrough Phase 1 Functionality", () => {
@@ -56,6 +56,30 @@ describe("WebsiteWalkthrough Phase 1 Functionality", () => {
     expect(section1Container?.getAttribute("data-section-duration")).toBe("5000");
     expect(section1Container?.getAttribute("data-section-pause")).toBe("1000");
     expect(section1Container?.getAttribute("data-section-scroll-offset")).toBe("100");
+  });
+
+  it("maps a timeline seek to the measured position of rendered sections", async () => {
+    vi.spyOn(HTMLElement.prototype, "offsetHeight", "get").mockImplementation(function (this: HTMLElement) {
+      return this.classList.contains("website-walkthrough-section") ? 600 : 0;
+    });
+    vi.spyOn(HTMLElement.prototype, "offsetTop", "get").mockImplementation(function (this: HTMLElement) {
+      return this.getAttribute("data-section-id") === "section-2" ? 600 : 0;
+    });
+
+    const { container } = render(
+      <WebsiteWalkthrough
+        sections={[
+          { id: "section-1", label: "First", duration: 2000, children: <div>First</div> },
+          { id: "section-2", label: "Second", duration: 2000, children: <div>Second</div> },
+        ]}
+        enableTimeline
+        duration={4000}
+        seekTime={3000}
+      />,
+    );
+
+    const viewport = container.querySelector(".website-walkthrough-viewport") as HTMLElement;
+    await waitFor(() => expect(viewport.scrollTop).toBe(900));
   });
 
   it("renders empty sections gracefully", () => {

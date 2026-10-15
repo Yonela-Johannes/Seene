@@ -131,14 +131,22 @@ describe("spatial evaluation", () => {
     }).nodes[0]!.blur;
     expect(atFocus).toBe(0);
     expect(close).toBeGreaterThan(0);
-    expect(far).toBeGreaterThan(close);
+      expect(far).toBeGreaterThan(close);
+      expect(far).toBeLessThanOrEqual(6);
+
+      const standardAperture = evaluateScene({
+        version: 3,
+        focus: { distance: 1400, fStop: 8, maxBlur: 6 },
+        nodes: [{ id: "standard-aperture", transform: { z: -50 } }],
+      }).nodes[0]!.blur;
 
     const wide = evaluateScene({
       version: 3,
       focus: { distance: 1400, fStop: 1.4, maxBlur: 6 },
-      nodes: [{ id: "w", transform: { z: -400 } }],
+        nodes: [{ id: "w", transform: { z: -50 } }],
     }).nodes[0]!.blur;
-    expect(wide).toBeGreaterThan(far);
+      expect(wide).toBeGreaterThan(standardAperture);
+      expect(wide).toBeLessThanOrEqual(6);
 
     const sharp = evaluateScene({
       version: 3,

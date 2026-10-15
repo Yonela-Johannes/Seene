@@ -1,6 +1,7 @@
 import { lstat, mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { SCENE_RECIPE_DIRECTORY, type SceneCatalog, type SceneRecipe, SceneRecipeSchema } from "../core/recipes";
+import type { PreviewDefinitionInput } from "../core/preview";
 import { RESOURCES } from "../core/resources";
 import { analyzeApplicationModule, classifyApplicationUnit, componentImportSpecifier, isApplicationSourcePath, isIconOrPrimitive, sceneComponentName, type PlatformContent } from "../core/platform";
 import { portableCatalog } from "../project/portable";
@@ -316,7 +317,7 @@ export async function discoverApplicationContent(root: string, limit = 400): Pro
 
 export { componentImportSpecifier };
 
-export async function updateSceneRecipe(root: string, id: string, definition: { backdrop?: string | undefined }): Promise<"updated" | "not-found"> {
+export async function updateSceneRecipe(root: string, id: string, definition: Partial<PreviewDefinitionInput>): Promise<"updated" | "not-found"> {
   const directory = await resolveProjectTarget(root, SCENE_RECIPE_DIRECTORY);
   const recipePath = path.join(directory, `${id}.scene.json`);
   const exists = await lstat(recipePath).then(() => true, () => false);

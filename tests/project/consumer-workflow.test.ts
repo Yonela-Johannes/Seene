@@ -190,4 +190,33 @@ describe("initialized consumer workflow", () => {
       "revenue-tour.tsx",
     ]);
   }, 30_000);
+
+  it("persists the complete scene definition sent by the Studio inspector", async () => {
+    const root = await fixture();
+    success(await executeProjectCommand("init-project", {}, { root }));
+    const origin = await start(root);
+    expect((await create(origin, "inspector-save", "Inspector save")).status).toBe(200);
+
+    const definition = {
+      width: 1600,
+      height: 900,
+      scene: {
+        version: 3,
+        camera: { perspective: 1500, x: 12, y: 4, z: 20, rotateX: 8, rotateY: -12, rotateZ: 2 },
+        focus: { distance: 1550, fStop: 2.8, focalLength: 85, maxBlur: 10 },
+        nodes: [{ id: "seene-application", transform: { x: 24, y: -8, z: 40 } }],
+      },
+      motion: { durationMs: 6000, speed: 1, tracks: [] },
+      backdrop: "#10151d",
+    };
+    const response = await fetch(`${origin}/__seene/create-scene`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: "inspector-save", recipe: { definition } }),
+    });
+
+    expect(response.status).toBe(200);
+    const saved = JSON.parse(await readFile(path.join(root, "src/seene/scenes/inspector-save.scene.json"), "utf8"));
+    expect(saved.definition).toMatchObject(definition);
+  });
 });

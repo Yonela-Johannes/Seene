@@ -38,9 +38,7 @@ export const BackdropPatchSchema = z.string().trim().min(1).max(64);
 export const SceneUpdateSchema = z.strictObject({
   id: SceneRecipeIdSchema,
   recipe: z.strictObject({
-    definition: z.strictObject({
-      backdrop: BackdropPatchSchema.optional(),
-    }),
+    definition: z.lazy(() => PreviewDefinitionSchema.partial()),
   }),
 });
 export type SceneUpdateInput = z.input<typeof SceneUpdateSchema>;

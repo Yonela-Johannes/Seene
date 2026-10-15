@@ -247,5 +247,5 @@ function circleOfOccurrence(
   const ratio = defocus / spread;
   const normalized = 1 - Math.exp(-ratio * ratio / 2);
   const blur = normalized * maxBlur * apertureFactor;
-  return Number(Math.min(maxBlur * apertureFactor, blur).toFixed(2));
+  return Number(Math.min(maxBlur, blur).toFixed(2));
 }

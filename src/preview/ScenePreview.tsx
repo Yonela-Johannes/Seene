@@ -160,7 +160,7 @@ function ExportMenu({ disabled, panelHost }: { disabled: boolean; panelHost: HTM
                   }
                 }}
               >
-                {copied ? "Copied Command!" : "Copy Command"}
+                {copied ? "Copied" : "Copy Command"}
               </button>
               <p role="status" className="text-[11px] text-zinc-500">
                 {copyError ? "Select and copy the command above manually." : "Requires Chromium and FFmpeg installed locally."}

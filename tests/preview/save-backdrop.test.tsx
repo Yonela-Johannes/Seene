@@ -25,7 +25,7 @@ afterEach(() => {
   window.history.replaceState({}, "", "/");
 });
 
-it("sends a PUT to the create-scene endpoint with the backdrop when Save Backdrop is clicked in host mode", async () => {
+it("saves the complete edited scene definition when Save Backdrop is clicked in host mode", async () => {
   enterLibrary();
   const request = vi.fn(async () => ({
     ok: true,
@@ -59,6 +59,12 @@ it("sends a PUT to the create-scene endpoint with the backdrop when Save Backdro
   const body = JSON.parse(options?.body as string);
   expect(body.id).toBe("demo");
   expect(body.recipe.definition.backdrop).toBe("site");
+  expect(body.recipe.definition.width).toBe(1400);
+  expect(body.recipe.definition.scene).toEqual(expect.objectContaining({
+    camera: expect.any(Object),
+    focus: expect.any(Object),
+    nodes: expect.arrayContaining([expect.objectContaining({ id: "host" })]),
+  }));
 });
 
 it("exposes a createSceneEndpoint through ProjectPreview into SceneModuleLibrary", async () => {
