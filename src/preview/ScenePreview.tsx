@@ -178,11 +178,17 @@ function containsWebsiteWalkthrough(children: ReactNode): boolean {
   while (stack.length) {
     const current = stack.pop();
     if (current == null || typeof current === "string" || typeof current === "number" || typeof current === "boolean") continue;
-    if (typeof current === "object" && "type" in current) {
+    if (typeof current === "object" && current && "type" in current) {
       const type = (current as { type?: unknown }).type;
-      const name = typeof type === "function" ? type.name : typeof type === "object" && type && "displayName" in type ? String((type as { displayName?: string }).displayName) : undefined;
+      const objectType = type && typeof type === "object" ? type as Record<string, unknown> : undefined;
+      const name = typeof type === "function"
+        ? type.name
+        : objectType && "displayName" in objectType
+          ? String(objectType.displayName)
+          : undefined;
       if (type === WebsiteWalkthrough || name === "WebsiteWalkthrough") return true;
-      const nextChildren = "props" in current && current.props && "children" in current.props ? current.props.children : undefined;
+      const props = "props" in current ? (current as { props?: { children?: ReactNode } }).props : undefined;
+      const nextChildren = props && typeof props === "object" ? props.children : undefined;
       if (nextChildren) stack.push(...(Array.isArray(nextChildren) ? nextChildren : [nextChildren]));
     }
   }

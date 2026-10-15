@@ -89,7 +89,7 @@ export default function SeenePage() {
 }
 `;
     const routeDirectory = (project.entry.startsWith("src/") ? "src/" : "") + appEntry.slice(0, appEntry.lastIndexOf("/seene/page.jsx"));
-    files[`${routeDirectory}/api/seene/create-scene/route.js`] = `// @seene-scaffold-version 1\nexport { POST, PUT, DELETE } from "@thatg33k/seene/next";\nexport const runtime = "nodejs";\n`;
+    files[`${routeDirectory}/api/seene/create-scene/route.js`] = `// @seene-scaffold-version 1\nexport { GET, POST, PUT, DELETE } from "@thatg33k/seene/next";\nexport const runtime = "nodejs";\n`;
   } else {
     files[project.entry] = `// @seene-scaffold-version 1
 import React from "react";

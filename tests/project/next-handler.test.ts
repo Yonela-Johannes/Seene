@@ -6,7 +6,7 @@ import os from "node:os";
 import path from "node:path";
 import { defaultSceneDefinition } from "../../src/core";
 import { executeProjectCommand, sha256 } from "../../src/project/commands";
-import { createPagesHandler, handleNextScenePost } from "../../src/vite/next-handler";
+import { createPagesHandler, handleNextSceneGetContent, handleNextScenePost } from "../../src/vite/next-handler";
 
 const roots: string[] = [];
 async function put(root: string, file: string, text: string) {
@@ -66,6 +66,20 @@ it("creates Next.js scene pairs through JSON, refreshes the generated catalog an
   const manifest = JSON.parse(await readFile(path.join(root, ".seene/integration.json"), "utf8"));
   expect(manifest.files["src/seene/catalog.js"]).toBe(sha256(catalog));
   expect((await executeProjectCommand("validate-project", {}, { root })).success).toBe(true);
+});
+
+it("exports the GET content discovery route for Next App Router and returns project files", async () => {
+  vi.stubEnv("NODE_ENV", "development");
+  const root = await nextProject();
+  const routeText = await readFile(path.join(root, "app/api/seene/create-scene/route.js"), "utf8");
+  expect(routeText).toContain("GET");
+
+  const response = await handleNextSceneGetContent(new Request("http://localhost/api/seene/create-scene/content"), root);
+  expect(response.status).toBe(200);
+  await expect(response.json()).resolves.toMatchObject({
+    success: true,
+    content: expect.objectContaining({ files: expect.any(Array) }),
+  });
 });
 
 it("handles the Next.js Pages Router Node request stream", async () => {
