@@ -323,12 +323,13 @@ export function WebsiteWalkthrough(props: WebsiteWalkthroughProps): ReactNode {
 
   // Render timeline controls if enabled
   const timelineControls = enableTimeline && durationValue > 0 ? (
-    <div className="website-walkthrough-timeline-controls">
+    <div className="website-walkthrough-timeline-controls" data-seene-chrome="walkthrough-timeline">
       <button 
         onClick={handlePlayPause}
         disabled={!durationValue}
         className="seene-control seene-primary seene-icon"
         aria-label={isPlayingValue ? "Pause" : "Play"}
+        data-seene-chrome="walkthrough-timeline-button"
       >
         {isPlayingValue ? '⏸' : '▶'}
       </button>

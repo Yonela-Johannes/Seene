@@ -17,6 +17,7 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cameraToCss, cameraFromPose, evaluateScene, transformToCss } from "../../src/core";
 import { Motion, Scene, SceneErrorBoundary, Surface } from "../../src/react";
+import { WebsiteWalkthrough } from "../../src/preview";
 
 import { installLayoutStubs } from "../helpers/layout";
 
@@ -634,6 +635,31 @@ it("diagnoses scene content outside any focus owner", async()=>{
  view.rerender(app(true));
  await act(async()=>{});
  expect(screen.queryByRole("alert")).toBeNull();
+});
+
+it("ignores Seene chrome and walkthrough timeline controls when checking for uncovered content", async () => {
+  render(
+    <Scene>
+      <Surface id="host" style={{ width: "100%", height: "100%" }}>
+        <WebsiteWalkthrough enableTimeline duration={3000} seekTime={0}>
+          <div>Page copy that belongs to the walkthrough content.</div>
+        </WebsiteWalkthrough>
+      </Surface>
+      <div className="website-walkthrough-timeline-controls" data-seene-chrome="walkthrough-timeline">
+        <button aria-label="Play">▶</button>
+        <span>0:00</span>
+      </div>
+      <div data-seene-preview-chrome="" aria-hidden="true">
+        <i />
+      </div>
+    </Scene>
+  );
+
+  act(() => {
+    observerInstances.forEach((observer) => observer.flush());
+  });
+
+  expect(screen.queryByRole("alert")).toBeNull();
 });
 
 it("diagnoses empty Surface nodes and node/surface mismatches", async () => {

@@ -173,6 +173,22 @@ function ExportMenu({ disabled, panelHost }: { disabled: boolean; panelHost: HTM
   );
 }
 
+function containsWebsiteWalkthrough(children: ReactNode): boolean {
+  const stack: ReactNode[] = Array.isArray(children) ? [...children] : [children];
+  while (stack.length) {
+    const current = stack.pop();
+    if (current == null || typeof current === "string" || typeof current === "number" || typeof current === "boolean") continue;
+    if (typeof current === "object" && "type" in current) {
+      const type = (current as { type?: unknown }).type;
+      const name = typeof type === "function" ? type.name : typeof type === "object" && type && "displayName" in type ? String((type as { displayName?: string }).displayName) : undefined;
+      if (type === WebsiteWalkthrough || name === "WebsiteWalkthrough") return true;
+      const nextChildren = "props" in current && current.props && "children" in current.props ? current.props.children : undefined;
+      if (nextChildren) stack.push(...(Array.isArray(nextChildren) ? nextChildren : [nextChildren]));
+    }
+  }
+  return false;
+}
+
 export function ScenePreview({
   definition: input,
   children,
@@ -334,13 +350,13 @@ export function ScenePreview({
         )}
       </div>
 
-      <div className="seene-bottom-blur" data-seene-preview-chrome="" aria-hidden="true">
+      <div className="seene-bottom-blur" data-seene-preview-chrome="" data-seene-chrome="preview-blur" aria-hidden="true">
         <i />
         <i />
         <i />
       </div>
 
-      <footer className="seene-footer seene-chrome" data-seene-preview-chrome="" aria-label="Scene controls">
+      <footer className="seene-footer seene-chrome" data-seene-preview-chrome="" data-seene-chrome="preview-footer" aria-label="Scene controls">
         <div className="seene-controls">
           <div className="seene-export-slot" ref={setExportPanel} />
 
@@ -384,16 +400,18 @@ export function ScenePreview({
                           onDiagnostics={session.onDiagnostics}
                           style={{ width: "100%", height: "100%" }}
                         >
-                          <WebsiteWalkthrough
-                            enableTimeline={true}
-                            seekTime={session.timeMs}
-                            duration={session.durationMs}
-                            isPlaying={session.playing}
-                            onSeek={ms => session.seek(ms)}
-                            onPlayPause={p => (p ? (session.playing ? undefined : session.toggle()) : session.pause())}
-                          >
-                            {children}
-                          </WebsiteWalkthrough>
+                          {containsWebsiteWalkthrough(children) ? children : (
+                            <WebsiteWalkthrough
+                              enableTimeline={true}
+                              seekTime={session.timeMs}
+                              duration={session.durationMs}
+                              isPlaying={session.playing}
+                              onSeek={ms => session.seek(ms)}
+                              onPlayPause={p => (p ? (session.playing ? undefined : session.toggle()) : session.pause())}
+                            >
+                              {children}
+                            </WebsiteWalkthrough>
+                          )}
                         </Scene>
                       </div>
                     ) : (
@@ -464,7 +482,7 @@ export function ScenePreview({
           </SceneErrorBoundary>
 
           {/* Editor Header Bar */}
-          <div className="seene-header flex items-center justify-between gap-4">
+          <div className="seene-header flex items-center justify-between gap-4" data-seene-chrome="preview-header">
             <div className="seene-heading flex items-center gap-3">
               {backHref ? (
                 <a
@@ -527,7 +545,7 @@ export function ScenePreview({
           {!definition ? <GettingStarted /> : null}
 
           {/* Playback Dock & Timeline */}
-          <div className="seene-dock">
+          <div className="seene-dock" data-seene-chrome="preview-dock">
             <button
               type="button"
               className="seene-control seene-primary seene-icon cursor-pointer"

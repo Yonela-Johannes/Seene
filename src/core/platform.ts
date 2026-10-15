@@ -218,17 +218,14 @@ export function sceneComponentSource(input: {
       return `// @seene-scaffold-version 1
 "use client";
 import { Surface } from "@thatg33k/seene";
-import { WebsiteWalkthrough } from "@thatg33k/seene/preview";
 
 export default function ${name}() {
   return (
     <Surface id="host" style={{ width: "100%", height: "100%" }}>
-      <WebsiteWalkthrough>
-        <div style={{ padding: "4rem", textAlign: "center" }}>
-          <h1 style={{ fontSize: 32, fontWeight: 700, marginBottom: 12 }}>Website Walkthrough</h1>
-          <p style={{ opacity: 0.7 }}>Edit src/seene/scenes/${input.id}.tsx to add your page sections.</p>
-        </div>
-      </WebsiteWalkthrough>
+      <div style={{ padding: "4rem", textAlign: "center" }}>
+        <h1 style={{ fontSize: 32, fontWeight: 700, marginBottom: 12 }}>Website Walkthrough</h1>
+        <p style={{ opacity: 0.7 }}>Edit src/seene/scenes/${input.id}.tsx to add your page sections.</p>
+      </div>
     </Surface>
   );
 }
@@ -236,31 +233,26 @@ export default function ${name}() {
     }
 
     const imports: string[] = [];
-    const sectionConfigs: string[] = [];
+    const elements: string[] = [];
 
     rawSections.forEach((sec, idx) => {
-      const compName = `SectionComponent${idx + 1}`;
+      const compName = `WalkthroughComponent${idx + 1}`;
       const binding = sec.export ? `{ ${sec.export} as ${compName} }` : compName;
       imports.push(`import ${binding} from ${JSON.stringify(sec.importSpecifier)};`);
-      const secId = sec.id || `section-${idx + 1}`;
-      const secLabel = sec.title || `Section ${idx + 1}`;
-      sectionConfigs.push(`          { id: ${JSON.stringify(secId)}, label: ${JSON.stringify(secLabel)}, children: <${compName} /> }`);
+      elements.push(`<${compName} />`);
     });
 
     return `// @seene-scaffold-version 1
 "use client";
 import { Surface } from "@thatg33k/seene";
-import { WebsiteWalkthrough } from "@thatg33k/seene/preview";
 ${imports.join("\n")}
 
 export default function ${name}() {
   return (
     <Surface id="host" style={{ width: "100%", height: "100%" }}>
-      <WebsiteWalkthrough
-        sections={[
-${sectionConfigs.join(",\n")}
-        ]}
-      />
+      <div style={{ display: "grid", gap: "2rem", width: "100%" }}>
+        ${elements.join("\n        ")}
+      </div>
     </Surface>
   );
 }

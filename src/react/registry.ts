@@ -38,15 +38,29 @@ function origin(element: HTMLElement) {
   return { x, y };
 }
 
-function uncoveredContent(root:Element):boolean {
+function isSeeneChrome(element: Element | null | undefined): boolean {
+  if (!element) return false;
+  return Boolean(
+    element.closest?.('[data-seene-chrome], [data-seene-preview-chrome], .website-walkthrough-timeline-controls')
+    || element.matches?.('[data-seene-chrome], [data-seene-preview-chrome], .website-walkthrough-timeline-controls')
+  );
+}
+
+function uncoveredContent(root: Element): boolean {
   for (const child of root.childNodes) {
-    if (child.nodeType===3 && child.textContent?.trim()) return true;
+    if (child.nodeType === 3) {
+      const parent = child.parentElement;
+      if (parent && isSeeneChrome(parent)) continue;
+      if (child.textContent?.trim()) return true;
+      continue;
+    }
     if (!(child instanceof Element)) continue;
+    if (isSeeneChrome(child)) continue;
     if (child.hasAttribute("data-seene-id") || child.hasAttribute("data-seene-content") || child.matches('svg[width="0"],script,style,template')) continue;
-    const css=getComputedStyle(child);
-    if(css.display==='none'||css.visibility==='hidden') continue;
-    if(child.matches('img,svg,canvas,video,input,textarea,select') || (css.backgroundImage && css.backgroundImage!=='none')) return true;
-    if(uncoveredContent(child)) return true;
+    const css = getComputedStyle(child);
+    if (css.display === 'none' || css.visibility === 'hidden') continue;
+    if (child.matches('img,svg,canvas,video,input,textarea,select') || (css.backgroundImage && css.backgroundImage !== 'none')) return true;
+    if (uncoveredContent(child)) return true;
   }
   return false;
 }
