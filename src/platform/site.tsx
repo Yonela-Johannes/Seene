@@ -1,10 +1,4 @@
-/** SOURCE OF TRUTH: Seene site chrome.
- * WHAT: shared marketing/platform frame, header, buttons, kbd and icons.
- * WHY: keep one zed-like quiet system instead of duplicated markup.
- * WHERE: platform views render the public site and project console.
- */
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Menu as MenuGlyph, X as CloseGlyph } from "lucide-react";
 import { SEENE_BRAND } from "../core/branding";
 import { HOME_ROUTE, PROJECTS_ROUTE, WALKTHROUGH_DEMO_URL } from "./api";
 
@@ -124,12 +118,39 @@ export function SearchIcon() {
   );
 }
 
+
 export function MenuIcon({ open = false }: { open?: boolean } = {}) {
-  const Icon = open ? CloseGlyph : MenuGlyph;
-  return (
-    <Icon size={16} strokeWidth={1.8} aria-hidden="true" />
+  return open ? (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M18 6 6 18M6 6l12 12" />
+    </svg>
+  ) : (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M4 7h16M4 12h16M4 17h16" />
+    </svg>
   );
 }
+
 
 export function SiteHeader({ onPalette, homeHref = HOME_ROUTE, installHref = "#install" }: { onPalette: () => void; homeHref?: string; installHref?: string }) {
   const [mobileOpen, setMobileOpen] = useState(false);
