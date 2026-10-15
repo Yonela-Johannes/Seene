@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Aligned homepage examples and feature descriptions with the current scene creation, Website Walkthrough, Vite plugin and export contracts.
+- Clarified that generated Website Walkthrough scaffolds do not automatically assign section timing or connect every section to the Scene timeline.
+- Corrected the homepage sample recipe ID, motion shape and component-relative import.
+
 ## 0.1.6
 
 ### Scene transitions
@@ -132,9 +138,8 @@
 - **Redesign**: Complete zed.dev-style redesign — CSS variable design tokens, `FrameSection` with rails and corner nodes, `SeeneButton` with primary/secondary/ghost variants and `Kbd` chips.
 - **Fix**: "Register project" button now uses `SenteButton` component instead of raw class strings.
 - **Fix**: Hardcoded hex colors replaced with CSS variables across `StudioView`, `SettingsView`, `CreateSceneDialog`, `SceneLibrary`, `GettingStarted`, `SceneInspector`, and `BrandAttribution` for proper light/dark mode support.
-- **Add**: `AuthView` — local login/signup form with email validation and localStorage account persistence.
-- **Add**: `SiteHeader` — sticky header with nav, command palette (Ctrl+K), auth buttons, and keyboard shortcuts.
-- **Add**: `useSiteShortcuts` — global keyboard shortcuts (L, S, I, R, ⌘K/Ctrl+K).
+- **Add**: `SiteHeader` — sticky header with primary/mobile navigation and a command palette.
+- **Add**: `useSiteShortcuts` — `I` scrolls to install and Ctrl/Cmd+K opens the command menu.
 
 ### CLI
 

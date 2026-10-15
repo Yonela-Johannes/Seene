@@ -15,9 +15,15 @@ test('public landing page documents installation, scene authoring, discovery and
  await expect(guide.getByRole('heading',{name:'Initialize Seene in Your Project'})).toBeVisible();
  await expect(guide.getByRole('heading',{name:'Author a Recipe and Component'})).toBeVisible();
  await expect(guide.getByRole('heading',{name:'Open Studio & Compose Motion'})).toBeVisible();
+ await expect(guide.getByText(/Choose Website Walkthrough in Create Scene/)).toBeVisible();
+ await expect(guide.getByText(/seeneCreateScenePlugin\(\)/)).toBeVisible();
  await expect(guide.getByText('npx @thatg33k/seene init')).toBeVisible();
  await expect(guide.getByText('hero-showcase.scene.json')).toBeVisible();
  await expect(guide.getByText('hero-showcase.tsx')).toBeVisible();
+ const exampleRecipe=JSON.parse((await guide.locator('pre code').nth(0).textContent())!);
+ expect(exampleRecipe.id).toBe('hero-showcase');
+ expect(exampleRecipe.definition.motion.tracks).toHaveLength(1);
+ await expect(guide.locator('pre code').nth(1)).toContainText('../../components/HeroSection');
  await expect(guide.getByText('npx seene open --url http://localhost:3000')).toBeVisible();
  await expect(guide.getByText('npx seene open --url http://localhost:5173')).toBeVisible();
 });

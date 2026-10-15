@@ -4,7 +4,7 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Pages](https://img.shields.io/badge/site-thatg33k--t33.github.io%2FSeene-5b8cff)](https://thatg33k-t33.github.io/Seene/)
 
-**Seene** is a cinematic scene studio for real React DOM interfaces. It presents your existing components with camera perspective, depth of field, timeline motion and local video export. Your app keeps its framework, route, providers, components and styles.
+**Seene** is a cinematic scene studio for existing React DOM interfaces. It presents your components with camera perspective, depth of field, keyframed motion and local video export while leaving your framework, routes, providers, components and styles in place.
 
 It runs locally: no account, cloud service or subscription is required.
 
@@ -74,8 +74,17 @@ export default function DashboardScene() {
 ```
 
 A `.jsx` component is also supported. Component `Surface` IDs must match the recipe's scene nodes. Use your existing client-compatible UI and providers; do not put server-only modules or async Server Components in the scene component.
+The component import is relative to the scene file. For example, from `src/seene/scenes/dashboard.tsx`, `../../Dashboard` resolves to `src/Dashboard.tsx`.
 
-### 3. Discover and validate
+### 3. Create and manage scenes in Studio
+
+Open the running host app with `npx seene open --url <origin>`, then use the scene library to create, select, reopen and delete scenes. The Create Scene dialog discovers project-local components, supports search and selection, and offers `Single Scene` and `Website Walkthrough` modes. A successful save updates the scene recipe in the host project; the component remains ordinary editable React source.
+
+For Vite, add `seeneCreateScenePlugin()` from `@thatg33k/seene/vite` to the existing `plugins` array to enable component browsing and scene creation, updates and deletion. The generated scene catalog and preview work without this optional server plugin. Next.js initialization generates the local scene API route.
+
+`Website Walkthrough` generates imports for the selected components in their chosen order and a `WebsiteWalkthrough` composition. It uses the host's real components rather than screenshots. The generated scaffold does not assign per-section durations or wire each selected section to the cinematic Scene timeline automatically. `WebsiteWalkthrough` also has its own optional controlled timeline API; provide section durations and its timeline props when using that API directly. The preview's `Scene` and `Scroll` buttons change the preview composition and are distinct from the creation mode.
+
+### 4. Discover and validate
 
 ```sh
 npx seene scenes --json
@@ -92,7 +101,7 @@ npx seene sync
 
 Standard Vite uses a development `import.meta.glob` and updates as files change; no manual sync is needed for its scene list.
 
-### 4. Mount and activate the preview
+### 5. Mount and activate the preview
 
 **Next.js (automatic):** the generated `/seene` route mounts the Studio in development, and `/api/seene/create-scene` safely writes scene pairs and refreshes the generated import catalog. Keep the host layout/providers intact; no homepage integration is needed. Start Next with the project's own command, then run the open command below. If upgrading a project initialized by an earlier Seene version, rerun `npx seene init` to add the managed API route.
 
@@ -112,7 +121,7 @@ import { SeeneProjectPreview } from "./seene/ProjectPreview";
 
 For a Next.js App Router project using `src/app/(app)/layout.tsx`, use a relative import such as `../../seene/ProjectPreview` and wrap the existing `{children}` inside `<body>` with `enabled={process.env.NODE_ENV === "development"}`. Standard Next.js initialization does not need this manual wrapper: it generates `/seene` and leaves the homepage alone. A custom renderer must actually mount the component; `seene open` does not modify a custom entry or pretend a manual connection is active.
 
-### 5. Open the local preview
+### 6. Open the local preview
 
 Start your existing host server in one terminal. In another, pass its origin explicitly:
 
@@ -141,6 +150,8 @@ Use your actual local origin and port if they differ. Add `--no-open` to verify 
 - **`invalid-scenes`:** check the reported JSON path, lowercase recipe ID, and matching sibling `.tsx` or `.jsx` file. Keep recipe pairs directly in `src/seene/scenes`.
 - **`wrong-dev-server`:** the URL is serving another project or route. Pass the origin of the app initialized by Seene.
 - **`conflict` on `/seene`:** preserve the existing route; use `npx @thatg33k/seene init --adapter react` and follow the manual mount steps instead.
+- **Studio cannot create or delete a Vite scene:** add `seeneCreateScenePlugin()` to the existing Vite plugins. Do not replace the host's React plugin or start a second app server.
+- **Walkthrough scroll does not follow the scene timeline:** generated walkthroughs currently scaffold ordered components without section durations or per-section timeline wiring. Use the `WebsiteWalkthrough` controlled timeline API explicitly when that behavior is required.
 
 Run `npx seene guide --json` for the installed package's complete authoring contract, `npx seene load --scene dashboard --json` to inspect a recipe, or `npx seene sync` to refresh a static catalog.
 
@@ -159,6 +170,21 @@ npx seene export --url 'http://localhost:5173/?seene-preview=1&seene-scene=dashb
 ```
 
 Supported frame rates are 30, 60 and 120 FPS. Install FFmpeg separately using your operating system's package manager.
+The export URL must be an HTTP loopback URL. The output must be a project-relative `.mp4` path without `..`; dimensions are even integers from 64 to 3840, and quality is FFmpeg CRF 0–51 (default 18). Export samples the registered scene at deterministic frame times; it does not start the host server.
+
+## Motion and focus
+
+Scene definitions use camera coordinates, focus settings and optional keyframe tracks. Track times and the CLI snapshot `--time` value are milliseconds. Playback speed is separate from export frame rate. `MotionSchema` defaults an omitted speed to 0.5; newly created Studio scenes currently start at 0.8. The evaluator applies `linear`, `easeInOut` and the default `cinematic` easing. Other easing strings accepted by the current schema fall back to linear interpolation and should not be relied on for distinct behavior.
+
+The focus model uses camera-axis distance, f-stop, focal length and `maxBlur`. DOM blur is an approximation, not a ray-traced or aperture-shaped bokeh renderer. Keep visible text and media inside registered `Surface` content leaves so the renderer can apply focus consistently.
+
+## Package exports
+
+- `@thatg33k/seene`: `Scene`, `Surface`, motion and core scene APIs.
+- `@thatg33k/seene/preview`: `ProjectPreview`, `ScenePreview`, `SceneInspector`, `WebsiteWalkthrough` and related preview components.
+- `@thatg33k/seene/vite`: the optional Vite scene-file plugin.
+- `@thatg33k/seene/next`: generated Next.js scene API handlers.
+- `@thatg33k/seene/style.css`: package styles.
 
 ## Development
 

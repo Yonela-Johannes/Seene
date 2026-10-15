@@ -1,86 +1,39 @@
-# Seene Product Audit
+# Product and Documentation Audit
 
-Audit date: 2026-10-04
+Audit date: 2026-10-15. This snapshot describes package version 0.1.6 in the current worktree. It does not authorize or perform a release.
 
-This audit describes the current source and local verification. The package is `@thatg33k/seene`; this document does not authorize or perform a release.
+## Product boundaries
 
-## Product and repository boundaries
+- The package exports its core React DOM API, `/preview`, `/style.css`, `/vite`, `/next`, and the `seene` CLI.
+- Vite and Next.js App/Pages Router receive generated development integrations. Other React DOM hosts require a developer-mounted wrapper. React Native without a DOM is unsupported.
+- Scene recipes and matching TSX/JSX components live directly in `src/seene/scenes`. Vite discovers them through a development glob; Next/manual catalogs are generated and synced with `seene sync` after file additions/removals.
+- Vite file creation, updates and deletion require `seeneCreateScenePlugin()` in the host config. Next initialization generates its local API route. These are development endpoints; do not expose host development servers to untrusted networks.
+- Website Walkthrough creation imports selected live components in order. Generated walkthrough scaffolds do not add per-section durations or automatically bind their timeline to the cinematic Scene timeline. The exported controlled timeline API is separate and must be configured by the caller.
+- DOM depth of field is an approximation. MP4 export requires a running loopback host, Playwright Chromium and FFmpeg; it supports 30/60/120 FPS and captures no more than 120 seconds.
 
-- **Package and CLI:** `src/core/`, `src/react/`, `src/preview/`, `src/project/`, `src/cli/`, `src/vite/`, and `src/export/` build to `dist/library/` and `dist/cli/`.
-- **Studio and landing page:** `src/platform/` renders the local Studio and the static landing-page source. `vite.pages.config.ts` builds the static site to `dist-pages/`.
-- **Public package surface:** `package.json` exports the root library, `/preview`, `/style.css`, `/vite`, and the `seene` executable. `scripts/release.mjs check` validates the local tarball without publishing.
-- **Tests and example:** `tests/` contains core, project, preview, CLI, export, browser, and release checks. `examples/basic-react/` is the standard Vite consumer.
-- **Real-world consumer:** a separate Next.js 15 / React 19 portfolio exists outside this repository. Its working tree contains pre-existing user changes, so integration verification was performed on a temporary copy; the consumer was not edited.
+## Verification
 
-## Confirmed findings and repairs
+Passed in this worktree:
 
-### Discovery scope and worktrees
+- `npm run typecheck`
+- `npm run build` (architecture checks, app, library/declarations and CLI)
+- `npm run build:pages`
+- `npm run test:core`: 182 tests
+- `npm run test:react`: 49 tests
+- `npm run test:launch`: 309 tests
+- `npm run test:export`: 56 tests
+- `npm run build:test && pnpm exec playwright test tests/browser/preview.spec.ts`: 5 browser tests
+- `SEENE_VERIFY_HARDWARE=0 npm run test:library`: installed library creation/deletion, persistence, snapshots, reopening and MP4 export passed
+- `npm run test:installed`: installed-tarball consumer workflow passed
+- `npm run test:portable:react`, `npm run test:portable:app`, and `npm run test:portable:pages`: passed during the immediately preceding implementation verification
+- CLI `--version`, `--help` and `guide --json`: passed; guide version 2 reports 11 concepts and 7 workflow steps
+- The live homepage was checked at 1440, 390 and 320 CSS pixels; no browser console errors were observed and the document did not overflow the viewport.
 
-`discoverRecipes()` reads the canonical `src/seene/scenes` directory. Before this audit, the shared recursive scanner excluded only `.git`, `.seene`, and `node_modules`; if used on a broader root or when a worktree/cache directory existed beneath a scanned tree, unrelated files could enter traversal. The scanner now skips known Git, AI-agent/worktree, IDE, dependency, build, and cache directories, including `.kilo` and `.agents`. It still scans ordinary project scene files. Missing directories remain empty catalogs; non-`ENOENT` filesystem errors are no longer silently converted to empty results.
+## Limits and notes
 
-The exact historical sibling path `.kilo/worktrees/.../src/seene/scenes` is outside the canonical scene directory in the current source and therefore could not be reproduced by the current `discoverRecipes()` call alone. Regression coverage now verifies both the project-root worktree boundary and ignored directories during broad scans, while confirming valid host scenes are retained.
+- The optional library GPU/frame-budget measurement was unavailable: headless Chromium reported `disabled_software` instead of hardware compositing. The library E2E passed with only this benchmark disabled.
+- The full browser suite's Next.js 14 fixture previously exceeded its 180-second setup timeout. The five homepage/preview browser specs pass; the Next.js 14 fixture was not rerun in this documentation task.
+- `npm run build` emits a Vite warning that the module-level `use client` directive in `WebsiteWalkthrough.tsx` is ignored during bundling. The build and declaration generation complete successfully.
+- No package publication or GitHub Pages deployment was performed.
 
-Recipe files are intentionally required directly in `src/seene/scenes`; nested recipe files are diagnosed rather than treated as canonical. IDs match lowercase slugs and the recipe filename; each recipe requires exactly one sibling `.tsx` or `.jsx` component. Empty catalogs, invalid JSON/schema, duplicate IDs, missing bindings, and ambiguous bindings have diagnostics.
-
-### Next.js detection and routing
-
-The automatic detector recognized a declared `next` dependency but only looked for `app/layout.*` or `src/app/layout.*`. A valid App Router organized under a route group such as `src/app/(app)/layout.tsx` was missed and fell back to the manual React adapter. A second failure path existed when a project declared Vite but its `dev` script was `next dev` without a direct `next` dependency: setup could reach Vite-specific validation.
-
-Next detection now prioritizes the declared framework and `next dev` script, reports a missing Next dependency without a Vite error, and finds root route-group layouts. It adds the generated `/seene` page beside the route-group homepage without rewriting that homepage. `open --url` verifies the generated route and returns an actionable Next-specific error when the server/route cannot be reached. Regression tests cover Next 15, mixed Vite dependencies, missing Next metadata, route groups, and route verification.
-
-### Preview integration and documentation
-
-Next.js App/Pages Router and standard Vite have generated automatic connections. A custom React DOM renderer intentionally receives `src/seene/ProjectPreview.jsx` and a static catalog but is not mounted automatically. Previously, the `manual-preview` message and generated handoff did not clearly say what to mount or which development flag to use.
-
-The CLI now states that manual mounting is required and explains the development-only `enabled` prop, query activation, provider placement, and framework-specific flag. Generated `SEENE.md`, README, and landing-page content explain Next.js, Vite, and custom React workflows separately. Existing, unchanged generated handoff files are safely refreshed; user-edited or unrelated `SEENE.md` files still produce a conflict and are preserved.
-
-### Next.js scene creation and preview route UI
-
-The create-scene UI previously always posted to the Vite-only `/__seene/create-scene` endpoint. Next.js served its normal HTML 404 page for that URL, so the UI reported an HTML/JSON mismatch even though its preview route was mounted. Next initialization now generates a development-only App Router handler at `/api/seene/create-scene` (or the matching Pages API handler), passes that URL through the generated Studio/preview components, validates requests, and returns JSON diagnostics. Successful creation writes the recipe/component pair and updates Seene's managed static catalog. The create dialog now has dialog semantics, bounded viewport height/scrolling, and an actionable endpoint repair message. The Pages handler accepts an injectable root for isolated tests; production defaults to the consumer project root.
-
-Regression tests cover App and Pages handler requests, invalid/duplicate/cross-origin/production requests, generated API paths and exports, catalog synchronization, and the create-dialog state. The package release verifier also caught that the new server entry's TypeScript declaration was not included in `tsconfig.lib.json`; its declaration input is now built and the unmodified release safeguard passes.
-
-### Package and release artifact
-
-The package has a Node.js `>=22.12.0` requirement and React/React DOM peer range `18.2` through `19.x`. Its declared exports, generated JavaScript, declarations, CSS and CLI are checked by the release-artifact verifier. The verifier also checks the executable shebang/permissions and package contents. Local artifact verification passed; no package was published.
-
-## Supported local workflow
-
-1. In a React DOM project (React 18.2/19; Node 22.12+), run `npx @thatg33k/seene init` from its package root.
-2. Keep the existing host dev server and project structure. Next.js gets a development-only `/seene` route; standard Vite wraps the existing React root; custom React DOM renderers must mount the generated wrapper themselves.
-3. Author a root-level `src/seene/scenes/<id>.scene.json` and matching `<id>.tsx` or `<id>.jsx` component.
-4. Run `npx seene scenes --json` and `npx seene validate`. Run `npx seene sync` after adding/removing pairs for Next/manual React static catalogs; Vite's glob is automatic.
-5. Start the host with its own dev script and run `npx seene open --url <origin>`; typical origins are `http://localhost:3000` for Next and `http://localhost:5173` for Vite.
-
-## Local commands
-
-- `npm run build`: architecture checks, typecheck, Studio build, package library/declarations, and CLI build.
-- `npm run build:pages`: static landing-page build.
-- `npm run test:launch`: project, preview, and CLI integration tests.
-- `npm run verify:release`: local package artifact verification only.
-
-## Final local validation
-
-- `npm run build`: passed, including architecture checks, TypeScript, Studio, package/library declarations, and CLI builds.
-- `npm run build:pages`: passed; static landing page generated locally.
-- `npm run test:core`: 176 passed; `npm run test:react`: 40 passed; `npm run test:architecture`: 142 passed.
-- `npm run test:launch`: 237 passed across project, preview, and CLI suites; the focused Next/portable/preview run passed 34 tests.
-- `npm run test:browser`: 8 passed, including the updated landing-page workflow, local-project-console contract, preview runtime, and focus behavior.
-- `npm run build`, `npm run build:pages`, `npm run build:library`, and `npm run build:cli`: passed. `npm run typecheck` and `npm run lint:architecture` passed.
-- `npm run verify:release`: passed for the local `0.1.5` tarball; `npm run test:installed`: passed against the installed local tarball. `node --test tests/release.test.mjs`: 34 passed.
-- Next.js integration was smoke-tested in an isolated temporary consumer copy against the locally built package: homepage returned HTTP 200 before and after, its source remained unchanged, and generated `/seene?seene-preview=1` returned HTTP 200. In the Pages Router portable smoke test, the new `/api/seene/create-scene` POST returned JSON 200 and updated generated scene/catalog files before a later Playwright click timed out because the transformed scene row never stabilized; the complete smoke test therefore did not pass.
-- `npm run test:export`: 52 passed, 3 could not pass because `ffmpeg`/`ffprobe` are absent; the observed failure is the explicit `missing-ffmpeg` diagnostic, not a weakened test.
-- `npm run test:performance`: could not launch because the configured Chromium executable is absent at `/home/skye/.cache/ms-playwright/chromium-1208/chrome-linux64/chrome`; no system Chromium was found. No hardware-performance result is claimed.
-- `git diff --check`: passed.
-
-No npm publication or website deployment was performed, and no publishing/deployment YAML was changed.
-
-## Remaining boundaries
-
-- React Native without a DOM is not supported.
-- A custom React renderer is not auto-mounted; host entry/layout changes remain the developer's responsibility.
-- A conflicting `/seene` or `/api/seene/create-scene` route is preserved; use the documented manual React adapter or resolve the route conflict before initialization.
-- App Router integration selects a root layout or a route-group layout suitable for `/seene`; unusual nested dynamic-segment layouts may require the manual adapter.
-- Recipe/component files must be directly in the canonical scene directory.
-
-No publishing/deployment YAML was changed. No npm publication or website deployment was performed.
+For setup and developer-facing limits, see [README](README.md) and [product](docs/product.md). Implementation ownership is summarized in [architecture](docs/architecture.md); current Walkthrough scope is in [PH2_IMPLEMENTATION.md](PH2_IMPLEMENTATION.md).

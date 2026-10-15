@@ -4,49 +4,62 @@ import { FrameSection, Kbd } from "./site";
 
 const CAPABILITIES = [
   {
-    title: "Focused Scene Composition",
-    body: "Position, rotate and frame real interface layers in 3D space with cinematic camera movement and focal depth.",
+    title: "Scene Studio and Library",
+    body: "Create, select, reopen and delete source-backed scenes while keeping each composition editable.",
     icon: "🎥",
   },
   {
-    title: "Full-Page Scroll Journey",
-    body: "Animate page scroll progress continuously from hero to footer alongside camera tilt and perspective.",
+    title: "Website Walkthrough",
+    body: "Select project-local components, arrange their order and compose real page content in a scroll view.",
     icon: "📜",
   },
   {
-    title: "Thin-Lens Depth of Field",
-    body: "Realistic focal distance and f-stop aperture blur non-focused surfaces naturally.",
+    title: "Camera and Focus",
+    body: "Adjust camera position, rotation and perspective, then tune focus distance, aperture and blur limits.",
     icon: "🔍",
   },
   {
-    title: "Motion Timeline & Easing",
-    body: "Keyframe tracks with cubic bezier and cinematic easing drive deterministic 60fps playback.",
+    title: "Seekable Motion Timeline",
+    body: "Keyframe camera, focus and surface properties on one millisecond timeline; seek and replay deterministically.",
     icon: "⏱️",
   },
   {
-    title: "Real Application Components",
-    body: "Renders your actual React components inside the providers, themes and CSS styles you already ship.",
+    title: "Your Existing React UI",
+    body: "Present project components with their existing providers, data, styles and responsive behavior.",
     icon: "⚛️",
   },
   {
-    title: "Deterministic Headless Export",
-    body: "Capture real frames headlessly and render MP4 videos at 30, 60 or 120 FPS.",
+    title: "Local MP4 Export",
+    body: "Capture the rendered scene with Chromium and encode MP4 locally at 30, 60 or 120 FPS.",
     icon: "🎬",
   },
 ];
 
 const RECIPE_EXAMPLE = `{
   "version": 1,
-  "id": "hero-overview",
+  "id": "hero-showcase",
   "title": "Hero Showcase",
   "definition": {
     "scene": { "nodes": [{ "id": "host" }] },
-    "motion": { "durationMs": 5000 }
+    "motion": {
+      "durationMs": 5000,
+      "speed": 0.8,
+      "tracks": [
+        {
+          "target": { "kind": "camera" },
+          "property": "x",
+          "keyframes": [
+            { "timeMs": 0, "value": 0, "easing": "linear" },
+            { "timeMs": 5000, "value": 120 }
+          ]
+        }
+      ]
+    }
   }
 }`;
 
 const COMPONENT_EXAMPLE = `import { Surface } from "@thatg33k/seene";
-import HeroSection from "../components/HeroSection";
+import HeroSection from "../../components/HeroSection";
 
 export default function HeroScene() {
   return (
@@ -114,15 +127,15 @@ function InteractiveDemoCard() {
   return (
     <div className="mx-auto mt-12 max-w-4xl rounded-2xl border border-[var(--seene-border)] bg-[var(--seene-surface-2)]/90 p-4 sm:p-6 shadow-2xl backdrop-blur-xl">
       {/* Demo Header */}
-      <div className="flex items-center justify-between border-b border-[var(--seene-border)] pb-4 mb-6">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--seene-border)] pb-4 mb-6">
         <div className="flex items-center gap-2">
           <span className="h-3 w-3 rounded-full bg-red-500/80" />
           <span className="h-3 w-3 rounded-full bg-yellow-500/80" />
           <span className="h-3 w-3 rounded-full bg-green-500/80" />
-          <span className="ml-2 font-mono text-xs text-[var(--seene-text-muted)]">seene-studio-preview</span>
+          <span className="ml-2 font-mono text-xs text-[var(--seene-text-muted)]">Scene composition</span>
         </div>
 
-        <div className="flex items-center gap-1 rounded-lg border border-[var(--seene-border)] bg-[var(--seene-surface)] p-1 text-xs">
+        <div className="flex max-w-full items-center gap-1 overflow-x-auto rounded-lg border border-[var(--seene-border)] bg-[var(--seene-surface)] p-1 text-xs">
           <button
             type="button"
             onClick={() => setActiveTab("focused")}
@@ -139,7 +152,7 @@ function InteractiveDemoCard() {
               activeTab === "scroll" ? "bg-[var(--seene-surface-2)] text-[var(--seene-text)] shadow-sm" : "text-[var(--seene-text-muted)]"
             }`}
           >
-            Full-Page Scroll
+            Website Walkthrough
           </button>
         </div>
       </div>
@@ -182,16 +195,16 @@ function InteractiveDemoCard() {
         ) : (
           <div className="w-full h-full overflow-y-auto space-y-4 text-left p-4 rounded-lg bg-zinc-900/60 border border-zinc-800">
             <div className="p-4 rounded-lg bg-zinc-800/80 border border-zinc-700">
-              <span className="text-[10px] font-mono text-indigo-400 uppercase tracking-wider">01 · Hero Section</span>
-              <h4 className="text-sm font-semibold text-white mt-1">Cinematic Webpage Journey</h4>
+              <span className="text-[10px] font-mono text-indigo-400 uppercase tracking-wider">01 · Header</span>
+              <h4 className="text-sm font-semibold text-white mt-1">Website Walkthrough</h4>
             </div>
             <div className="p-4 rounded-lg bg-zinc-800/50 border border-zinc-800">
-              <span className="text-[10px] font-mono text-zinc-500 uppercase tracking-wider">02 · Product Features</span>
-              <p className="text-xs text-zinc-400 mt-1">Smooth top-to-bottom scroll walkthrough synced with playback.</p>
+              <span className="text-[10px] font-mono text-zinc-500 uppercase tracking-wider">02 · Page sections</span>
+              <p className="text-xs text-zinc-400 mt-1">Choose real project components and arrange their sequence.</p>
             </div>
             <div className="p-4 rounded-lg bg-zinc-800/50 border border-zinc-800">
               <span className="text-[10px] font-mono text-zinc-500 uppercase tracking-wider">03 · Footer</span>
-              <p className="text-xs text-zinc-400 mt-1">Reaches bottom frame deterministically during video export.</p>
+              <p className="text-xs text-zinc-400 mt-1">Keep the original component layout and styling.</p>
             </div>
           </div>
         )}
@@ -276,7 +289,7 @@ export function LandingView() {
           <div className="text-center max-w-2xl mx-auto">
             <h2 className="seene-h2 text-3xl sm:text-4xl">Simple Setup in Minutes</h2>
             <p className="mt-3 text-sm text-[var(--seene-text-muted)]">
-              Works seamlessly with standard Vite React projects, Next.js (App & Pages router), and custom React DOM renderers.
+              Vite and Next.js App/Pages Router connect automatically. Other React DOM hosts use a generated wrapper that you mount yourself.
             </p>
           </div>
 
@@ -304,18 +317,18 @@ export function LandingView() {
                 <h3 className="text-base font-semibold text-[var(--seene-text)]">Author a Recipe and Component</h3>
               </div>
               <p className="text-sm text-[var(--seene-text-muted)] leading-relaxed">
-                Create a scene pair in <code className="font-mono text-xs bg-[var(--seene-surface-2)] px-1.5 py-0.5 rounded">src/seene/scenes/</code>. The recipe defines camera keyframes while the component renders your UI.
+                Create a matching recipe and component in <code className="font-mono text-xs bg-[var(--seene-surface-2)] px-1.5 py-0.5 rounded">src/seene/scenes/</code>. Choose Website Walkthrough in Create Scene to select and order real project components; the recipe defines surfaces and optional keyframes.
               </p>
               <div className="grid gap-3 md:grid-cols-2">
                 <div className="min-w-0">
                   <p className="mb-2 font-mono text-xs text-[var(--seene-text-muted)]">hero-showcase.scene.json</p>
-                  <pre className="max-w-full overflow-x-auto rounded-xl border border-[var(--seene-border)] bg-[var(--seene-surface)] p-4 font-mono text-xs leading-relaxed text-[var(--seene-text)]">
+                  <pre className="w-full min-w-0 max-w-full overflow-x-auto rounded-xl border border-[var(--seene-border)] bg-[var(--seene-surface)] p-4 font-mono text-xs leading-relaxed text-[var(--seene-text)]">
                     <code>{RECIPE_EXAMPLE}</code>
                   </pre>
                 </div>
                 <div className="min-w-0">
                   <p className="mb-2 font-mono text-xs text-[var(--seene-text-muted)]">hero-showcase.tsx</p>
-                  <pre className="max-w-full overflow-x-auto rounded-xl border border-[var(--seene-border)] bg-[var(--seene-surface)] p-4 font-mono text-xs leading-relaxed text-[var(--seene-text)]">
+                  <pre className="w-full min-w-0 max-w-full overflow-x-auto rounded-xl border border-[var(--seene-border)] bg-[var(--seene-surface)] p-4 font-mono text-xs leading-relaxed text-[var(--seene-text)]">
                     <code>{COMPONENT_EXAMPLE}</code>
                   </pre>
                 </div>
@@ -337,6 +350,9 @@ export function LandingView() {
                 <CommandLine value="npx seene open --url http://localhost:3000" />
                 <CommandLine value="npx seene open --url http://localhost:5173" />
               </div>
+              <p className="text-sm text-[var(--seene-text-muted)] leading-relaxed">
+                Vite scene creation and file changes require <code className="font-mono text-xs">seeneCreateScenePlugin()</code> from <code className="font-mono text-xs">@thatg33k/seene/vite</code>. Next.js initialization creates its scene API route. Other React DOM hosts need the generated preview wrapper mounted manually.
+              </p>
             </div>
           </div>
         </div>
