@@ -312,6 +312,7 @@ export async function discoverApplicationContent(root: string, limit = 400): Pro
   await walk("src");
   await walk("app");
   await walk("pages");
+  await walk("components");
   return { files: files.sort((a, b) => a.path.localeCompare(b.path)) };
 }
 

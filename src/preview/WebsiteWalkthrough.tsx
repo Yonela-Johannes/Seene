@@ -52,7 +52,29 @@ export type WebsiteWalkthroughProps = {
   seekTime?: number;
   isPlaying?: boolean;
   duration?: number;
+  easing?: "linear" | "ease-in-out";
+  holdAtTopMs?: number;
+  holdAtBottomMs?: number;
+  startOffset?: number | string;
+  endOffset?: number | string;
 };
+
+function easeProgress(progress: number, easing: "linear" | "ease-in-out"): number {
+  if (easing === "linear") return progress;
+  return progress < 0.5
+    ? 2 * progress * progress
+    : 1 - Math.pow(-2 * progress + 2, 2) / 2;
+}
+
+function layoutTop(element: HTMLElement, container: HTMLElement): number {
+  let top = 0;
+  let current: HTMLElement | null = element;
+  while (current && current !== container) {
+    top += current.offsetTop;
+    current = current.offsetParent as HTMLElement | null;
+  }
+  return top;
+}
 
 export function WebsiteWalkthrough(props: WebsiteWalkthroughProps): ReactNode {
   const {
@@ -67,6 +89,11 @@ export function WebsiteWalkthrough(props: WebsiteWalkthroughProps): ReactNode {
     seekTime,
     isPlaying,
     duration,
+    easing = "linear",
+    holdAtTopMs = 0,
+    holdAtBottomMs = 0,
+    startOffset,
+    endOffset,
   } = props;
 
   // Internal state for timeline control
@@ -75,6 +102,7 @@ export function WebsiteWalkthrough(props: WebsiteWalkthroughProps): ReactNode {
   const [internalDuration, setInternalDuration] = useState(0);
   const [maxScrollDistance, setMaxScrollDistance] = useState(0);
   const maxScrollDistanceRef = useRef(0);
+  const lastReportedAutoDuration = useRef(0);
   
   // Use external state if provided, otherwise internal
   const seekTimeValue = seekTime !== undefined ? seekTime : internalSeekTime;
@@ -83,6 +111,17 @@ export function WebsiteWalkthrough(props: WebsiteWalkthroughProps): ReactNode {
 
   // Viewport ref for section discovery and measurement
   const viewportRef = useRef<HTMLDivElement>(null);
+  const resolveOffset = useCallback((offset: number | string | undefined, fallback: number) => {
+    const viewport = viewportRef.current;
+    if (offset === undefined || offset === "") return fallback;
+    if (typeof offset === "number") return offset;
+    const parsed = Number(offset);
+    if (Number.isFinite(parsed)) return parsed;
+    if (!viewport) return fallback;
+    const section = Array.from(viewport.querySelectorAll<HTMLElement>("[data-section-id]"))
+      .find(element => element.dataset.sectionId === offset);
+    return section ? layoutTop(section, viewport) : fallback;
+  }, []);
   
   // Discovered sections state
   const [discoveredSections, setDiscoveredSections] = useState<DiscoveredSection[]>([]);
@@ -258,18 +297,53 @@ export function WebsiteWalkthrough(props: WebsiteWalkthroughProps): ReactNode {
     const max = Math.max(0, viewport.scrollHeight - viewport.clientHeight);
     maxScrollDistanceRef.current = max;
     setMaxScrollDistance(max);
+    if (!combinedSections && max > 0) {
+      const autoDuration = Math.max(10000, Math.round(max / 400 * 1000));
+      if (autoDuration !== lastReportedAutoDuration.current) {
+        lastReportedAutoDuration.current = autoDuration;
+        onDurationChange?.(autoDuration);
+      }
+    }
     if (max <= 0 && viewport.scrollTop !== 0) {
       viewport.scrollTop = 0;
     }
-  }, []);
+  }, [combinedSections, onDurationChange]);
 
   useEffect(() => {
-    syncScrollMetrics();
     const viewport = viewportRef.current;
     if (!viewport) return;
-    const observer = typeof ResizeObserver !== "undefined" ? new ResizeObserver(syncScrollMetrics) : null;
+    let active = true;
+    const scheduleSync = () => {
+      requestAnimationFrame(() => {
+        if (active) syncScrollMetrics();
+      });
+    };
+    const observer = typeof ResizeObserver !== "undefined" ? new ResizeObserver(scheduleSync) : null;
+    const observeChildren = () => Array.from(viewport.children).forEach(child => observer?.observe(child));
     observer?.observe(viewport);
-    return () => observer?.disconnect();
+    observeChildren();
+    const mutationObserver = typeof MutationObserver !== "undefined" ? new MutationObserver(() => {
+      observeChildren();
+      scheduleSync();
+    }) : null;
+    mutationObserver?.observe(viewport, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ["class", "height", "src", "style", "width"],
+    });
+    viewport.addEventListener("load", scheduleSync, true);
+    viewport.addEventListener("loadedmetadata", scheduleSync, true);
+    syncScrollMetrics();
+    const imageSettled = Promise.all(Array.from(viewport.querySelectorAll("img"), image => image.decode().catch(() => undefined)));
+    void imageSettled.then(() => typeof document === "undefined" ? undefined : document.fonts?.ready).then(scheduleSync);
+    return () => {
+      active = false;
+      observer?.disconnect();
+      mutationObserver?.disconnect();
+      viewport.removeEventListener("load", scheduleSync, true);
+      viewport.removeEventListener("loadedmetadata", scheduleSync, true);
+    };
   }, [syncScrollMetrics, children, explicitSections]);
 
   // Synchronize timeline time to viewport scroll position
@@ -278,7 +352,7 @@ export function WebsiteWalkthrough(props: WebsiteWalkthroughProps): ReactNode {
     const options: TimelineOptions = { duration: durationValue || 5000, clamp: true };
     const max = maxScrollDistanceRef.current;
 
-    if (sectionBoundaries.length > 0) {
+    if (combinedSections && sectionBoundaries.length > 0) {
       const state = evaluateTimelineState(seekTimeValue, options, sectionBoundaries);
       const nextScroll = max > 0 ? Math.min(Math.max(0, state.scrollPosition), max) : state.scrollPosition;
       if (Math.abs(viewportRef.current.scrollTop - nextScroll) > 2) {
@@ -288,18 +362,25 @@ export function WebsiteWalkthrough(props: WebsiteWalkthroughProps): ReactNode {
     }
 
     if (durationValue > 0 && max > 0) {
-      const progress = Math.min(Math.max(seekTimeValue / durationValue, 0), 1);
-      const eased = progress < 0.5
-        ? 4 * progress * progress * progress
-        : 1 - Math.pow(-2 * progress + 2, 3) / 2;
-      const nextScroll = eased * max;
+      const topHold = Math.max(0, Math.min(holdAtTopMs, durationValue));
+      const bottomHold = Math.max(0, Math.min(holdAtBottomMs, durationValue - topHold));
+      const activeDuration = Math.max(1, durationValue - topHold - bottomHold);
+      const rawProgress = seekTimeValue <= topHold
+        ? 0
+        : seekTimeValue >= durationValue - bottomHold
+          ? 1
+          : (seekTimeValue - topHold) / activeDuration;
+      const start = Math.max(0, Math.min(max, resolveOffset(startOffset, 0)));
+      const end = Math.max(0, Math.min(max, resolveOffset(endOffset, max)));
+      const progress = easeProgress(Math.min(Math.max(rawProgress, 0), 1), easing);
+      const nextScroll = start + progress * (end - start);
       if (Math.abs(viewportRef.current.scrollTop - nextScroll) > 2) {
         viewportRef.current.scrollTop = nextScroll;
       }
     } else if (viewportRef.current.scrollTop !== 0) {
       viewportRef.current.scrollTop = 0;
     }
-  }, [seekTimeValue, durationValue, sectionBoundaries, maxScrollDistance]);
+  }, [seekTimeValue, durationValue, sectionBoundaries, maxScrollDistance, holdAtTopMs, holdAtBottomMs, startOffset, endOffset, easing, resolveOffset]);
 
   // Synchronize manual user scrolling to timeline time
   const handleViewportScroll = useCallback(() => {
@@ -307,8 +388,19 @@ export function WebsiteWalkthrough(props: WebsiteWalkthroughProps): ReactNode {
     const currentScroll = viewportRef.current.scrollTop;
     const totalDuration = durationValue || 5000;
     const range = maxScrollDistanceRef.current || 1;
-    const progress = Math.min(Math.max(currentScroll / range, 0), 1);
-    const bestTime = progress * totalDuration;
+    const topHold = Math.max(0, Math.min(holdAtTopMs, totalDuration));
+    const bottomHold = Math.max(0, Math.min(holdAtBottomMs, totalDuration - topHold));
+    const activeDuration = Math.max(1, totalDuration - topHold - bottomHold);
+    const start = Math.max(0, Math.min(range, resolveOffset(startOffset, 0)));
+    const end = Math.max(0, Math.min(range, resolveOffset(endOffset, range)));
+    const distance = end - start;
+    const positionProgress = distance === 0 ? 0 : Math.min(Math.max((currentScroll - start) / distance, 0), 1);
+    const progress = easing === "linear"
+      ? positionProgress
+      : positionProgress < 0.5
+        ? Math.sqrt(positionProgress / 2)
+        : 1 - Math.sqrt((1 - positionProgress) / 2);
+    const bestTime = topHold + progress * activeDuration;
 
     if (Math.abs(seekTimeValue - bestTime) > 100) {
       if (seekTime !== undefined) {
@@ -318,7 +410,7 @@ export function WebsiteWalkthrough(props: WebsiteWalkthroughProps): ReactNode {
         onSeek?.(bestTime);
       }
     }
-  }, [durationValue, isPlayingValue, seekTimeValue, seekTime, onSeek]);
+  }, [durationValue, isPlayingValue, seekTimeValue, seekTime, onSeek, holdAtTopMs, holdAtBottomMs, startOffset, endOffset, easing, resolveOffset]);
 
   const handlePlayPause = useCallback(() => {
     if (!enableTimeline) return;
@@ -370,8 +462,9 @@ export function WebsiteWalkthrough(props: WebsiteWalkthroughProps): ReactNode {
         value={seekTimeValue} 
         onChange={(e) => handleSeek(Number(e.target.value))}
         className="website-walkthrough-timeline-slider"
+        data-seene-chrome="walkthrough-timeline-slider"
       />
-      <span className="website-walkthrough-time-display">
+      <span className="website-walkthrough-time-display" data-seene-chrome="walkthrough-timeline-time">
         {formatTime ? formatTime(seekTimeValue) : `${Math.floor(seekTimeValue / 60000)}:${String(Math.floor(seekTimeValue / 1000) % 60).padStart(2, '0')}`}
       </span>
     </div>
@@ -382,11 +475,14 @@ export function WebsiteWalkthrough(props: WebsiteWalkthroughProps): ReactNode {
     : "";
 
   return (
-    <div className={`website-walkthrough ${combinedSections ? 'website-walkthrough-sections' : 'website-walkthrough-full-page'} ${className || ''}`.trim()}>
+    <div
+      className={`website-walkthrough ${combinedSections ? 'website-walkthrough-sections' : 'website-walkthrough-full-page'} ${className || ''}`.trim()}
+      style={combinedSections ? undefined : { position: "absolute", inset: 0, width: "100%", height: "100%" }}
+    >
       <div 
         ref={viewportRef}
         className="website-walkthrough-viewport"
-        style={{ position: 'relative', overflowY: 'auto', height: '100%', minHeight: '100%', width: '100%' }}
+        style={{ position: 'relative', overflowY: 'auto', height: '100%', minHeight: 0, width: '100%' }}
         onScroll={handleViewportScroll}
       >
         {/* Render sections from explicit definitions */}
@@ -409,7 +505,7 @@ export function WebsiteWalkthrough(props: WebsiteWalkthroughProps): ReactNode {
         {combinedSections === undefined && children}
       </div>
       
-      {scrollDiagnostic ? <div role="status" className="website-walkthrough-diagnostic">{scrollDiagnostic}</div> : null}
+      {scrollDiagnostic ? <div role="status" className="website-walkthrough-diagnostic" data-seene-chrome="walkthrough-diagnostic">{scrollDiagnostic}</div> : null}
       {timelineControls}
     </div>
   );

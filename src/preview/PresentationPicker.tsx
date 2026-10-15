@@ -3,9 +3,10 @@ import { AUTHORED_PRESENTATION, PRESENTATIONS, presentation } from "../core";
 export type PresentationPickerProps = {
   value: string | undefined;
   onChange: (id: string) => void;
+  disabled?: boolean;
 };
 
-export function PresentationPicker({ value, onChange }: PresentationPickerProps) {
+export function PresentationPicker({ value, onChange, disabled = false }: PresentationPickerProps) {
   const active = value ?? AUTHORED_PRESENTATION;
   const summary =
     active === AUTHORED_PRESENTATION
@@ -13,13 +14,14 @@ export function PresentationPicker({ value, onChange }: PresentationPickerProps)
       : presentation(active).summary;
 
   return (
-    <div className="seene-presentations" role="group" aria-label="Presentation">
-      <div className="seene-presentation-rail">
+    <div className="seene-presentations" role="group" aria-label="Presentation" aria-disabled={disabled} title={disabled ? "Presets apply in Scene mode" : undefined}>
+      <div className="seene-presentation-rail" aria-disabled={disabled}>
         <button
           type="button"
           className={active === AUTHORED_PRESENTATION ? "seene-control seene-primary" : "seene-control"}
           aria-pressed={active === AUTHORED_PRESENTATION}
-          title="The camera, focus and motion written in this scene recipe."
+          disabled={disabled}
+          title={disabled ? "Presets apply in Scene mode" : "The camera, focus and motion written in this scene recipe."}
           onClick={() => onChange(AUTHORED_PRESENTATION)}
         >
           Authored
@@ -30,7 +32,8 @@ export function PresentationPicker({ value, onChange }: PresentationPickerProps)
             type="button"
             className={active === item.id ? "seene-control seene-primary" : "seene-control"}
             aria-pressed={active === item.id}
-            title={item.summary}
+            disabled={disabled}
+            title={disabled ? "Presets apply in Scene mode" : item.summary}
             onClick={() => onChange(item.id)}
           >
             {item.label}

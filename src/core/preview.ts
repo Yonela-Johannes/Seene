@@ -42,6 +42,15 @@ export const WalkthroughSectionSchema = z.strictObject({
   durationMs: z.number().finite().nonnegative().optional(),
   pauseMs: z.number().finite().nonnegative().optional(),
 });
+export const WalkthroughSettingsSchema = z.strictObject({
+  durationAuto: z.boolean().optional(),
+  easing: z.enum(["linear", "ease-in-out"]).optional(),
+  holdAtTopMs: z.number().finite().nonnegative().max(3600000).optional(),
+  holdAtBottomMs: z.number().finite().nonnegative().max(3600000).optional(),
+  startOffset: z.union([z.number().finite(), z.string().trim().max(120)]).optional(),
+  endOffset: z.union([z.number().finite(), z.string().trim().max(120)]).optional(),
+  autoplay: z.boolean().optional(),
+});
 
 export const PreviewDefinitionSchema = z.strictObject({
   scene: SceneSchema.refine(scene => scene.nodes.length > 0, {
@@ -55,6 +64,7 @@ export const PreviewDefinitionSchema = z.strictObject({
   backdrop: z.string().trim().min(1).max(64).optional(),
   compositionType: z.enum(["scene", "walkthrough"]).optional(),
   sections: z.array(WalkthroughSectionSchema).optional(),
+  walkthroughSettings: WalkthroughSettingsSchema.optional(),
 });
 export type PreviewDefinitionInput = z.input<typeof PreviewDefinitionSchema>;
 export type PreviewDefinition = z.output<typeof PreviewDefinitionSchema>;

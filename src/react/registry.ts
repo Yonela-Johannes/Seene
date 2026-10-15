@@ -120,7 +120,7 @@ export function createRegistry() {
     const next: SceneIssue[] = Array.from(entries.values())
       .filter(b => groups.has(b.token) && uncoveredContent(b.element))
       .map(b => ({ path: b.id, message: "Unfiltered content in spatial group. Wrap each visible text/media region in a Surface, or put its paint in content. Group filters would flatten nested 3D." }));
-    if (uncoveredContent(stage)) next.push({ path: "scene", message: "Unfiltered scene content. Wrap visible text/media in a Surface so camera depth of field can apply." });
+    if (!stage.closest("[data-seene-walkthrough]") && uncoveredContent(stage)) next.push({ path: "scene", message: "Unfiltered scene content. Wrap visible text/media in a Surface so camera depth of field can apply." });
     next.push(...zeroArea, ...emptyNodes);
 
     if (JSON.stringify(next) !== JSON.stringify(coverageIssues)) {

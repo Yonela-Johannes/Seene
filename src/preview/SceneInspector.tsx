@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { PRESENTATION_PRESETS, applyPresentationPreset, type PresentationPresetName, type PreviewDefinitionInput } from "../core/preview";
 import { parseBackdropMode } from "./backdrop";
 
@@ -76,6 +76,7 @@ export function SceneInspector({
   onCompositionModeChange,
 }: SceneInspectorProps) {
   const [internalIsOpen, setInternalIsOpen] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement>(null);
   const open = isOpen !== undefined ? isOpen : internalIsOpen;
   const toggle = onToggle || (() => setInternalIsOpen(!open));
 
@@ -83,6 +84,7 @@ export function SceneInspector({
     const handleEscape = (event: KeyboardEvent) => {
       if (event.key === "Escape" && open) {
         toggle();
+        requestAnimationFrame(() => triggerRef.current?.focus());
       }
     };
     document.addEventListener("keydown", handleEscape);
@@ -125,6 +127,37 @@ export function SceneInspector({
     onChange({
       ...definition,
       motion: { ...(definition.motion || { durationMs: 2000, tracks: [] }), durationMs: val },
+    });
+  };
+
+  const updateWalkthroughSetting = (key: string, value: number | string | boolean) => {
+    if (!onChange) return;
+    onChange({
+      ...definition,
+      walkthroughSettings: {
+        ...definition.walkthroughSettings,
+        [key]: value,
+      },
+    });
+  };
+
+  const updateWalkthroughDuration = (seconds: number) => {
+    if (!onChange) return;
+    const durationMs = Math.max(100, Math.round(seconds * 1000));
+    onChange({
+      ...definition,
+      motion: {
+        durationMs,
+        speed: 1,
+        tracks: (definition.motion?.tracks ?? []).map(track => ({
+          ...track,
+          keyframes: track.keyframes.filter(frame => frame.timeMs <= durationMs),
+        })),
+      },
+      walkthroughSettings: {
+        ...definition.walkthroughSettings,
+        durationAuto: false,
+      },
     });
   };
 
@@ -181,6 +214,7 @@ export function SceneInspector({
     <div className="relative">
       <button
         type="button"
+        ref={triggerRef}
         className={`appearance-none border rounded-full px-4 py-2 text-xs font-medium inline-flex items-center gap-2 cursor-pointer transition-all duration-200 ${
           open
             ? "border-[var(--seene-accent)] bg-[var(--seene-accent)] text-[var(--seene-surface)] shadow-md"
@@ -197,6 +231,7 @@ export function SceneInspector({
       {open ? (
         <aside
           id="scene-inspector-panel"
+          data-seene-chrome="inspector-panel"
           className="seene-inspector-panel fixed inset-y-0 right-0 w-96 max-w-full bg-[#121215]/95 border-l border-zinc-800/80 shadow-2xl z-50 transform transition-transform duration-300 ease-in-out overflow-y-auto backdrop-blur-xl text-zinc-200 font-sans"
         >
           <div className="p-5 space-y-6">
@@ -208,7 +243,10 @@ export function SceneInspector({
               </div>
               <button
                 type="button"
-                onClick={toggle}
+                onClick={() => {
+                  toggle();
+                  requestAnimationFrame(() => triggerRef.current?.focus());
+                }}
                 className="rounded-lg p-1.5 text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors text-sm"
                 aria-label="Close inspector"
               >
@@ -529,8 +567,60 @@ export function SceneInspector({
               </div>
             </div>
 
+            {compositionMode === "walkthrough" ? (
+              <div className="space-y-3 pt-2 border-t border-zinc-800">
+                <h4 className="text-xs font-medium uppercase tracking-wider text-zinc-400">Walkthrough</h4>
+                <label className="block space-y-1 text-xs text-zinc-400">
+                  <span>Duration (seconds)</span>
+                  <input
+                    type="number"
+                    aria-label="Walkthrough duration (seconds)"
+                    min="0.1"
+                    step="0.5"
+                    value={durMs / 1000}
+                    onChange={event => updateWalkthroughDuration(parseFloat(event.target.value) || 0.1)}
+                    className="w-full rounded border border-zinc-800 bg-zinc-900 px-3 py-1.5 font-mono text-xs text-zinc-100"
+                  />
+                </label>
+                <label className="block space-y-1 text-xs text-zinc-400">
+                  <span>Easing</span>
+                  <select
+                    aria-label="Walkthrough easing"
+                    value={definition.walkthroughSettings?.easing ?? "linear"}
+                    onChange={event => updateWalkthroughSetting("easing", event.target.value)}
+                    className="w-full rounded border border-zinc-800 bg-zinc-900 px-3 py-1.5 text-xs text-zinc-100"
+                  >
+                    <option value="linear">Linear</option>
+                    <option value="ease-in-out">Ease in-out</option>
+                  </select>
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <label className="space-y-1 text-xs text-zinc-400">
+                    <span>Hold at top (s)</span>
+                    <input type="number" aria-label="Hold at top (seconds)" min="0" step="0.5" value={(definition.walkthroughSettings?.holdAtTopMs ?? 0) / 1000} onChange={event => updateWalkthroughSetting("holdAtTopMs", Math.max(0, Number(event.target.value) || 0) * 1000)} className="w-full rounded border border-zinc-800 bg-zinc-900 px-2 py-1.5 font-mono text-xs text-zinc-100" />
+                  </label>
+                  <label className="space-y-1 text-xs text-zinc-400">
+                    <span>Hold at bottom (s)</span>
+                    <input type="number" aria-label="Hold at bottom (seconds)" min="0" step="0.5" value={(definition.walkthroughSettings?.holdAtBottomMs ?? 0) / 1000} onChange={event => updateWalkthroughSetting("holdAtBottomMs", Math.max(0, Number(event.target.value) || 0) * 1000)} className="w-full rounded border border-zinc-800 bg-zinc-900 px-2 py-1.5 font-mono text-xs text-zinc-100" />
+                  </label>
+                </div>
+                <label className="block space-y-1 text-xs text-zinc-400">
+                  <span>Start offset (px or section ID)</span>
+                  <input type="text" aria-label="Walkthrough start offset" value={String(definition.walkthroughSettings?.startOffset ?? "")} onChange={event => updateWalkthroughSetting("startOffset", event.target.value)} className="w-full rounded border border-zinc-800 bg-zinc-900 px-3 py-1.5 font-mono text-xs text-zinc-100" />
+                </label>
+                <label className="block space-y-1 text-xs text-zinc-400">
+                  <span>End offset (px or section ID)</span>
+                  <input type="text" aria-label="Walkthrough end offset" value={String(definition.walkthroughSettings?.endOffset ?? "")} onChange={event => updateWalkthroughSetting("endOffset", event.target.value)} className="w-full rounded border border-zinc-800 bg-zinc-900 px-3 py-1.5 font-mono text-xs text-zinc-100" />
+                </label>
+                <label className="flex items-center gap-2 text-xs text-zinc-300">
+                  <input type="checkbox" aria-label="Autoplay walkthrough" checked={definition.walkthroughSettings?.autoplay ?? false} onChange={event => updateWalkthroughSetting("autoplay", event.target.checked)} className="accent-indigo-500" />
+                  Autoplay
+                </label>
+              </div>
+            ) : null}
+
             {/* Motion Duration */}
-            <div className="space-y-2 pt-2 border-t border-zinc-800">
+            {compositionMode !== "walkthrough" ? <div className="space-y-2 pt-2 border-t border-zinc-800">
               <div className="flex justify-between items-center text-xs">
                 <span className="font-medium uppercase tracking-wider text-zinc-400">Motion Duration</span>
                 <span className="font-mono text-zinc-200">{(durMs / 1000).toFixed(1)}s</span>
@@ -543,7 +633,7 @@ export function SceneInspector({
                 onChange={(e) => updateDuration(parseFloat(e.target.value) || 2000)}
                 className="w-full rounded border border-zinc-800 bg-zinc-900 px-3 py-1.5 font-mono text-xs text-zinc-100 focus:border-indigo-500 focus:outline-none"
               />
-            </div>
+            </div> : null}
 
             {/* Action Buttons */}
             <div className="pt-4 border-t border-zinc-800 space-y-2">

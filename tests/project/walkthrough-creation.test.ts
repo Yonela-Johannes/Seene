@@ -1,8 +1,9 @@
 import { describe, expect, it, afterEach } from "vitest";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
-import { createSceneRecipe, sceneComponentSource } from "../../src/core/platform";
+import { componentImportSpecifier, createSceneRecipe, sceneComponentSource } from "../../src/core/platform";
+import { discoverApplicationContent } from "../../src/vite/scene-files";
 
 const roots: string[] = [];
 
@@ -17,6 +18,17 @@ afterEach(async () => {
 });
 
 describe("Website Walkthrough First-Class Scene Type Regression Tests", () => {
+  it("discovers root-level layout components and generates alias imports", async () => {
+    const root = await createTempFolder();
+    const footerPath = path.join(root, "components/common/footer.tsx");
+    await mkdir(path.dirname(footerPath), { recursive: true });
+    await writeFile(footerPath, "export default function Footer() { return <footer>End</footer>; }");
+
+    const content = await discoverApplicationContent(root);
+    expect(content.files.map(file => file.path)).toContain("components/common/footer.tsx");
+    expect(componentImportSpecifier("components/common/footer.tsx")).toBe("@/components/common/footer");
+  });
+
   it("creates a Single Scene recipe and scaffold with single Surface host and configurable dimensions", () => {
     const recipe = createSceneRecipe({
       id: "single-demo",
@@ -60,11 +72,14 @@ describe("Website Walkthrough First-Class Scene Type Regression Tests", () => {
     expect(recipe.definition.sizingMode).toBe("viewport");
     expect(recipe.definition.minHeight).toBe("100vh");
     expect(recipe.definition.sections?.length).toBe(3);
+    expect(recipe.definition.motion?.durationMs).toBe(10000);
+    expect(recipe.definition.motion?.speed).toBe(1);
+    expect(recipe.definition.walkthroughSettings?.durationAuto).toBe(true);
 
     const sectionImports = [
-      { id: "sec-1", title: "Header", importSpecifier: "../../components/Header" },
-      { id: "sec-2", title: "Hero", importSpecifier: "../../components/Hero" },
-      { id: "sec-3", title: "Footer", importSpecifier: "../../components/Footer" },
+      { id: "sec-1", title: "Header", importSpecifier: "@/components/Header" },
+      { id: "sec-2", title: "Hero", importSpecifier: "@/components/Hero" },
+      { id: "sec-3", title: "Footer", importSpecifier: "@/components/Footer" },
     ];
 
     const source = sceneComponentSource({
@@ -74,21 +89,20 @@ describe("Website Walkthrough First-Class Scene Type Regression Tests", () => {
     });
 
     expect(source).toContain('// @seene-scaffold-version 1');
-    expect(source).toContain('import { WebsiteWalkthrough } from "@thatg33k/seene/preview";');
-    expect(source).toContain('import SectionComponent1 from "../../components/Header";');
-    expect(source).toContain('import SectionComponent2 from "../../components/Hero";');
-    expect(source).toContain('import SectionComponent3 from "../../components/Footer";');
-    expect(source).toContain('sections={[');
-    expect(source).toContain('{ id: "sec-1", label: "Header", children: <SectionComponent1 /> }');
-    expect(source).toContain('{ id: "sec-2", label: "Hero", children: <SectionComponent2 /> }');
-    expect(source).toContain('{ id: "sec-3", label: "Footer", children: <SectionComponent3 /> }');
+    expect(source).toContain('import Header from "@/components/Header";');
+    expect(source).toContain('import Hero from "@/components/Hero";');
+    expect(source).toContain('import Footer from "@/components/Footer";');
+    expect(source).toContain('<Surface id="host" style={{ width: "100%", height: "auto", minHeight: "100vh" }}>');
+    expect(source).toContain('<Header />\n      <Hero />\n      <Footer />');
+    expect(source).not.toContain('gap: "2rem"');
+    expect(source).not.toContain("WalkthroughComponent");
   });
 
   it("preserves section ordering from top to bottom (Hero -> Features -> Footer)", () => {
     const orderedSections = [
-      { id: "s1", title: "01 Hero", importSpecifier: "../../components/Hero" },
-      { id: "s2", title: "02 Features", importSpecifier: "../../components/Features" },
-      { id: "s3", title: "03 Footer", importSpecifier: "../../components/Footer" },
+      { id: "s1", title: "01 Hero", importSpecifier: "@/components/Hero" },
+      { id: "s2", title: "02 Features", importSpecifier: "@/components/Features" },
+      { id: "s3", title: "03 Footer", importSpecifier: "@/components/Footer" },
     ];
 
     const source = sceneComponentSource({
@@ -97,9 +111,9 @@ describe("Website Walkthrough First-Class Scene Type Regression Tests", () => {
       sections: orderedSections,
     });
 
-    const pos1 = source.indexOf('SectionComponent1');
-    const pos2 = source.indexOf('SectionComponent2');
-    const pos3 = source.indexOf('SectionComponent3');
+    const pos1 = source.indexOf('<Hero />');
+    const pos2 = source.indexOf('<Features />');
+    const pos3 = source.indexOf('<Footer />');
 
     expect(pos1).toBeGreaterThan(-1);
     expect(pos2).toBeGreaterThan(pos1);

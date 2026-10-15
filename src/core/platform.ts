@@ -192,9 +192,11 @@ export function createSceneRecipe(input: {
     ...(input.applicationRoute ? { application: { route: input.applicationRoute } } : {}),
     definition: {
       ...def,
+      ...(isWalkthrough ? { motion: { durationMs: 10000, speed: 1, tracks: [] } } : {}),
       ...(input.width ? { width: input.width } : {}),
       ...(input.height ? { height: input.height } : {}),
       compositionType: isWalkthrough ? "walkthrough" : "scene",
+      ...(isWalkthrough ? { walkthroughSettings: { durationAuto: true } } : {}),
       ...(isWalkthrough ? { sizingMode: "viewport", minHeight: "100vh" } : {}),
       ...(input.sections ? { sections: input.sections } : {}),
     },
@@ -221,7 +223,7 @@ import { Surface } from "@thatg33k/seene";
 
 export default function ${name}() {
   return (
-    <Surface id="host" style={{ width: "100%", height: "100%" }}>
+    <Surface id="host" style={{ width: "100%", height: "auto", minHeight: "100vh" }}>
       <div style={{ padding: "4rem", textAlign: "center" }}>
         <h1 style={{ fontSize: 32, fontWeight: 700, marginBottom: 12 }}>Website Walkthrough</h1>
         <p style={{ opacity: 0.7 }}>Edit src/seene/scenes/${input.id}.tsx to add your page sections.</p>
@@ -234,9 +236,18 @@ export default function ${name}() {
 
     const imports: string[] = [];
     const elements: string[] = [];
+    const usedNames = new Set<string>();
 
     rawSections.forEach((sec, idx) => {
-      const compName = `WalkthroughComponent${idx + 1}`;
+      const sourceName = sec.export && sec.export !== "default"
+        ? sec.export
+        : sec.importSpecifier.split("/").pop()?.replace(/\.[jt]sx?$/, "") || sec.title || `Section${idx + 1}`;
+      const baseName = sourceName.replace(/^\d+/, "").split(/[^A-Za-z0-9_$]+/).filter(Boolean).map(part => part.charAt(0).toUpperCase() + part.slice(1)).join("") || `Section${idx + 1}`;
+      let compName = /^[A-Z_$]/.test(baseName) ? baseName : `Section${baseName}`;
+      if (/^\d/.test(compName)) compName = `Section${compName}`;
+      let suffix = 2;
+      while (usedNames.has(compName)) compName = `${baseName}${suffix++}`;
+      usedNames.add(compName);
       const binding = sec.export ? `{ ${sec.export} as ${compName} }` : compName;
       imports.push(`import ${binding} from ${JSON.stringify(sec.importSpecifier)};`);
       elements.push(`<${compName} />`);
@@ -249,10 +260,8 @@ ${imports.join("\n")}
 
 export default function ${name}() {
   return (
-    <Surface id="host" style={{ width: "100%", height: "100%" }}>
-      <div style={{ display: "grid", gap: "2rem", width: "100%" }}>
-        ${elements.join("\n        ")}
-      </div>
+    <Surface id="host" style={{ width: "100%", height: "auto", minHeight: "100vh" }}>
+      ${elements.join("\n      ")}
     </Surface>
   );
 }
@@ -331,27 +340,7 @@ export function validateHostComponent(hostPath: string, source: string): { valid
 export function componentImportSpecifier(target: string): string {
   const normalized = target.replace(/\\/g, "/").replace(/^\.\//, "");
   const withoutExt = normalized.replace(/\.(?:[cm]?[jt]sx?)$/, "");
-  const fromDir = "src/seene/scenes";
-
-  const fromParts = fromDir.split("/").filter(Boolean);
-  const targetParts = withoutExt.split("/").filter(Boolean);
-
-  let common = 0;
-  while (common < fromParts.length && common < targetParts.length && fromParts[common] === targetParts[common]) {
-    common++;
-  }
-
-  const upCount = fromParts.length - common;
-  const remainingTarget = targetParts.slice(common);
-
-  let relative = "";
-  if (upCount > 0) {
-    relative = "../".repeat(upCount) + remainingTarget.join("/");
-  } else {
-    relative = "./" + remainingTarget.join("/");
-  }
-
-  return relative.startsWith(".") ? relative : `./${relative}`;
+  return `@/${withoutExt.replace(/^src\//, "")}`;
 }
 
 export function isDocumentOrLayoutWrapper(target: string): boolean {
@@ -365,7 +354,7 @@ export function isDocumentOrLayoutWrapper(target: string): boolean {
 export function isApplicationSourcePath(target: string): boolean {
   const normalized = target.replace(/\\/g, "/").replace(/^\.\//, "");
   if (normalized.includes("..")) return false;
-  if (!/^(?:src|app|pages)\/[A-Za-z0-9._/-]+\.(?:tsx|jsx)$/.test(normalized)) return false;
+  if (!/^(?:src|app|pages|components)\/[A-Za-z0-9._/-]+\.(?:tsx|jsx)$/.test(normalized)) return false;
   if (normalized.startsWith(SCENE_RECIPE_DIRECTORY + "/")) return false;
   if (isDocumentOrLayoutWrapper(normalized)) return false;
   return true;

@@ -179,6 +179,7 @@ export function SceneLibrary({
   const [activeTab, setActiveTab] = useState<"all" | "page" | "section" | "component">("all");
   const [choice, setChoice] = useState("");
   const [selectedSections, setSelectedSections] = useState<Array<{ file: string; export?: string; title?: string }>>([]);
+  const [includeLayoutChrome, setIncludeLayoutChrome] = useState(false);
   const [createHostPath, setCreateHostPath] = useState("");
   const [showCustomPath, setShowCustomPath] = useState(false);
   const [createWidth, setCreateWidth] = useState<number>(1400);
@@ -386,6 +387,7 @@ export function SceneLibrary({
     setActiveTab("all");
     setChoice("");
     setSelectedSections([]);
+    setIncludeLayoutChrome(false);
     setCreateHostPath("");
     setShowCustomPath(false);
     setCreateWidth(1400);
@@ -449,8 +451,14 @@ export function SceneLibrary({
     const title = createTitle.trim();
     const id = title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || `scene-${Date.now()}`;
 
+    const layoutComponents = includeLayoutChrome
+      ? (contentFiles ?? []).filter(file => /(?:^|\/)components\/common\/(?:navbar|footer)\.[jt]sx?$/i.test(file.path))
+      : [];
+    const layoutNavbar = layoutComponents.filter(file => /\/navbar\.[jt]sx?$/i.test(file.path)).map(file => ({ file: file.path, title: file.title }));
+    const layoutFooter = layoutComponents.filter(file => /\/footer\.[jt]sx?$/i.test(file.path)).map(file => ({ file: file.path, title: file.title }));
+    const walkthroughSections = [...layoutNavbar, ...selectedSections, ...layoutFooter].filter((section, index, items) => items.findIndex(candidate => candidate.file === section.file) === index);
     const rawSections = compositionType === "walkthrough"
-      ? selectedSections
+      ? walkthroughSections
       : createHostPath.trim()
         ? [{ file: createHostPath.trim() }]
         : choice
@@ -465,7 +473,7 @@ export function SceneLibrary({
       definition: {
         ...defaultSceneDefinition(),
         compositionType,
-        ...(compositionType === "walkthrough" ? { sizingMode: "viewport", minHeight: "100vh" } : { width: createWidth, height: createHeight }),
+        ...(compositionType === "walkthrough" ? { sizingMode: "viewport", minHeight: "100vh", walkthroughSettings: { durationAuto: true } } : { width: createWidth, height: createHeight }),
       },
     };
 
@@ -1100,6 +1108,19 @@ export function SceneLibrary({
                 )}
 
                 {/* Ordered Walkthrough Sequence */}
+                {compositionType === "walkthrough" ? (
+                  <label className="flex items-center gap-2 rounded-lg border border-[var(--seene-border-text)] bg-[var(--seene-surface)] px-3 py-2 text-xs text-[var(--seene-text)]">
+                    <input
+                      type="checkbox"
+                      aria-label="Include layout navbar and footer"
+                      checked={includeLayoutChrome}
+                      disabled={!(contentFiles ?? []).some(file => /(?:^|\/)components\/common\/(?:navbar|footer)\.[jt]sx?$/i.test(file.path))}
+                      onChange={event => setIncludeLayoutChrome(event.target.checked)}
+                    />
+                    Include layout navbar/footer
+                  </label>
+                ) : null}
+
                 {compositionType === "walkthrough" && selectedSections.length > 0 && (
                   <div className="space-y-2 rounded-xl border border-[var(--seene-accent)]/40 bg-[var(--seene-surface)] p-3">
                     <div className="flex items-center justify-between">

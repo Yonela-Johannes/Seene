@@ -138,7 +138,7 @@ describe("Phase 1b: Versioned files, upgrade rules and manifest migration", () =
     const sceneSource = await readFile(sceneFile, "utf8");
     expect(sceneSource).toContain("// @seene-scaffold-version 1");
     expect(sceneSource).toContain('"use client";');
-    expect(sceneSource).toContain('import HostComponent from "../../components/Header";');
+    expect(sceneSource).toContain('import HostComponent from "@/components/Header";');
     expect(sceneSource).toContain('<Surface id="host" style={{ width: 1400, height: 980 }}>');
 
     // 4. Route file warning in a fresh host
@@ -178,11 +178,11 @@ describe("Phase 1b: Versioned files, upgrade rules and manifest migration", () =
   });
 
   it("calculates componentImportSpecifier correctly across all host file locations", () => {
-    expect(componentImportSpecifier("src/components/Header.tsx")).toBe("../../components/Header");
-    expect(componentImportSpecifier("components/Header.tsx")).toBe("../../../components/Header");
-    expect(componentImportSpecifier("app/page.tsx")).toBe("../../../app/page");
-    expect(componentImportSpecifier("pages/index.tsx")).toBe("../../../pages/index");
-    expect(componentImportSpecifier("src/seene/scenes/sub/Widget.tsx")).toBe("./sub/Widget");
-    expect(componentImportSpecifier("src\\components\\Header.js")).toBe("../../components/Header");
+    expect(componentImportSpecifier("src/components/Header.tsx")).toBe("@/components/Header");
+    expect(componentImportSpecifier("components/Header.tsx")).toBe("@/components/Header");
+    expect(componentImportSpecifier("app/page.tsx")).toBe("@/app/page");
+    expect(componentImportSpecifier("pages/index.tsx")).toBe("@/pages/index");
+    expect(componentImportSpecifier("src/seene/scenes/sub/Widget.tsx")).toBe("@/seene/scenes/sub/Widget");
+    expect(componentImportSpecifier("src\\components\\Header.js")).toBe("@/components/Header");
   });
 });

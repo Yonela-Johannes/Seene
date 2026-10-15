@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useId, type ReactNode, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
-import { SUPPORTED_EXPORT_FPS, ExportFrameRateSchema, SCENE_TRANSITION_DURATION, type TransitionPresetName, type PreviewDefinition, type PreviewDefinitionInput } from "../core";
+import { AUTHORED_PRESENTATION, SUPPORTED_EXPORT_FPS, ExportFrameRateSchema, SCENE_TRANSITION_DURATION, type TransitionPresetName, type PreviewDefinition, type PreviewDefinitionInput } from "../core";
 import { Scene, SceneErrorBoundary, useSceneCapture } from "../react";
 import { resolvePresentation } from "../core";
 import { usePreviewSession } from "./session";
@@ -97,6 +97,7 @@ function ExportMenu({ disabled, panelHost }: { disabled: boolean; panelHost: HTM
               id={panelId}
               role="region"
               aria-label="Export your scene"
+              data-seene-chrome="export-panel"
               className="seene-export-panel seene-chrome bg-zinc-900 border border-zinc-800 rounded-xl p-4 shadow-2xl space-y-3 text-xs text-zinc-200"
               onKeyDown={event => {
                 if (event.key === "Escape" && details.current) {
@@ -217,19 +218,26 @@ export function ScenePreview({
   formatTime,
   onSaveDefinition,
 }: ScenePreviewProps) {
-  const presented = useMemo(() => (input === undefined ? undefined : resolvePresentation(input, presentation)), [input, presentation]);
+  const [compositionMode, setCompositionMode] = useState<"scene" | "walkthrough">(() => {
+    const mode = typeof window === "undefined" ? null : new URL(window.location.href).searchParams.get("seene-mode");
+    return mode === "scroll" ? "walkthrough" : mode === "scene" ? "scene" : input?.compositionType === "walkthrough" ? "walkthrough" : "scene";
+  });
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    const mode = compositionMode === "walkthrough" ? "scroll" : "scene";
+    if (url.searchParams.get("seene-mode") !== mode) {
+      url.searchParams.set("seene-mode", mode);
+      window.history.replaceState({}, "", url.pathname + url.search + url.hash);
+    }
+  }, [compositionMode]);
+  const presented = useMemo(
+    () => input === undefined ? undefined : resolvePresentation(input, compositionMode === "walkthrough" ? undefined : presentation),
+    [input, presentation, compositionMode],
+  );
   const [localDef, setLocalDef] = useState<PreviewDefinitionInput | undefined>(presented);
   useEffect(() => {
     setLocalDef(presented);
   }, [presented]);
-
-  const [compositionMode, setCompositionMode] = useState<"scene" | "walkthrough">("scene");
-
-  useEffect(() => {
-    if (localDef?.compositionType === "walkthrough") {
-      setCompositionMode("walkthrough");
-    }
-  }, [localDef?.compositionType]);
 
   const session = usePreviewSession(localDef, revision);
   const connection = usePreviewConnection(hot, session.pause);
@@ -261,6 +269,63 @@ export function ScenePreview({
   const definition = session.definition;
   const sceneBackdrop = useSceneBackdrop(definition?.backdrop, viewport);
   const blocked = !session.valid || !connection.connected || !!connection.error || !!renderError;
+  const scrollCamera = definition ? {
+    ...definition.scene.camera,
+    x: 0,
+    y: 0,
+    z: 0,
+    rotateX: 0,
+    rotateY: 0,
+    rotateZ: 0,
+  } : undefined;
+  const scrollFocus = definition ? { ...definition.scene.focus, maxBlur: 0 } : undefined;
+  const scrollMotion = definition?.motion
+    ? { ...definition.motion, tracks: definition.motion.tracks.filter(track => track.target.kind === "surface") }
+    : undefined;
+  const walkthroughSettings = definition?.walkthroughSettings;
+  const updateAutoWalkthroughDuration = useCallback((durationMs: number) => {
+    setLocalDef(current => {
+      if (!current || current.walkthroughSettings?.durationAuto !== true) return current;
+      if (current.motion?.durationMs === durationMs && current.motion.speed === 1) return current;
+      return {
+        ...current,
+        motion: { ...(current.motion ?? { tracks: [] }), durationMs, speed: 1 },
+      };
+    });
+  }, []);
+  const autoplayStarted = useRef(false);
+
+  useEffect(() => {
+    if (!walkthroughSettings?.autoplay) {
+      autoplayStarted.current = false;
+      return;
+    }
+    if (compositionMode === "walkthrough" && session.valid && session.durationMs > 0 && !autoplayStarted.current) {
+      autoplayStarted.current = true;
+      session.toggle();
+    }
+  }, [compositionMode, walkthroughSettings?.autoplay, session.valid, session.durationMs, session.toggle]);
+
+  const changeCompositionMode = useCallback((next: "scene" | "walkthrough") => {
+    setCompositionMode(next);
+    const url = new URL(window.location.href);
+    url.searchParams.set("seene-mode", next === "walkthrough" ? "scroll" : "scene");
+    if (next === "walkthrough") {
+      url.searchParams.delete("seene-preset");
+      onPresentationChange?.(AUTHORED_PRESENTATION);
+    }
+    window.history.replaceState({}, "", url.pathname + url.search + url.hash);
+  }, [onPresentationChange]);
+
+  useEffect(() => {
+    if (compositionMode !== "walkthrough") return;
+    const url = new URL(window.location.href);
+    if (url.searchParams.has("seene-preset")) {
+      url.searchParams.delete("seene-preset");
+      window.history.replaceState({}, "", url.pathname + url.search + url.hash);
+    }
+    if (presentation) onPresentationChange?.(AUTHORED_PRESENTATION);
+  }, [compositionMode, presentation, onPresentationChange]);
 
   const [prevDefinition, setPrevDefinition] = useState<PreviewDefinition | undefined>(undefined);
   const [transitionProgress, setTransitionProgress] = useState(0);
@@ -393,13 +458,14 @@ export function ScenePreview({
                     className="seene-canvas"
                     data-seene-capture="scene"
                     data-seene-valid={blocked ? "false" : "true"}
+                    data-seene-walkthrough={compositionMode === "walkthrough" ? "" : undefined}
                     style={{ width: "100%", height: "100%", position: "relative" }}
                   >
                     {compositionMode === "walkthrough" ? (
                       <Scene
-                        camera={definition.scene.camera}
-                        focus={definition.scene.focus}
-                        motion={definition.motion}
+                        camera={scrollCamera}
+                        focus={scrollFocus}
+                        motion={scrollMotion}
                         recipeNodes={definition.scene.nodes}
                         timeMs={session.timeMs}
                         onDiagnostics={session.onDiagnostics}
@@ -407,10 +473,16 @@ export function ScenePreview({
                       >
                         {containsWebsiteWalkthrough(children) ? children : (
                           <WebsiteWalkthrough
-                            enableTimeline={true}
+                            enableTimeline={false}
                             seekTime={session.timeMs}
                             duration={session.durationMs}
                             isPlaying={session.playing}
+                            easing={walkthroughSettings?.easing ?? "linear"}
+                            holdAtTopMs={walkthroughSettings?.holdAtTopMs ?? 0}
+                            holdAtBottomMs={walkthroughSettings?.holdAtBottomMs ?? 0}
+                            startOffset={walkthroughSettings?.startOffset}
+                            endOffset={walkthroughSettings?.endOffset}
+                            onDurationChange={updateAutoWalkthroughDuration}
                             onSeek={ms => session.seek(ms)}
                             onPlayPause={p => (p ? (session.playing ? undefined : session.toggle()) : session.pause())}
                           >
@@ -511,18 +583,22 @@ export function ScenePreview({
 
               {/* Mode indicator pill */}
               <div className="flex items-center gap-1 bg-zinc-900 border border-zinc-800 rounded-full p-0.5 text-[11px]">
-                <button
+                  <button
                   type="button"
-                  onClick={() => setCompositionMode("scene")}
+                  onClick={() => changeCompositionMode("scene")}
+                  aria-pressed={compositionMode === "scene"}
+                  data-seene-chrome="composition-mode-scene"
                   className={`px-2.5 py-0.5 rounded-full font-medium transition-colors ${
                     compositionMode === "scene" ? "bg-zinc-800 text-white font-semibold" : "text-zinc-400 hover:text-zinc-200"
                   }`}
                 >
                   Scene
                 </button>
-                <button
+                  <button
                   type="button"
-                  onClick={() => setCompositionMode("walkthrough")}
+                  onClick={() => changeCompositionMode("walkthrough")}
+                  aria-pressed={compositionMode === "walkthrough"}
+                  data-seene-chrome="composition-mode-scroll"
                   className={`px-2.5 py-0.5 rounded-full font-medium transition-colors ${
                     compositionMode === "walkthrough" ? "bg-zinc-800 text-white font-semibold" : "text-zinc-400 hover:text-zinc-200"
                   }`}
@@ -538,13 +614,13 @@ export function ScenePreview({
                 onChange={updated => setLocalDef(updated)}
                 onSaveDefinition={onSaveDefinition}
                 compositionMode={compositionMode}
-                onCompositionModeChange={setCompositionMode}
+                onCompositionModeChange={changeCompositionMode}
               />
               <ExportMenu disabled={blocked || !session.durationMs} panelHost={exportPanel} />
             </div>
           </div>
 
-          {onPresentationChange ? <PresentationPicker value={presentation} onChange={onPresentationChange} /> : null}
+          {onPresentationChange ? <PresentationPicker value={presentation} onChange={onPresentationChange} disabled={compositionMode === "walkthrough"} /> : null}
           {onTransitionChange ? <TransitionPicker value={transition} onChange={onTransitionChange} /> : null}
           {!definition ? <GettingStarted /> : null}
 

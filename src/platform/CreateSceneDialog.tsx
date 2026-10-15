@@ -24,6 +24,7 @@ export function CreateSceneDialog({ project, onClose, onCreated }: { project: st
   const [activeTab, setActiveTab] = useState<"all" | "page" | "section" | "component">("all");
   const [choice, setChoice] = useState("");
   const [selectedSections, setSelectedSections] = useState<Selection[]>([]);
+  const [includeLayoutChrome, setIncludeLayoutChrome] = useState(false);
   const [customHostPath, setCustomHostPath] = useState("");
   const [showCustomPath, setShowCustomPath] = useState(false);
   const [width, setWidth] = useState<number>(1400);
@@ -99,12 +100,18 @@ export function CreateSceneDialog({ project, onClose, onCreated }: { project: st
     try {
       let created;
       if (compositionType === "walkthrough") {
+        const layoutComponents = includeLayoutChrome
+          ? allFiles.filter(file => /(?:^|\/)components\/common\/(?:navbar|footer)\.[jt]sx?$/i.test(file.path))
+          : [];
+        const navbar = layoutComponents.filter(file => /\/navbar\.[jt]sx?$/i.test(file.path)).map(file => ({ file: file.path, title: file.title }));
+        const footer = layoutComponents.filter(file => /\/footer\.[jt]sx?$/i.test(file.path)).map(file => ({ file: file.path, title: file.title }));
+        const sections = [...navbar, ...selectedSections, ...footer].filter((section, index, items) => items.findIndex(candidate => candidate.file === section.file) === index);
         created = await platformApi.createScene({
           path: project,
           id,
           title: title.trim(),
           compositionType: "walkthrough",
-          sections: selectedSections.length > 0 ? selectedSections : undefined,
+          sections: sections.length > 0 ? sections : undefined,
           content: selectedSections.length > 0 ? selectedSections[0] : customHostPath.trim() ? { file: customHostPath.trim() } : undefined,
         });
       } else {
@@ -259,6 +266,19 @@ export function CreateSceneDialog({ project, onClose, onCreated }: { project: st
             ) : null}
 
             {/* Ordered Sections List for Walkthrough */}
+            {compositionType === "walkthrough" ? (
+              <label className="flex items-center gap-2 rounded-xl border border-[var(--seene-border)] bg-[var(--seene-surface)] px-3 py-2 text-xs text-[var(--seene-text)]">
+                <input
+                  type="checkbox"
+                  aria-label="Include layout navbar and footer"
+                  checked={includeLayoutChrome}
+                  disabled={!allFiles.some(file => /(?:^|\/)components\/common\/(?:navbar|footer)\.[jt]sx?$/i.test(file.path))}
+                  onChange={event => setIncludeLayoutChrome(event.target.checked)}
+                />
+                Include layout navbar/footer
+              </label>
+            ) : null}
+
             {compositionType === "walkthrough" && selectedSections.length > 0 ? (
               <div className="space-y-2 rounded-xl border border-[var(--seene-accent)]/40 bg-[var(--seene-surface)] p-3">
                 <div className="flex items-center justify-between">
