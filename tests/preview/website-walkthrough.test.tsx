@@ -117,6 +117,20 @@ describe("WebsiteWalkthrough Phase 1 Functionality", () => {
     await waitFor(() => expect(viewport.scrollTop).toBeGreaterThan(1550));
   });
 
+  it("keeps native scroll position when no timeline is configured", () => {
+    const { container } = render(
+      <WebsiteWalkthrough>
+        <div style={{ height: 2000 }}>Tall standalone story</div>
+      </WebsiteWalkthrough>,
+    );
+    const viewport = container.querySelector(".website-walkthrough-viewport") as HTMLElement;
+    Object.defineProperty(viewport, "scrollHeight", { value: 2000, configurable: true });
+    Object.defineProperty(viewport, "clientHeight", { value: 400, configurable: true });
+    viewport.scrollTop = 600;
+    fireEvent.scroll(viewport);
+    expect(viewport.scrollTop).toBe(600);
+  });
+
   it("defaults walkthrough scenes to a flat camera when no preset is supplied", () => {
     const definition = {
       compositionType: "walkthrough" as const,

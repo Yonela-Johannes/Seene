@@ -4,8 +4,9 @@
  * WHERE: platform views render the public site and project console.
  */
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { Menu as MenuGlyph, X as CloseGlyph } from "lucide-react";
 import { SEENE_BRAND } from "../core/branding";
-import { HOME_ROUTE, PROJECTS_ROUTE } from "./api";
+import { HOME_ROUTE, PROJECTS_ROUTE, WALKTHROUGH_DEMO_URL } from "./api";
 
 export type RailSegment = { kind: "solid" | "dashed"; flex: number };
 export const DEFAULT_RAIL: RailSegment[] = [
@@ -123,23 +124,49 @@ export function SearchIcon() {
   );
 }
 
-export function MenuIcon() {
+export function MenuIcon({ open = false }: { open?: boolean } = {}) {
+  const Icon = open ? CloseGlyph : MenuGlyph;
   return (
-    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
-      <path d="M2 4h12M2 8h12M2 12h12" strokeLinecap="round" />
-    </svg>
+    <Icon size={16} strokeWidth={1.8} aria-hidden="true" />
   );
 }
 
-export function SiteHeader({ onPalette }: { onPalette: () => void }) {
-  const [openMenu, setOpenMenu] = useState<string | null>(null);
+export function SiteHeader({ onPalette, homeHref = HOME_ROUTE, installHref = "#install" }: { onPalette: () => void; homeHref?: string; installHref?: string }) {
   const [mobileOpen, setMobileOpen] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const firstMenuLinkRef = useRef<HTMLAnchorElement>(null);
   useEffect(() => {
     const palette = () => onPalette();
     window.addEventListener("seene:palette", palette);
     return () => window.removeEventListener("seene:palette", palette);
   }, [onPalette]);
   const mac = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform);
+
+  useEffect(() => {
+    if (!mobileOpen) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setMobileOpen(false);
+        requestAnimationFrame(() => triggerRef.current?.focus());
+      }
+    };
+    const media = window.matchMedia("(max-width: 1023px)");
+    const previousOverflow = document.body.style.overflow;
+    const updateScrollLock = () => {
+      document.body.style.overflow = media.matches ? "hidden" : previousOverflow;
+    };
+    updateScrollLock();
+    media.addEventListener("change", updateScrollLock);
+    window.addEventListener("keydown", onKeyDown);
+    requestAnimationFrame(() => firstMenuLinkRef.current?.focus());
+    return () => {
+      media.removeEventListener("change", updateScrollLock);
+      window.removeEventListener("keydown", onKeyDown);
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [mobileOpen]);
+
+  const closeMenu = () => setMobileOpen(false);
   return (
     <header className="seene-site-header" role="banner">
       <div className="seene-frame-row" style={{ height: 57 }}>
@@ -148,11 +175,11 @@ export function SiteHeader({ onPalette }: { onPalette: () => void }) {
         <div className="seene-frame-content">
           <nav aria-label="Primary" className="flex h-[57px] items-center justify-between gap-3">
             <div className="flex min-w-0 items-center gap-1">
-              <a href={HOME_ROUTE} className="flex items-center gap-2" aria-label="Seene home">
+              <a href={homeHref} className="flex items-center gap-2" aria-label="Seene home">
                 <span className="text-[15px] font-semibold tracking-tight">{SEENE_BRAND.name}</span>
               </a>
               <div className="ml-3 hidden items-center gap-0.5 lg:flex">
-                <a className="seene-nav-item" href="#install">Install</a>
+                <a className="seene-nav-item" href={installHref}>Install</a>
                 <a className="seene-nav-item" href={SEENE_BRAND.docs} target="_blank" rel="noreferrer noopener">Docs</a>
                 <a className="seene-nav-item" href={SEENE_BRAND.examples} target="_blank" rel="noreferrer noopener">Examples</a>
               </div>
@@ -161,10 +188,19 @@ export function SiteHeader({ onPalette }: { onPalette: () => void }) {
               <a className="seene-btn seene-btn-ghost seene-btn-nav" href={SEENE_BRAND.repository} target="_blank" rel="noreferrer noopener">
                 GitHub
               </a>
-              <a className="seene-btn seene-btn-primary seene-btn-nav" href="#install">Get started <Kbd onPrimary>I</Kbd></a>
+              <a className="seene-btn seene-btn-primary seene-btn-nav" href={installHref}>Get started <Kbd onPrimary>I</Kbd></a>
             </div>
-            <button type="button" className="seene-btn seene-btn-secondary seene-btn-nav lg:hidden" aria-label="Menu" aria-expanded={mobileOpen} onClick={() => setMobileOpen(value => !value)}>
-              <MenuIcon />
+            <button
+              ref={triggerRef}
+              type="button"
+              className="seene-btn seene-btn-secondary seene-btn-nav"
+              aria-label={mobileOpen ? "Close navigation menu" : "Open navigation menu"}
+              aria-expanded={mobileOpen}
+              aria-controls="seene-site-menu"
+              title={mobileOpen ? "Close navigation menu" : "Open navigation menu"}
+              onClick={() => setMobileOpen(value => !value)}
+            >
+              <MenuIcon open={mobileOpen} />
             </button>
           </nav>
         </div>
@@ -172,15 +208,19 @@ export function SiteHeader({ onPalette }: { onPalette: () => void }) {
         <div className="seene-gutter seene-gutter-right" aria-hidden="true" />
       </div>
       {mobileOpen && (
-        <div className="lg:hidden" style={{ borderTop: "1px solid var(--seene-border)", background: "var(--seene-surface)" }}>
-          <nav aria-label="Mobile" className="flex flex-col gap-1 p-4">
-            <a className="seene-nav-item" href="#install" onClick={() => setMobileOpen(false)}>Install</a>
-            <a className="seene-nav-item" href={SEENE_BRAND.docs} target="_blank" rel="noreferrer noopener">Docs</a>
-            <a className="seene-nav-item" href={SEENE_BRAND.examples} target="_blank" rel="noreferrer noopener">Examples</a>
-            <div className="mt-2 flex flex-wrap gap-2">
-              <a className="seene-btn seene-btn-secondary seene-btn-nav" href={SEENE_BRAND.repository} target="_blank" rel="noreferrer noopener">GitHub</a>
-              <a className="seene-btn seene-btn-primary seene-btn-nav" href="#install" onClick={() => setMobileOpen(false)}>Get started</a>
-            </div>
+        <div
+          id="seene-site-menu"
+          className="seene-site-menu absolute inset-x-0 top-full z-[49] h-[calc(100dvh-58px)] overflow-y-auto border-t border-[var(--seene-border)] bg-[var(--seene-bg)] lg:inset-x-auto lg:right-6 lg:z-[60] lg:mt-2 lg:h-auto lg:max-h-[calc(100dvh-76px)] lg:w-80 lg:rounded-md lg:border lg:bg-[var(--seene-surface)] lg:shadow-xl"
+          onClick={event => {
+            if (event.target === event.currentTarget) closeMenu();
+          }}
+        >
+          <nav aria-label="Site menu" className="mx-auto flex max-w-3xl flex-col gap-1 p-4 lg:p-2">
+            <a ref={firstMenuLinkRef} className="seene-nav-item h-10" href={homeHref} onClick={closeMenu}>Home</a>
+            <a className="seene-nav-item h-10" href="#demo" onClick={closeMenu}>Why I Built Seene</a>
+            <a className="seene-nav-item h-10" href={WALKTHROUGH_DEMO_URL} onClick={closeMenu}>Demo</a>
+            <a className="seene-nav-item h-10" href={installHref} onClick={closeMenu}>Documentation / Getting Started</a>
+            <a className="seene-nav-item h-10" href={SEENE_BRAND.repository} target="_blank" rel="noreferrer noopener" onClick={closeMenu}>GitHub</a>
           </nav>
         </div>
       )}

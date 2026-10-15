@@ -193,4 +193,65 @@ body {
 .seene-hero-drop { animation: seene-hero-drop 1.6s var(--seene-ease-out) 1.4s both; }
 @media (prefers-reduced-motion: reduce) { .seene-hero-rise, .seene-hero-drop { animation: none; } }
 
+.seene-site-menu { animation: seene-menu-enter 180ms var(--seene-ease-out) both; }
+.seene-site-menu a { min-height: 2.5rem; justify-content: flex-start; }
+.home-story-kicker { color: var(--seene-accent); font-family: var(--seene-font-mono); font-size: .72rem; font-weight: 600; letter-spacing: .08em; }
+.demo-fixture-shell {
+  min-height: 100vh;
+  color-scheme: dark;
+  --seene-bg: hsl(219 92% 2%);
+  --seene-surface: #0d1119;
+  --seene-surface-2: #141a26;
+  --seene-border: #1d2637;
+  --seene-border-text: #2b3a52;
+  --seene-text: #eef1f6;
+  --seene-text-muted: #9aa4b8;
+  --seene-accent: hsl(219 90% 68%);
+  --seene-accent-hover: hsl(219 90% 74%);
+  --seene-accent-edge: hsl(219 90% 52%);
+  --seene-accent-soft: hsl(219 90% 68% / .14);
+  --seene-cream: #0d1119;
+  --seene-offgray-50: #141a26;
+  --seene-offgray-100: #1d2637;
+  --seene-offgray-200: #2b3a52;
+  --seene-nav-bg: rgb(4 7 13 / .88);
+  --seene-font-ui: "IBM Plex Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --seene-font-heading: "IBM Plex Serif", Georgia, "Times New Roman", serif;
+  --seene-font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+.demo-fixture-shell > .seene-site-header > .seene-frame-row { width: calc(100% - var(--demo-story-scrollbar-width, 0px)); }
+.demo-founder-story-page { color: var(--seene-text); background: var(--seene-bg); }
+.demo-founder-story-list { width: 100%; height: 100%; overflow-y: auto; overscroll-behavior: contain; border: 1px solid var(--seene-border); border-radius: .5rem; background: var(--seene-bg); scrollbar-color: var(--seene-border-text) transparent; scroll-snap-type: y mandatory; }
+.demo-founder-story-list:focus-visible { outline: 2px solid var(--seene-accent); outline-offset: -2px; }
+.demo-founder-story-screen { position: relative; display: flex; min-height: 100%; box-sizing: border-box; align-items: center; overflow: hidden; padding: 1.25rem 1.5rem; color: var(--seene-text); background: var(--seene-bg); scroll-snap-align: start; }
+.demo-founder-story-screen-full { min-height: 0; padding: 0; }
+.demo-founder-story-screen-full .seene-frame { width: 100%; height: 100%; }
+.demo-founder-story-screen-full .seene-frame-row { height: 100%; }
+.demo-founder-story-screen-full .seene-frame-content { display: flex; min-height: 100%; align-items: center; }
+.demo-founder-story-content { position: relative; z-index: 1; width: 100%; }
+.demo-founder-story-screen-full .demo-founder-story-content { display: flex; min-height: 100%; max-width: 56rem; flex-direction: column; justify-content: center; padding-left: 0; }
+.demo-founder-story-kicker { margin: 0; color: var(--seene-accent); font-family: var(--seene-font-mono); font-size: .72rem; font-weight: 600; letter-spacing: .08em; }
+.demo-founder-story-title { max-width: 50rem; margin: .8rem 0 .75rem; color: var(--seene-text); font-family: var(--seene-font-heading); font-size: 1.55rem; font-weight: 500; line-height: 1.12; letter-spacing: 0; text-wrap: balance; }
+.demo-founder-story-screen-full .demo-founder-story-title { margin: 1.5rem 0 1.25rem; font-size: 4rem; line-height: 1.06; }
+.demo-founder-story-copy { max-width: 42rem; margin: 0; color: var(--seene-text-muted); font-size: .75rem; line-height: 1.55; }
+.demo-founder-story-screen-full .demo-founder-story-copy { font-size: 1.125rem; line-height: 1.85; }
+.demo-founder-story-progress { display: flex; width: min(10rem, 70%); align-items: center; gap: .6rem; margin-top: 1.1rem; color: var(--seene-text-muted); font-family: var(--seene-font-mono); font-size: .65rem; }
+.demo-founder-story-screen-full .demo-founder-story-progress { width: min(14rem, 60%); margin-top: 2.5rem; font-size: .7rem; }
+.demo-founder-story-progress-line { height: 1px; flex: 1; background: linear-gradient(to right, var(--seene-accent), var(--seene-border-text)); }
+.demo-founder-story-cta { position: relative; z-index: 1; display: inline-flex; width: fit-content; align-items: center; gap: .5rem; margin-top: 1.25rem; border: 1px solid var(--seene-accent); border-radius: .25rem; padding: .6rem .85rem; background: var(--seene-accent); color: #fff; font-size: .75rem; font-weight: 600; text-decoration: none; }
+.demo-founder-story-cta:hover { background: var(--seene-accent-hover); }
+.demo-founder-story-screen-full .demo-founder-story-cta { margin-top: 2rem; }
+@keyframes seene-menu-enter { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: translateY(0); } }
+@media (max-width: 767px) {
+  .demo-founder-story-screen-full .demo-founder-story-content { padding-left: 0; }
+  .demo-founder-story-screen-full .demo-founder-story-title { font-size: 2.75rem; }
+  .demo-founder-story-screen-full .demo-founder-story-copy { font-size: 1rem; line-height: 1.75; }
+}
+@media (max-width: 420px) {
+  .demo-founder-story-screen-full .demo-founder-story-title { font-size: 2.25rem; }
+  .demo-founder-story-screen-card .demo-founder-story-title { font-size: 1.35rem; }
+}
+@media (prefers-reduced-motion: reduce) { .demo-founder-story-list { scroll-snap-type: none; } }
+@media (prefers-reduced-motion: reduce) { .seene-site-menu { animation: none; } }
+
 

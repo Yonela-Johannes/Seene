@@ -377,14 +377,14 @@ export function WebsiteWalkthrough(props: WebsiteWalkthroughProps): ReactNode {
       if (Math.abs(viewportRef.current.scrollTop - nextScroll) > 2) {
         viewportRef.current.scrollTop = nextScroll;
       }
-    } else if (viewportRef.current.scrollTop !== 0) {
+    } else if (durationValue > 0 && viewportRef.current.scrollTop !== 0) {
       viewportRef.current.scrollTop = 0;
     }
   }, [seekTimeValue, durationValue, sectionBoundaries, maxScrollDistance, holdAtTopMs, holdAtBottomMs, startOffset, endOffset, easing, resolveOffset]);
 
   // Synchronize manual user scrolling to timeline time
   const handleViewportScroll = useCallback(() => {
-    if (!viewportRef.current || isPlayingValue) return;
+    if (!enableTimeline || !viewportRef.current || isPlayingValue) return;
     const currentScroll = viewportRef.current.scrollTop;
     const totalDuration = durationValue || 5000;
     const range = maxScrollDistanceRef.current || 1;
@@ -410,7 +410,7 @@ export function WebsiteWalkthrough(props: WebsiteWalkthroughProps): ReactNode {
         onSeek?.(bestTime);
       }
     }
-  }, [durationValue, isPlayingValue, seekTimeValue, seekTime, onSeek, holdAtTopMs, holdAtBottomMs, startOffset, endOffset, easing, resolveOffset]);
+  }, [enableTimeline, durationValue, isPlayingValue, seekTimeValue, seekTime, onSeek, holdAtTopMs, holdAtBottomMs, startOffset, endOffset, easing, resolveOffset]);
 
   const handlePlayPause = useCallback(() => {
     if (!enableTimeline) return;

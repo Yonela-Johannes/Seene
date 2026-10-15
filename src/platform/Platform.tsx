@@ -6,7 +6,7 @@ import { PresentationView } from "./PresentationView";
 import { PROJECTS_ROUTE } from "./api";
 import { useHashRoute } from "./data";
 import { SiteHeader, useSiteShortcuts } from "./site";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 /** The command menu offers real navigation and the install command.
  * There is no account, so nothing here signs a user in or out. */
@@ -19,6 +19,12 @@ export function Platform() {
   const route = useHashRoute();
   const [paletteOpen, setPaletteOpen] = useState(false);
   useSiteShortcuts();
+  useEffect(() => {
+    if (route.view !== "home") return;
+    const target = window.location.hash.slice(1);
+    if (target !== "demo" && target !== "install") return;
+    requestAnimationFrame(() => document.getElementById(target)?.scrollIntoView({ behavior: "smooth" }));
+  }, [route.view]);
   return (
     <div className="min-h-screen bg-[var(--seene-bg)] text-[var(--seene-text)]">
       <SiteHeader onPalette={() => setPaletteOpen(true)} />

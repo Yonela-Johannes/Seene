@@ -1,5 +1,62 @@
 import {test,expect} from '@playwright/test';
 
+test('site navigation menu works on desktop and mobile with keyboard and scroll handling',async({page})=>{
+ for(const viewport of [{width:1440,height:1000},{width:390,height:844}]){
+  await page.setViewportSize(viewport);
+  await page.goto('/');
+  const trigger=page.getByRole('button',{name:'Open navigation menu'});
+  await expect(trigger).toBeVisible();
+  await trigger.click();
+  await expect(page.getByRole('button',{name:'Close navigation menu'})).toHaveAttribute('aria-expanded','true');
+  const menu=page.getByRole('navigation',{name:'Site menu'});
+  await expect(menu).toBeVisible();
+  for(const [label,href] of [['Home','#/'],['Why I Built Seene','#demo'],['Demo','/tests/preview/walkthrough-fixture.html?seene-mode=scroll'],['Documentation / Getting Started','#install'],['GitHub','https://github.com/thatg33k-t33/Seene']]){
+   await expect(menu.getByRole('link',{name:label,exact:true})).toHaveAttribute('href',href);
+  }
+  if(viewport.width<1024) await expect.poll(()=>page.locator('body').evaluate(element=>getComputedStyle(element).overflowY)).toBe('hidden');
+  await page.getByRole('button',{name:'Close navigation menu'}).click();
+  await expect(page.getByRole('button',{name:'Open navigation menu'})).toHaveAttribute('aria-expanded','false');
+  await page.getByRole('button',{name:'Open navigation menu'}).click();
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('button',{name:'Open navigation menu'})).toHaveAttribute('aria-expanded','false');
+  await expect(page.getByRole('button',{name:'Open navigation menu'})).toBeFocused();
+  await expect.poll(()=>page.locator('body').evaluate(element=>getComputedStyle(element).overflowY)).not.toBe('hidden');
+  await page.getByRole('button',{name:'Open navigation menu'}).click();
+  await menu.getByRole('link',{name:'Why I Built Seene'}).click();
+  await expect(page).toHaveURL(/#demo$/);
+  await expect(page.getByRole('button',{name:'Open navigation menu'})).toHaveAttribute('aria-expanded','false');
+  await expect(page.locator('#demo')).toBeInViewport();
+  await page.locator('#demo').getByRole('button',{name:'Website Walkthrough'}).click();
+  await expect(page.locator('[data-testid^="home-demo-story-"]')).toHaveCount(5);
+ }
+});
+
+test('homepage demo presents the founder story in its existing walkthrough preview',async({page})=>{
+ await page.goto('/#/story');
+ await expect(page.getByRole('heading',{name:'Present your React interfaces as cinematic scenes.'})).toBeVisible();
+ await expect(page.locator('.founder-story-page')).toHaveCount(0);
+ await page.goto('/#demo');
+ await expect(page.locator('#demo')).toBeInViewport();
+ await page.locator('#demo').getByRole('button',{name:'Website Walkthrough'}).click();
+ const screens=page.locator('[data-testid^="home-demo-story-"]');
+ await expect(screens).toHaveCount(5);
+ await expect(screens.nth(0)).toContainText('Every project deserved to be seen.');
+ await expect(screens.nth(4)).toContainText('So I built Seene.');
+ await expect(page.getByRole('link',{name:'Watch the demo'})).toHaveAttribute('href','/tests/preview/walkthrough-fixture.html?seene-mode=scroll');
+ await expect(page.getByRole('link',{name:'Experience Seene'})).toHaveAttribute('href','#install');
+ await page.getByRole('button',{name:'Open navigation menu'}).click();
+ await page.getByRole('navigation',{name:'Site menu'}).getByRole('link',{name:'Demo',exact:true}).click();
+ await expect(page).toHaveURL(/\/tests\/preview\/walkthrough-fixture\.html\?seene-mode=scroll$/);
+ await expect(page.getByRole('navigation',{name:'Primary'})).toBeVisible();
+ await expect(page.getByRole('heading',{name:'Why I Built Seene'})).toBeVisible();
+ await expect(page.getByTestId('scene-time')).toHaveText('0:00 / 0:20');
+ await page.goto('/#demo');
+ await page.getByRole('button',{name:'Open navigation menu'}).click();
+ await page.getByRole('navigation',{name:'Site menu'}).getByRole('link',{name:'Home'}).click();
+ await expect(page).toHaveURL(/#\/$/);
+ await expect(page.getByRole('heading',{name:'Present your React interfaces as cinematic scenes.'})).toBeVisible();
+});
+
 test('walkthrough scroll maps frame 0, midpoint and end on a flat sharp canvas',async({page})=>{
  await page.goto('/tests/preview/walkthrough-fixture.html?seene-mode=scene&seene-preset=overview');
  const oldSlider=page.getByRole('slider',{name:'Scene time'});
@@ -12,12 +69,34 @@ test('walkthrough scroll maps frame 0, midpoint and end on a flat sharp canvas',
  await page.goto('/tests/preview/walkthrough-fixture.html?seene-mode=scroll&seene-preset=overview');
  const viewport=page.locator('.website-walkthrough-viewport');
  const slider=page.getByRole('slider',{name:'Scene time'});
+ await expect(page.getByRole('navigation',{name:'Primary'})).toBeVisible();
+ await expect(page.locator('.demo-founder-story-screen-full .seene-frame')).toHaveCount(5);
+ await expect.poll(()=>page.evaluate(()=>{const section=document.querySelector('.demo-founder-story-screen')!;const frame=section.querySelector('.seene-frame')!;return Math.abs(section.getBoundingClientRect().width-frame.getBoundingClientRect().width)})).toBeLessThanOrEqual(1);
+ await expect.poll(()=>page.evaluate(()=>Math.abs(document.querySelector('.seene-site-header .seene-frame-row')!.getBoundingClientRect().width-document.querySelector('.demo-founder-story-screen')!.getBoundingClientRect().width))).toBeLessThanOrEqual(1);
+ await expect.poll(()=>page.evaluate(()=>Math.abs(document.querySelector('.seene-site-header [aria-label="Seene home"]')!.getBoundingClientRect().left-document.querySelector('.demo-founder-story-screen .demo-founder-story-kicker')!.getBoundingClientRect().left))).toBeLessThanOrEqual(1);
+ await expect.poll(()=>page.evaluate(()=>{const screens=[...document.querySelectorAll('.demo-founder-story-screen')];const railPositions=(container:ParentNode,selector:string)=>[...container.querySelectorAll(selector)].map(rail=>Math.round(rail.getBoundingClientRect().left+rail.getBoundingClientRect().width/2));const header=railPositions(document.querySelector('.seene-site-header')!,'.seene-rail');return screens.slice(1,4).every(screen=>JSON.stringify(railPositions(screen,'[data-seene-rail]'))===JSON.stringify(header))})).toBe(true);
+ const storyTitles=[
+  'Every project deserved to be seen.',
+  'Press record. Start scrolling.',
+  "The work was good. The process wasn't.",
+  'There had to be a better way.',
+  'So I built Seene.',
+ ];
+ const storyBodies=[
+  'I wanted to showcase the actual websites and projects I built, from beginning to end.',
+  "Every time I wanted to demonstrate a project, I'd activate the screen recorder and manually scroll from the top of the website to the bottom.",
+  'The scrolling was inconsistent, and getting the pacing right required repeated manual effort.',
+  'I wanted a tool I could install in a project, configure, and reuse whenever I needed a consistent presentation.',
+  'Seene turns website presentations into a more deliberate, controlled, and repeatable process.',
+ ];
+ expect(await page.locator('[data-testid^="walkthrough-section-"] h1').allTextContents()).toEqual(storyTitles);
+ expect(await page.locator('[data-testid^="walkthrough-section-"] h1 + p').allTextContents()).toEqual(storyBodies);
  await expect(page.getByRole('button',{name:'Scroll',exact:true})).toHaveAttribute('aria-pressed','true');
  await expect(page.getByRole('button',{name:'Scene',exact:true})).toHaveAttribute('aria-pressed','false');
  await expect(page.getByRole('button',{name:'Overview',exact:true})).toBeDisabled();
  await expect(page.getByRole('button',{name:'Overview',exact:true})).toHaveAttribute('title','Presets apply in Scene mode');
- await expect(slider).toHaveAttribute('max','60000');
- await expect(page.getByTestId('scene-time')).toHaveText('0:00 / 1:00');
+ await expect(slider).toHaveAttribute('max','20000');
+ await expect(page.getByTestId('scene-time')).toHaveText('0:00 / 0:20');
  await expect(page.locator('.website-walkthrough-timeline-controls')).toHaveCount(0);
  await expect(page.locator('[data-seene-capture="scene"]')).toHaveAttribute('data-seene-valid','true');
  await expect(page.locator('[data-seene-id="host"]')).toHaveAttribute('data-seene-blur','0');
@@ -33,23 +112,28 @@ test('walkthrough scroll maps frame 0, midpoint and end on a flat sharp canvas',
  expect(geometry.find(value=>value.selector==='[data-seene-stage]')?.transform).toBe('matrix(1, 0, 0, 1, 0, 0)');
  await slider.fill('0');
  await expect.poll(()=>viewport.evaluate(element=>(element as HTMLElement).scrollTop)).toBe(0);
+ await expect(page.getByTestId('walkthrough-section-0')).toBeInViewport();
  await page.screenshot({path:'test-results/walkthrough-frame-0.png'});
- await slider.fill('30000');
+ await slider.fill('10000');
  await expect.poll(()=>viewport.evaluate(element=>{const item=element as HTMLElement;return Math.abs(item.scrollTop-(item.scrollHeight-item.clientHeight)/2)})).toBeLessThanOrEqual(2);
+ await expect(page.getByTestId('walkthrough-section-2')).toBeInViewport();
  await page.screenshot({path:'test-results/walkthrough-frame-mid.png'});
- await slider.fill('60000');
+ await slider.fill('20000');
  await expect.poll(()=>viewport.evaluate(element=>{const item=element as HTMLElement;return Math.abs(item.scrollTop-(item.scrollHeight-item.clientHeight))})).toBeLessThanOrEqual(2);
  await expect(page.getByTestId('walkthrough-section-4')).toBeVisible();
+ await expect(page.getByRole('link',{name:'Experience Seene'})).toBeVisible();
  await page.screenshot({path:'test-results/walkthrough-frame-end.png'});
 });
 
 test('walkthrough mode, presets, Inspector, timeline and Export controls stay synchronized',async({page})=>{
  await page.goto('/tests/preview/walkthrough-fixture.html?seene-mode=scroll');
+ await page.evaluate(() => localStorage.clear());
+ await page.reload();
  const slider=page.getByRole('slider',{name:'Scene time'});
- await slider.fill('30000');
+ await slider.fill('10000');
  await page.getByRole('button',{name:'Scene',exact:true}).click();
  await expect(page).toHaveURL(/seene-mode=scene/);
- await expect(slider).toHaveValue('30000');
+ await expect(slider).toHaveValue('10000');
  const presetNames=['Clean','Depth','Cinematic','Floating','Focus','Showcase','Minimal','Orbit','Reveal','Product Tour','Editorial','Parallax','Dramatic Push','Overview','Detail Focus'];
  const cameraSignatures=new Set<string>();
  for(const name of presetNames){
@@ -92,6 +176,7 @@ test('walkthrough mode, presets, Inspector, timeline and Export controls stay sy
  await page.getByLabel('Walkthrough end offset').fill('05 / Closing');
  await page.getByLabel('Autoplay walkthrough').check();
  await page.getByTestId('seene-inspector-save').click();
+ await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('walkthrough-fixture-definition') ?? '{}').walkthroughSettings?.holdAtTopMs)).toBe(2000);
  await page.keyboard.press('Escape');
  await expect(page.getByRole('button',{name:'Scene Inspector'})).toHaveAttribute('aria-expanded','false');
  await expect(page.getByRole('button',{name:'Scene Inspector'})).toBeFocused();

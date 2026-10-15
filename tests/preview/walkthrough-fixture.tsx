@@ -1,7 +1,10 @@
 import { createRoot } from "react-dom/client";
-import { useState } from "react";
+import { useLayoutEffect, useState, type CSSProperties } from "react";
+import "../../src/index.css";
 import { ScenePreview } from "../../src/preview";
 import { Surface, type PreviewDefinitionInput } from "../../src";
+import { DEFAULT_RAIL, FrameSection, SiteHeader } from "../../src/platform/site";
+import { FOUNDER_STORY_SCREENS } from "../../src/platform/founder-story";
 
 const definition: PreviewDefinitionInput = {
   width: 1440,
@@ -15,28 +18,39 @@ const definition: PreviewDefinitionInput = {
     focus: { distance: 608, fStop: 2, focalLength: 50, maxBlur: 12 },
     nodes: [{ id: "host" }],
   },
-  motion: { durationMs: 60000, speed: 1, tracks: [] },
+  motion: { durationMs: 20000, speed: 1, tracks: [] },
 };
 
 function Page() {
   return (
     <Surface id="host" style={{ width: "100%", height: "auto", minHeight: "100vh" }}>
-      <main data-testid="walkthrough-page" style={{ height: "500vh", color: "#18212b", background: "#f3f1e8" }}>
-        {[
-          ["01 / Opening", "A clear beginning."],
-          ["02 / Detail", "The story continues."],
-          ["03 / Proof", "A middle frame with room to breathe."],
-          ["04 / Craft", "Small details, carefully made."],
-          ["05 / Closing", "The final section is reachable."],
-        ].map(([label, title], index) => (
+      <main className="demo-founder-story-page" data-testid="walkthrough-page" style={{ height: "500vh" }}>
+        {FOUNDER_STORY_SCREENS.map((screen, index) => (
           <section
-            key={label}
+            key={screen.label}
+            className="demo-founder-story-screen demo-founder-story-screen-full"
             data-testid={`walkthrough-section-${index}`}
-            data-section-id={label}
-            style={{ height: "100vh", boxSizing: "border-box", padding: "10vh 10vw", background: index % 2 ? "#d5e4e1" : "#f3f1e8" }}
+            data-section-id={screen.label}
+            data-screen-number={String(index + 1).padStart(2, "0")}
+            style={{ height: "100vh", boxSizing: "border-box" }}
           >
-            <p style={{ fontSize: 14, fontWeight: 700, textTransform: "uppercase" }}>{label}</p>
-            <h1 style={{ maxWidth: 700, fontSize: 64, lineHeight: 1.05 }}>{title}</h1>
+            <FrameSection label={screen.label} edge="both" rails={DEFAULT_RAIL}>
+              <div className="demo-founder-story-content">
+                <p className="demo-founder-story-kicker">{screen.label}</p>
+                <h1 className="demo-founder-story-title">{screen.title}</h1>
+                <p className="demo-founder-story-copy">{screen.body}</p>
+                <div className="demo-founder-story-progress" aria-hidden="true">
+                  <span>{String(index + 1).padStart(2, "0")}</span>
+                  <span className="demo-founder-story-progress-line" />
+                  <span>05</span>
+                </div>
+                {index === FOUNDER_STORY_SCREENS.length - 1 ? (
+                  <a className="demo-founder-story-cta" href="/#install">
+                    Experience Seene <span aria-hidden="true" style={{ marginLeft: 8 }}>→</span>
+                  </a>
+                ) : null}
+              </div>
+            </FrameSection>
           </section>
         ))}
       </main>
@@ -45,11 +59,34 @@ function Page() {
 }
 
 function BrowserFixture() {
+  const [scrollbarWidth, setScrollbarWidth] = useState(0);
   const [sceneDefinition, setSceneDefinition] = useState<PreviewDefinitionInput>(() => {
     const saved = localStorage.getItem("walkthrough-fixture-definition");
     return saved ? JSON.parse(saved) as PreviewDefinitionInput : definition;
   });
   const [presentation, setPresentation] = useState<string | undefined>(() => new URL(window.location.href).searchParams.get("seene-preset") ?? undefined);
+  useLayoutEffect(() => {
+    let viewport: HTMLDivElement | null = null;
+    let resizeObserver: ResizeObserver;
+    function measure() {
+      const nextViewport = document.querySelector<HTMLDivElement>(".website-walkthrough-viewport");
+      if (!nextViewport) return;
+      if (viewport !== nextViewport) {
+        if (viewport) resizeObserver.unobserve(viewport);
+        viewport = nextViewport;
+        resizeObserver.observe(viewport);
+      }
+      setScrollbarWidth(viewport.offsetWidth - viewport.clientWidth);
+    }
+    resizeObserver = new ResizeObserver(measure);
+    measure();
+    const mutationObserver = new MutationObserver(measure);
+    mutationObserver.observe(document.body, { childList: true, subtree: true });
+    return () => {
+      mutationObserver.disconnect();
+      resizeObserver.disconnect();
+    };
+  }, []);
   const changePresentation = (value: string) => {
     const next = value === "authored" ? undefined : value;
     setPresentation(next);
@@ -59,18 +96,21 @@ function BrowserFixture() {
     window.history.replaceState({}, "", url.pathname + url.search + url.hash);
   };
   return (
-    <ScenePreview
-      definition={sceneDefinition}
-      title="Walkthrough fixture"
-      presentation={presentation}
-      onPresentationChange={changePresentation}
-      onSaveDefinition={updated => {
-        setSceneDefinition(updated);
-        localStorage.setItem("walkthrough-fixture-definition", JSON.stringify(updated));
-      }}
-    >
-      <Page />
-    </ScenePreview>
+    <div className="demo-fixture-shell" style={{ "--demo-story-scrollbar-width": `${scrollbarWidth}px` } as CSSProperties}>
+      <SiteHeader onPalette={() => {}} homeHref="/#/" installHref="/#install" />
+      <ScenePreview
+        definition={sceneDefinition}
+        title="Why I Built Seene"
+        presentation={presentation}
+        onPresentationChange={changePresentation}
+        onSaveDefinition={updated => {
+          setSceneDefinition(updated);
+          localStorage.setItem("walkthrough-fixture-definition", JSON.stringify(updated));
+        }}
+      >
+        <Page />
+      </ScenePreview>
+    </div>
   );
 }
 
