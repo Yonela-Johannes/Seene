@@ -27,6 +27,32 @@ describe("Scene Management and Walkthrough Integration Regression Tests", () => 
     cleanup();
   });
 
+  it("removes the explicit preset query when returning to the authored camera", async () => {
+    window.history.replaceState({}, "", "/?seene-preview=1&seene-scene=hero-scene&seene-preset=depth");
+    const sources = {
+      "src/seene/scenes/hero-scene.scene.json": {
+        version: 1,
+        id: "hero-scene",
+        title: "Hero Showcase",
+        definition: defaultSceneDefinition(),
+      },
+    };
+    const bindings = {
+      "src/seene/scenes/hero-scene.tsx": () => <div>Hero</div>,
+    };
+
+    render(<SceneLibrary sources={sources} bindings={bindings} />);
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Depth" }).getAttribute("aria-pressed")).toBe("true");
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Authored" }));
+
+    await waitFor(() => {
+      expect(new URL(window.location.href).searchParams.has("seene-preset")).toBe(false);
+    });
+  });
+
   it("renders scene list and shows delete button with confirmation step", async () => {
     const sources = {
       "src/seene/scenes/hero-scene.scene.json": {

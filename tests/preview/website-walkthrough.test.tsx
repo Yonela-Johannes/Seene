@@ -137,6 +137,10 @@ describe("WebsiteWalkthrough Phase 1 Functionality", () => {
     expect(camera.rotateY).toBe(0);
     expect(camera.rotateZ).toBe(0);
     expect(camera.perspective).toBeGreaterThanOrEqual(2000);
+
+    const explicitPreset = resolvePresentation(definition, "depth");
+    expect(explicitPreset.scene.camera?.rotateX).toBe(6);
+    expect(explicitPreset.scene.camera?.rotateY).toBe(-16);
   });
 
   it("renders empty sections gracefully", () => {

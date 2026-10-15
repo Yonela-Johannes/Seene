@@ -314,7 +314,7 @@ export function SceneLibrary({
     };
   }, [selectedScene?.id, SelectedComponent, documentRoute]);
 
-  const buildDestination = useCallback((id?: string, nextPresentation?: string) => {
+  const buildDestination = useCallback((id?: string, nextPresentation?: string | null) => {
     const url = new URL(window.location.href);
 
     if (id) {
@@ -330,7 +330,7 @@ export function SceneLibrary({
       url.searchParams.delete(SEENE_APPLICATION_QUERY_PARAM);
     }
 
-    const chosen = nextPresentation ?? presentation;
+    const chosen = nextPresentation === undefined ? presentation : nextPresentation;
     if (chosen) {
       url.searchParams.set(PRESENTATION_QUERY_PARAM, chosen);
     } else {
@@ -372,7 +372,7 @@ export function SceneLibrary({
   const changePresentation = useCallback(
     (next: string) => {
       const chosen = next === AUTHORED_PRESENTATION ? undefined : next;
-      window.history.pushState({}, "", buildDestination(sceneId, chosen));
+      window.history.pushState({}, "", buildDestination(sceneId, chosen ?? null));
       setPresentation(chosen);
     },
     [buildDestination, sceneId],
