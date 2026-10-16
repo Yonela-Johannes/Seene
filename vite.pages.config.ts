@@ -26,6 +26,13 @@ export default defineConfig(() => ({
     outDir: "dist-pages",
     emptyOutDir: true,
     assetsDir: "assets",
+    manifest: true,
+    rollupOptions: {
+      input: {
+        index: path.resolve(process.cwd(), "index.html"),
+        walkthrough: path.resolve(process.cwd(), "tests/preview/walkthrough-fixture.html"),
+      },
+    },
     // Routing is hash-based, so GitHub Pages needs no SPA rewrite and no 404 fallback.
     sourcemap: false,
   },

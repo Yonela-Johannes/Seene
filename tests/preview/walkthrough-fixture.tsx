@@ -45,7 +45,7 @@ function Page() {
                   <span>05</span>
                 </div>
                 {index === FOUNDER_STORY_SCREENS.length - 1 ? (
-                  <a className="demo-founder-story-cta" href="/#install">
+                  <a className="demo-founder-story-cta" href={`${import.meta.env.BASE_URL}#install`}>
                     Experience Seene <span aria-hidden="true" style={{ marginLeft: 8 }}>→</span>
                   </a>
                 ) : null}
@@ -97,7 +97,7 @@ function BrowserFixture() {
   };
   return (
     <div className="demo-fixture-shell" style={{ "--demo-story-scrollbar-width": `${scrollbarWidth}px` } as CSSProperties}>
-      <SiteHeader onPalette={() => {}} homeHref="/#/" installHref="/#install" />
+      <SiteHeader onPalette={() => {}} homeHref={`${import.meta.env.BASE_URL}#/`} installHref={`${import.meta.env.BASE_URL}#install`} />
       <ScenePreview
         definition={sceneDefinition}
         title="Why I Built Seene"

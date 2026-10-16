@@ -11,6 +11,7 @@
     "dev": "node scripts/dev.mjs",
     "build": "npm run lint:architecture && tsc --noEmit && vite build && npm run build:package",
     "build:pages": "vite build --config vite.pages.config.ts --mode pages",
+    "test:pages": "npm run build:pages && node --test tests/pages-build.test.mjs",
     "typecheck": "tsc --noEmit",
     "test:core": "vitest run tests/core",
     "test:react": "vitest run tests/react",

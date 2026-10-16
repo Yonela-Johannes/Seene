@@ -42,7 +42,7 @@ test('homepage demo presents the founder story in its existing walkthrough previ
  await expect(screens).toHaveCount(5);
  await expect(screens.nth(0)).toContainText('Every project deserved to be seen.');
  await expect(screens.nth(4)).toContainText('So I built Seene.');
- await expect(page.getByRole('link',{name:'Watch the demo'})).toHaveAttribute('href','/tests/preview/walkthrough-fixture.html?seene-mode=scroll');
+ await expect(page.getByRole('region',{name:'Overview'}).getByRole('link',{name:'Watch the demo',exact:true})).toHaveAttribute('href','/tests/preview/walkthrough-fixture.html?seene-mode=scroll');
  await expect(page.getByRole('link',{name:'Experience Seene'})).toHaveAttribute('href','#install');
  await page.getByRole('button',{name:'Open navigation menu'}).click();
  await page.getByRole('navigation',{name:'Site menu'}).getByRole('link',{name:'Demo',exact:true}).click();

@@ -56,7 +56,7 @@ export type Route =
 
 export const HOME_ROUTE = "#/";
 export const PROJECTS_ROUTE = "#/projects";
-export const WALKTHROUGH_DEMO_URL = "/tests/preview/walkthrough-fixture.html?seene-mode=scroll";
+export const WALKTHROUGH_DEMO_URL = `${import.meta.env.BASE_URL}tests/preview/walkthrough-fixture.html?seene-mode=scroll`;
 export function studioHref(project: string): string { return `#/projects/${encodeURIComponent(project)}`; }
 export function settingsHref(project: string): string { return `${studioHref(project)}/settings`; }
 export function presentHref(project: string, scene: string): string { return `#/present/${encodeURIComponent(project)}/${encodeURIComponent(scene)}`; }
