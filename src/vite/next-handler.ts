@@ -185,9 +185,16 @@ export async function DELETE(request: Request): Promise<Response> {
   return handleNextSceneDelete(request);
 }
 
+function contentFilters(search: URLSearchParams): { query: string; kinds?: Array<"page" | "section" | "component"> } {
+  const kinds = (search.get("kind") ?? "").split(",")
+    .map(value => value.trim())
+    .filter((value): value is "page" | "section" | "component" => value === "page" || value === "section" || value === "component");
+  return { query: search.get("q") ?? "", ...(kinds.length ? { kinds } : {}) };
+}
+
 export async function handleNextSceneGetContent(request: Request, root = process.cwd()): Promise<Response> {
   try {
-    const content = await discoverApplicationContent(root);
+    const content = await discoverApplicationContent(root, contentFilters(new URL(request.url).searchParams));
     return Response.json({ success: true, content });
   } catch (err: any) {
     return Response.json({ error: err?.message || String(err) }, { status: 500 });
@@ -274,7 +281,7 @@ function handlePagesSceneDelete(request: IncomingMessage, response: ServerRespon
 function handlePagesSceneGetContent(request: IncomingMessage, response: ServerResponse, root: string): void {
   void (async () => {
     try {
-      const content = await discoverApplicationContent(root);
+      const content = await discoverApplicationContent(root, contentFilters(new URL(request.url ?? "/", "http://127.0.0.1").searchParams));
       json(response, 200, { success: true, content });
     } catch (err: any) {
       json(response, 500, { error: err?.message || String(err) });

@@ -1,9 +1,11 @@
-import { lstat, mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
+import { lstat, mkdir, readFile, readdir, realpath, rename, rm, stat, writeFile } from "node:fs/promises";
+import { homedir } from "node:os";
 import path from "node:path";
 import { SCENE_RECIPE_DIRECTORY, type SceneCatalog, type SceneRecipe, SceneRecipeSchema } from "../core/recipes";
 import type { PreviewDefinitionInput } from "../core/preview";
 import { RESOURCES } from "../core/resources";
-import { analyzeApplicationModule, classifyApplicationUnit, componentImportSpecifier, isApplicationSourcePath, isIconOrPrimitive, sceneComponentName, sceneComponentSource, type PlatformContent } from "../core/platform";
+import { analyzeApplicationModule, applicationFileReadiness, classifyApplicationUnit, componentImportSpecifier, isApplicationSourcePath, isIconOrPrimitive, sceneComponentName, sceneComponentSource, type PlatformContent, type PlatformContentFile, type PlatformDirectoryEntry, type PlatformSource } from "../core/platform";
+import { ProjectStateSchema } from "../core/project";
 import { portableCatalog } from "../project/portable";
 import type { SceneIssue } from "../core/scene";
 
@@ -239,7 +241,60 @@ export function resolveAliasSpecifier(specifier: string, paths: Record<string, s
   return undefined;
 }
 
-export async function discoverApplicationContent(root: string, limit = 400): Promise<PlatformContent> {
+export type ApplicationScanOptions = {
+  /** Free text matched against path, title, route and export names. */
+  query?: string;
+  /** Restrict to page, section or component classifications. */
+  kinds?: Array<"page" | "section" | "component">;
+  limit?: number;
+};
+
+/** Filter discovered files by free text and component kind. Pure so the console, the server
+ * and tests share exactly one definition of what a search matches. */
+export function filterApplicationContent(
+  files: PlatformContentFile[],
+  query = "",
+  kinds?: Array<"page" | "section" | "component">,
+): PlatformContentFile[] {
+  const needle = query.trim().toLowerCase();
+  return files.filter(file => {
+    if (kinds && kinds.length > 0 && (!file.kind || !kinds.includes(file.kind))) return false;
+    if (!needle) return true;
+    const haystack = `${file.path} ${file.title ?? ""} ${file.route ?? ""} ${file.exports.join(" ")}`.toLowerCase();
+    return haystack.includes(needle);
+  });
+}
+
+const SCAN_CACHE_TTL_MS = 2000;
+const scanCache = new Map<string, { at: number; content: PlatformContent }>();
+
+/** Drop cached scan results after writes so the next read sees the change. */
+export function invalidateApplicationScan(root?: string): void {
+  if (root === undefined) scanCache.clear();
+  else scanCache.delete(path.resolve(root));
+}
+
+/** Walk a project once and cache the result briefly so typing in a search box does not
+ * trigger repeated filesystem scans. */
+export async function scanApplicationContent(root: string, limit = 400): Promise<PlatformContent> {
+  const key = path.resolve(root);
+  const cached = scanCache.get(key);
+  if (cached && Date.now() - cached.at < SCAN_CACHE_TTL_MS) return cached.content;
+  const content = await scanApplicationContentUncached(root, limit);
+  scanCache.set(key, { at: Date.now(), content });
+  return content;
+}
+
+export async function discoverApplicationContent(
+  root: string,
+  options: ApplicationScanOptions | number = {},
+): Promise<PlatformContent> {
+  const resolved = typeof options === "number" ? { limit: options } : options;
+  const base = await scanApplicationContent(root, resolved.limit ?? 400);
+  return { files: filterApplicationContent(base.files, resolved.query ?? "", resolved.kinds) };
+}
+
+async function scanApplicationContentUncached(root: string, limit: number): Promise<PlatformContent> {
   const files: PlatformContent["files"] = [];
   const addedPaths = new Set<string>();
   const tsconfigPaths = await loadTsconfigPaths(root);
@@ -249,6 +304,7 @@ export async function discoverApplicationContent(root: string, limit = 400): Pro
     const analysis = analyzeApplicationModule(text);
     if (!analysis.default && !analysis.exports.length) return;
     const { kind, title, route } = classifyApplicationUnit(child);
+    const readiness = applicationFileReadiness(child, analysis, text);
     addedPaths.add(child);
     files.push({
       path: child,
@@ -257,6 +313,8 @@ export async function discoverApplicationContent(root: string, limit = 400): Pro
       kind,
       title,
       route,
+      previewable: readiness.previewable,
+      ...(readiness.issue ? { issue: readiness.issue } : {}),
     });
   };
 
@@ -314,6 +372,139 @@ export async function discoverApplicationContent(root: string, limit = 400): Pro
   await walk("pages");
   await walk("components");
   return { files: files.sort((a, b) => a.path.localeCompare(b.path)) };
+}
+
+type SourceManifest = {
+  name?: unknown;
+  packageManager?: unknown;
+  dependencies?: Record<string, unknown>;
+  devDependencies?: Record<string, unknown>;
+};
+
+const sourceLockfiles: Record<string, PlatformSource["packageManager"]> = {
+  "package-lock.json": "npm", "npm-shrinkwrap.json": "npm", "pnpm-lock.yaml": "pnpm",
+  "yarn.lock": "yarn", "bun.lock": "bun", "bun.lockb": "bun",
+};
+
+async function readManifestAt(root: string): Promise<SourceManifest | undefined> {
+  const text = await readScoped(root, "package.json", 64_000).catch(() => undefined);
+  if (text === undefined) return undefined;
+  try { return JSON.parse(text) as SourceManifest; } catch { return undefined; }
+}
+
+/**
+ * Read a candidate source folder without registering it. This powers the creation flow's
+ * "check this path" step so users learn whether Seene can work with a folder before committing.
+ */
+export async function inspectSource(target: string): Promise<Omit<PlatformSource, "registered">> {
+  const resolved = path.resolve(target.trim());
+  const fallbackName = path.basename(resolved) || resolved;
+  const base = {
+    path: resolved,
+    name: fallbackName,
+    exists: false,
+    isDirectory: false,
+    react: false,
+    hasPackageJson: false,
+    connected: false,
+    sceneDirectory: SCENE_RECIPE_DIRECTORY,
+    sceneCount: 0,
+  };
+  const info = await stat(resolved).catch(() => undefined);
+  if (!info) return { ...base, issue: "That folder does not exist. Check the path and try again." };
+  if (!info.isDirectory()) return { ...base, exists: true, issue: "Select a folder, not a file." };
+
+  const root = await realpath(resolved).catch(() => resolved);
+  const manifest = await readManifestAt(root);
+  const name = typeof manifest?.name === "string" && manifest.name.trim() ? manifest.name.trim() : path.basename(root) || root;
+  const react = manifest ? typeof { ...manifest.dependencies, ...manifest.devDependencies }.react === "string" : false;
+
+  const declaredManager = typeof manifest?.packageManager === "string" ? manifest.packageManager.split(/[@/]/)[0] : "";
+  let packageManager = (["npm", "pnpm", "yarn", "bun"] as const).find(manager => manager === declaredManager);
+  if (!packageManager) {
+    for (const [file, manager] of Object.entries(sourceLockfiles)) {
+      if (await stat(path.join(root, file)).then(() => true, () => false)) { packageManager = manager; break; }
+    }
+  }
+
+  let recorded: PlatformSource | undefined;
+  const stateText = await readFile(path.join(root, ".seene", "project.json"), "utf8").catch(() => undefined);
+  if (stateText !== undefined) {
+    try {
+      const state = ProjectStateSchema.parse(JSON.parse(stateText));
+      recorded = {
+        path: root, name, exists: true, isDirectory: true, react, hasPackageJson: true, connected: true,
+        sceneDirectory: SCENE_RECIPE_DIRECTORY, sceneCount: 0, registered: false,
+        packageManager: state.packageManager, adapter: state.adapter, entry: state.entry,
+      } as PlatformSource;
+    } catch { recorded = undefined; }
+  }
+
+  const catalog = await readSceneCatalog(root).catch(() => ({ scenes: [] }));
+  const manager = recorded?.packageManager ?? packageManager;
+
+  return {
+    path: root,
+    name,
+    exists: true,
+    isDirectory: true,
+    react,
+    hasPackageJson: manifest !== undefined,
+    connected: recorded !== undefined,
+    sceneDirectory: SCENE_RECIPE_DIRECTORY,
+    sceneCount: catalog.scenes.length,
+    ...(manager ? { packageManager: manager } : {}),
+    ...(recorded?.adapter ? { adapter: recorded.adapter } : {}),
+    ...(recorded?.entry ? { entry: recorded.entry } : {}),
+    ...(!manifest
+      ? { issue: "This folder has no package.json. Choose the folder that contains your React application." }
+      : !react
+      ? { issue: `${name} does not depend on react. Add react and react-dom to its package.json, then check again.` }
+      : {}),
+  };
+}
+
+const browseSkip = new Set([".git", "node_modules", "dist", "build", ".next", ".turbo", ".cache"]);
+
+/**
+ * List child folders of a directory so users can browse to a project instead of typing a path.
+ * Only directory names and whether each looks like a React project are returned; no file
+ * contents cross the boundary, and symlinked folders are skipped.
+ */
+export async function browseSourceDirectories(
+  target: string | undefined,
+  limit = 100,
+): Promise<{ path: string; parent?: string; entries: PlatformDirectoryEntry[]; truncated: boolean; issue?: string }> {
+  const resolved = path.resolve(target?.trim() || homedir());
+  const info = await stat(resolved).catch(() => undefined);
+  if (!info || !info.isDirectory()) {
+    return { path: resolved, entries: [], truncated: false, issue: "Seene cannot open that folder. Check the path and permissions." };
+  }
+  const children = await readdir(resolved, { withFileTypes: true }).catch(() => undefined);
+  if (!children) {
+    return { path: resolved, entries: [], truncated: false, issue: "Seene cannot read that folder. Check permissions." };
+  }
+  const directories = children
+    .filter(entry => entry.isDirectory() && !entry.name.startsWith(".") && !browseSkip.has(entry.name))
+    .sort((a, b) => a.name.localeCompare(b.name));
+  const selected = directories.slice(0, limit);
+  const entries = await Promise.all(selected.map(async entry => {
+    const child = path.join(resolved, entry.name);
+    const manifest = await readManifestAt(child);
+    return {
+      name: entry.name,
+      path: child,
+      hasPackageJson: manifest !== undefined,
+      isReactProject: manifest ? typeof { ...manifest.dependencies, ...manifest.devDependencies }.react === "string" : false,
+    } satisfies PlatformDirectoryEntry;
+  }));
+  const parentDirectory = path.dirname(resolved);
+  return {
+    path: resolved,
+    ...(parentDirectory === resolved ? {} : { parent: parentDirectory }),
+    entries,
+    truncated: directories.length > selected.length,
+  };
 }
 
 export { componentImportSpecifier };

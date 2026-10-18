@@ -1,13 +1,15 @@
 import { useEffect, useRef, useState } from "react";
 import {
-  PLATFORM_API_PREFIX, SEENE_PROTOCOL_VERSION, isAllowedDevOrigin, type PlatformCatalog, type PlatformContent, type PlatformProject,
-  type PlatformStatus,
+  PLATFORM_API_PREFIX, SEENE_PROTOCOL_VERSION, isAllowedDevOrigin, type PlatformBrowseResponse, type PlatformCatalog,
+  type PlatformContent, type PlatformProject, type PlatformSourcesResponse, type PlatformStatus,
 } from "../core/platform";
 
 export type ProjectsResponse = { home: string; projects: PlatformProject[] };
 export type CatalogResponse = { project: PlatformProject; catalog: PlatformCatalog };
 export type ContentResponse = { project: PlatformProject; content: PlatformContent };
 export type SceneResponse = { project: PlatformProject; scene: PlatformCatalog["scenes"][number]; catalog: PlatformCatalog };
+export type SourceInspectResponse = PlatformSourcesResponse;
+export type BrowseResponse = PlatformBrowseResponse;
 
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
   let response: Response;
@@ -27,7 +29,15 @@ export const platformApi = {
   addProject: (target: string) => request<ProjectsResponse>(`${PLATFORM_API_PREFIX}/projects`, body({ path: target })),
   removeProject: (target: string) => request<ProjectsResponse>(`${PLATFORM_API_PREFIX}/projects`, { ...body({ path: target }), method: "DELETE" }),
   catalog: (target: string) => request<CatalogResponse>(`${PLATFORM_API_PREFIX}/projects/scenes?path=${encodeURIComponent(target)}`),
-  content: (target: string) => request<ContentResponse>(`${PLATFORM_API_PREFIX}/projects/content?path=${encodeURIComponent(target)}`),
+  content: (target: string, filters?: { query?: string; kinds?: Array<"page" | "section" | "component"> }) => {
+    const params = new URLSearchParams({ path: target });
+    if (filters?.query) params.set("q", filters.query);
+    if (filters?.kinds?.length) params.set("kind", filters.kinds.join(","));
+    return request<ContentResponse>(`${PLATFORM_API_PREFIX}/projects/content?${params.toString()}`);
+  },
+  inspectSource: (target: string) => request<SourceInspectResponse>(`${PLATFORM_API_PREFIX}/projects/sources/inspect`, body({ path: target })),
+  browseSource: (target?: string) =>
+    request<BrowseResponse>(`${PLATFORM_API_PREFIX}/projects/sources/browse${target ? `?path=${encodeURIComponent(target)}` : ""}`),
   status: (target: string, origin: string) => request<PlatformStatus>(`${PLATFORM_API_PREFIX}/projects/status?path=${encodeURIComponent(target)}&origin=${encodeURIComponent(origin)}`),
   createScene: (draft: {
     path: string;
@@ -45,31 +55,56 @@ export const platformApi = {
   removeScene: (target: string, id: string) => request<CatalogResponse>(`${PLATFORM_API_PREFIX}/projects/scenes`, { ...body({ path: target, id }), method: "DELETE" }),
 };
 
-/** Hash routes for the public site. The default route is the static landing page,
- * which needs no platform server and therefore works on GitHub Pages. */
+export type CompositionKind = "scene" | "walkthrough";
+
 export type Route =
   | { view: "home" }
   | { view: "projects" }
-  | { view: "studio"; project: string }
+  | { view: "create"; kind?: CompositionKind; project?: string }
+  | { view: "studio"; project: string; scene?: string }
   | { view: "settings"; project: string }
   | { view: "present"; project: string; scene: string };
 
 export const HOME_ROUTE = "#/";
 export const PROJECTS_ROUTE = "#/projects";
+export const CREATE_ROUTE = "#/create";
 export const WALKTHROUGH_DEMO_URL = `${import.meta.env.BASE_URL}tests/preview/walkthrough-fixture.html?seene-mode=scroll`;
-export function studioHref(project: string): string { return `#/projects/${encodeURIComponent(project)}`; }
+export function studioHref(project: string, scene?: string): string {
+  const base = `#/projects/${encodeURIComponent(project)}`;
+  return scene ? `${base}?scene=${encodeURIComponent(scene)}` : base;
+}
 export function settingsHref(project: string): string { return `${studioHref(project)}/settings`; }
 export function presentHref(project: string, scene: string): string { return `#/present/${encodeURIComponent(project)}/${encodeURIComponent(scene)}`; }
+export function createHref(kind?: CompositionKind, project?: string): string {
+  const params = new URLSearchParams();
+  if (kind) params.set("kind", kind);
+  if (project) params.set("project", project);
+  const query = params.toString();
+  return query ? `${CREATE_ROUTE}?${query}` : CREATE_ROUTE;
+}
+
+function splitHash(hash: string): { segments: string[]; params: URLSearchParams } {
+  const withoutHash = hash.replace(/^#/, "");
+  const [pathPart = "", query = ""] = withoutHash.split("?");
+  return { segments: pathPart.replace(/^\/+/, "").split("/"), params: new URLSearchParams(query) };
+}
 
 export function readRoute(hash: string): Route {
-  const parts = hash.replace(/^#\/?/, "").split("/");
+  const { segments: parts, params } = splitHash(hash);
   const [head] = parts;
   if (!head) return { view: "home" };
+  if (head === "create") {
+    const kindParam = params.get("kind");
+    const kind = kindParam === "scene" || kindParam === "walkthrough" ? kindParam : undefined;
+    const project = params.get("project") ?? parts[1];
+    return { view: "create", ...(kind ? { kind } : {}), ...(project ? { project: decodeURIComponent(project) } : {}) };
+  }
   if (head === "projects") {
     if (typeof parts[1] === "string" && parts[1]) {
       const project = decodeURIComponent(parts[1]);
       if (parts[2] === "settings") return { view: "settings", project };
-      return { view: "studio", project };
+      const scene = params.get("scene");
+      return { view: "studio", project, ...(scene ? { scene: decodeURIComponent(scene) } : {}) };
     }
     return { view: "projects" };
   }

@@ -61,7 +61,7 @@ export type WalkthroughStudioProps = {
 
 export type StudioSection = { file: string; export?: string; title?: string };
 
-type ContentFile = { path: string; default: boolean; exports: string[]; kind?: "page" | "section" | "component"; title?: string; route?: string };
+type ContentFile = { path: string; default: boolean; exports: string[]; kind?: "page" | "section" | "component"; title?: string; route?: string; previewable?: boolean; issue?: string };
 
 const ADDABLE_TYPES: WalkthroughNodeType[] = ["show", "scroll", "focus", "highlight", "click", "wait", "camera", "transition", "caption"];
 
@@ -604,7 +604,14 @@ export function WalkthroughStudio({
                     {contentState === "error" ? <p className="seene-studio-hint seene-danger">{contentError}</p> : null}
                     <ul className="seene-studio-browser">
                       {filteredFiles.map(file =>
-                        file.exports.length > 0 ? (
+                        file.previewable === false ? (
+                          <li key={file.path}>
+                            <button type="button" disabled title={file.issue}>
+                              <strong>{file.title ?? file.path.split("/").pop()}</strong>
+                              <span>{file.issue ?? file.path}</span>
+                            </button>
+                          </li>
+                        ) : file.exports.length > 0 ? (
                           file.exports.map(exportName => (
                             <li key={`${file.path}#${exportName}`}>
                               <button type="button" onClick={() => addComponentNode(file.path, exportName, file.title ?? exportName)}>

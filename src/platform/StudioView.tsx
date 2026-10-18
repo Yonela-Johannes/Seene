@@ -1,22 +1,20 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { defaultDevOrigin, previewUrl, type PlatformStatus } from "../core/platform";
-import { platformApi, presentHref, settingsHref, useStudioBridge, PROJECTS_ROUTE } from "./api";
+import { createHref, platformApi, presentHref, settingsHref, useStudioBridge, PROJECTS_ROUTE } from "./api";
 import { useResource } from "./data";
-import { CreateSceneDialog } from "./CreateSceneDialog";
 import { Command, Notice, Panel, StatusPill, fieldClass } from "./ui";
-import { FrameSection, Kbd, PlusIcon, SeeneButton } from "./site";
+import { SeeneButton } from "./site";
 
 const buttonPrimary = "seene-btn seene-btn-primary seene-btn-nav";
 const buttonQuiet = "seene-btn seene-btn-secondary seene-btn-nav";
 
-export function StudioView({ project }: { project: string }) {
+export function StudioView({ project, initialScene }: { project: string; initialScene?: string }) {
   const catalog = useResource(`catalog:${project}`, () => platformApi.catalog(project));
-  const [selected, setSelected] = useState("");
+  const [selected, setSelected] = useState(initialScene ?? "");
   const [origin, setOrigin] = useState("http://127.0.0.1:5173");
   const [status, setStatus] = useState<PlatformStatus>();
   const [statusError, setStatusError] = useState("");
   const [checking, setChecking] = useState(false);
-  const [creating, setCreating] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState("");
   const [message, setMessage] = useState("");
 
@@ -30,6 +28,10 @@ export function StudioView({ project }: { project: string }) {
       setOrigin(defaultDevOrigin(data.project.adapter));
     }
   }, [data?.project.adapter]);
+
+  useEffect(() => {
+    if (initialScene) setSelected(initialScene);
+  }, [initialScene]);
 
   const bridge = useStudioBridge(project, !!status?.reachable);
   const isConnected = !!(data?.project.connected && (!status?.reachable || bridge.liveConnected));
@@ -93,10 +95,21 @@ export function StudioView({ project }: { project: string }) {
         <Panel
           title="Scenes"
           description="Every scene presents real UI from this application."
-          actions={<button type="button" className={buttonPrimary} onClick={() => setCreating(true)}>+ New scene</button>}
+          actions={
+            <div className="flex items-center gap-2">
+              <a className={buttonQuiet} href={createHref("walkthrough", project)}>+ Walkthrough</a>
+              <a className={buttonPrimary} href={createHref("scene", project)}>+ Scene</a>
+            </div>
+          }
         >
           {scenes.length === 0 ? (
-            <p className="text-sm text-[var(--seene-text-muted)]">No scenes yet. Create the first one to present part of your application.</p>
+            <div className="space-y-3">
+              <p className="text-sm text-[var(--seene-text-muted)]">No scenes yet. Create the first one to present part of your application.</p>
+              <div className="flex flex-wrap gap-2">
+                <a className={buttonPrimary} href={createHref("scene", project)}>Create a scene</a>
+                <a className={buttonQuiet} href={createHref("walkthrough", project)}>Create a walkthrough</a>
+              </div>
+            </div>
           ) : (
             <ul className="space-y-3">
               {scenes.map((scene, index) => (
@@ -111,7 +124,12 @@ export function StudioView({ project }: { project: string }) {
                       <strong className="block truncate text-sm font-medium text-[var(--seene-text)]">{scene.title}</strong>
                       <span className="block truncate text-xs text-[var(--seene-text-muted)]">{scene.description || "A scene from your application"}</span>
                     </span>
-                    <span className="font-mono text-xs text-[var(--seene-text-muted)]">{Math.round(scene.durationMs / 1000)}s</span>
+                    <span className="flex shrink-0 items-center gap-2">
+                      <span className="rounded-sm border border-[var(--seene-border)] px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-[var(--seene-text-muted)]">
+                        {scene.compositionType === "walkthrough" ? "Walkthrough" : "Scene"}
+                      </span>
+                      <span className="font-mono text-xs text-[var(--seene-text-muted)]">{Math.round(scene.durationMs / 1000)}s</span>
+                    </span>
                   </button>
                   <div className="mt-3 flex flex-wrap items-center gap-2">
                     <a className={buttonQuiet} href={previewUrl(data?.project.adapter, origin, scene.id, scene.applicationRoute)} target="_blank" rel="noreferrer">Open in app studio</a>
@@ -166,13 +184,6 @@ export function StudioView({ project }: { project: string }) {
         </div>
       </div>
 
-      {creating && (
-        <CreateSceneDialog
-          project={project}
-          onClose={() => setCreating(false)}
-          onCreated={id => { setCreating(false); setSelected(id); catalog.reload(); }}
-        />
-      )}
     </div>
   );
 }

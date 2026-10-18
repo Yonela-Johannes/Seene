@@ -1,7 +1,8 @@
 import { useState } from "react";
-import { PROJECTS_ROUTE, platformApi } from "./api";
+import type { PlatformSource } from "../core/platform";
+import { createHref, PROJECTS_ROUTE, platformApi, studioHref } from "./api";
 import { useResource } from "./data";
-import { Command, Notice, Panel, StatusPill, buttonQuiet } from "./ui";
+import { Command, Notice, Panel, StatusPill, buttonPrimary, buttonQuiet } from "./ui";
 
 const connectionLabels: Record<string, string> = {
   "next-app": "Next.js App Router",
@@ -25,6 +26,34 @@ export function SettingsView({ project }: { project: string }) {
   });
   const [error, setError] = useState("");
   const [confirmForget, setConfirmForget] = useState(false);
+  const [check, setCheck] = useState<{ loading: boolean; source?: PlatformSource; error: string }>({ loading: false, error: "" });
+  const [discovery, setDiscovery] = useState<{ loading: boolean; total?: number; pages?: number; sections?: number; components?: number; error: string }>({ loading: false, error: "" });
+
+  const recheck = async () => {
+    setCheck({ loading: true, error: "" });
+    try {
+      const result = await platformApi.inspectSource(project);
+      setCheck({ loading: false, source: result.source, error: "" });
+    } catch (failure) {
+      setCheck({ loading: false, error: failure instanceof Error ? failure.message : "This folder could not be read." });
+    }
+  };
+
+  const discover = async () => {
+    setDiscovery({ loading: true, error: "" });
+    try {
+      const result = await platformApi.content(project);
+      const files = result.content.files;
+      setDiscovery({
+        loading: false, error: "", total: files.length,
+        pages: files.filter(file => file.kind === "page").length,
+        sections: files.filter(file => file.kind === "section").length,
+        components: files.filter(file => file.kind === "component").length,
+      });
+    } catch (failure) {
+      setDiscovery({ loading: false, error: failure instanceof Error ? failure.message : "Discovery failed." });
+    }
+  };
 
   const forget = async () => {
     setError("");
@@ -61,6 +90,36 @@ export function SettingsView({ project }: { project: string }) {
               <Row label="Scenes" value={String(found.sceneCount)} />
               <Row label="Seene home" value={settings.data.home} />
             </dl>
+          </Panel>
+
+          <Panel title="Source application" description="The folder Seene reads. Re-check it, or discover what can be presented right now.">
+            <div className="flex flex-wrap items-center gap-2">
+              <button type="button" className={buttonQuiet} disabled={check.loading} onClick={() => void recheck()}>
+                {check.loading ? "Checking…" : "Re-check folder"}
+              </button>
+              <button type="button" className={buttonQuiet} disabled={discovery.loading} onClick={() => void discover()}>
+                {discovery.loading ? "Discovering…" : "Discover targets"}
+              </button>
+              <a className={buttonPrimary} href={createHref("scene", project)}>+ Scene</a>
+              <a className={buttonQuiet} href={createHref("walkthrough", project)}>+ Walkthrough</a>
+              <a className={buttonQuiet} href={studioHref(project)}>Open studio</a>
+            </div>
+            {check.error && <div className="mt-3"><Notice>{check.error}</Notice></div>}
+            {check.source && (
+              <div className="mt-3 space-y-2">
+                <p className="text-sm text-[var(--seene-text-muted)]">
+                  {check.source.exists ? (check.source.react ? "React application found." : "This folder does not depend on React.") : "This folder is missing."}
+                  {" "}{check.source.connected ? "Seene is connected." : "Seene is not connected yet."}
+                </p>
+                {check.source.issue && <Notice tone="info">{check.source.issue}</Notice>}
+              </div>
+            )}
+            {discovery.error && <div className="mt-3"><Notice>{discovery.error}</Notice></div>}
+            {discovery.total !== undefined && (
+              <p className="mt-3 text-sm text-[var(--seene-text-muted)]">
+                Found {discovery.total} presentable file{discovery.total === 1 ? "" : "s"}: {discovery.pages} page{discovery.pages === 1 ? "" : "s"}, {discovery.sections} section{discovery.sections === 1 ? "" : "s"}, {discovery.components} component{discovery.components === 1 ? "" : "s"}.
+              </p>
+            )}
           </Panel>
 
           <Panel title="Keep this connection healthy" description="Run these in the application's own folder with its package manager.">

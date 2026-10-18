@@ -2,38 +2,46 @@ import { useState, type ReactNode } from "react";
 import { SEENE_BRAND, SEENE_INSTALL_COMMAND } from "../core/branding";
 import { FrameSection, Kbd } from "./site";
 import { FOUNDER_STORY_SCREENS } from "./founder-story";
-import { WALKTHROUGH_DEMO_URL } from "./api";
+import { createHref, PROJECTS_ROUTE, WALKTHROUGH_DEMO_URL } from "./api";
+
+function Glyph({ children }: { children: ReactNode }) {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      {children}
+    </svg>
+  );
+}
 
 const CAPABILITIES = [
   {
     title: "Scene Studio and Library",
     body: "Create, select, reopen and delete source-backed scenes while keeping each composition editable.",
-    icon: "🎥",
+    icon: <Glyph><rect x="3" y="4" width="18" height="16" rx="2" /><path d="M3 9h18M9 4l-2 5M15 4l-2 5" /></Glyph>,
   },
   {
-    title: "Website Walkthrough",
-    body: "Select project-local components, arrange their order and compose real page content in a scroll view.",
-    icon: "📜",
+    title: "Walkthrough Studio",
+    body: "Connect components, pages, scrolls and interactions into one sequence with a single timeline.",
+    icon: <Glyph><path d="M4 5h16M4 12h16M4 19h9" /><circle cx="19" cy="19" r="2" /></Glyph>,
   },
   {
     title: "Camera and Focus",
     body: "Adjust camera position, rotation and perspective, then tune focus distance, aperture and blur limits.",
-    icon: "🔍",
+    icon: <Glyph><circle cx="12" cy="12" r="3.5" /><path d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22" /></Glyph>,
   },
   {
     title: "Seekable Motion Timeline",
     body: "Keyframe camera, focus and surface properties on one millisecond timeline; seek and replay deterministically.",
-    icon: "⏱️",
+    icon: <Glyph><circle cx="12" cy="13" r="8" /><path d="M12 9v4l2.5 2M9 2h6" /></Glyph>,
   },
   {
     title: "Your Existing React UI",
     body: "Present project components with their existing providers, data, styles and responsive behavior.",
-    icon: "⚛️",
+    icon: <Glyph><circle cx="12" cy="12" r="2" /><path d="M12 4c3.5 0 6 3.6 6 8s-2.5 8-6 8-6-3.6-6-8 2.5-8 6-8Z" /><path d="M5.5 8c3-1.7 6.7-1.7 9.7 0" /><path d="M5.5 16c3 1.7 6.7 1.7 9.7 0" /></Glyph>,
   },
   {
     title: "Local MP4 Export",
-    body: "Capture the rendered scene with Chromium and encode MP4 locally at 30, 60 or 120 FPS.",
-    icon: "🎬",
+    body: "Capture the rendered sequence with Chromium and encode one continuous MP4 locally at 30, 60 or 120 FPS.",
+    icon: <Glyph><path d="M12 3v10m0 0 3.5-3.5M12 13 8.5 9.5" /><path d="M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3" /></Glyph>,
   },
 ];
 
@@ -157,7 +165,7 @@ function InteractiveDemoCard() {
           <span className="h-3 w-3 rounded-full bg-yellow-500/80" />
           <span className="h-3 w-3 rounded-full bg-green-500/80" />
           <span className="ml-2 font-mono text-xs text-[var(--seene-text-muted)]">
-            Scene composition
+            Illustration · not the live studio
           </span>
         </div>
 
@@ -272,9 +280,13 @@ function InteractiveDemoCard() {
 
       <p className="text-center text-[11px] text-[var(--seene-text-muted)] mt-3">
         {activeTab === "focused"
-          ? "Move cursor over preview to test live 3D camera response · Toggle composition modes above"
+          ? "An illustration of a camera orbit over a component. Open the studio to drive the real thing."
           : "Scroll through the story behind Seene."}
       </p>
+      <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
+        <a className="seene-btn seene-btn-secondary seene-btn-nav" href={PROJECTS_ROUTE}>Open the studio</a>
+        <a className="seene-btn seene-btn-ghost seene-btn-nav" href={WALKTHROUGH_DEMO_URL}>Open the live demo →</a>
+      </div>
     </div>
   );
 }
@@ -322,6 +334,12 @@ export function LandingView() {
           <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
             <a
               className="seene-btn seene-btn-primary seene-btn-cta"
+              href={PROJECTS_ROUTE}
+            >
+              Open the studio
+            </a>
+            <a
+              className="seene-btn seene-btn-secondary seene-btn-cta"
               href="#install"
             >
               Get started <Kbd onPrimary>I</Kbd>
@@ -378,7 +396,7 @@ export function LandingView() {
                 key={item.title}
                 className="rounded-2xl border border-[var(--seene-border)] bg-[var(--seene-surface)] p-6 hover:border-[var(--seene-border-text)] transition-colors"
               >
-                <div className="text-2xl mb-3">{item.icon}</div>
+                <div className="mb-3 flex h-9 w-9 items-center justify-center rounded-md border border-[var(--seene-border)] bg-[var(--seene-surface-2)] text-[var(--seene-accent)]">{item.icon}</div>
                 <h3 className="text-base font-semibold text-[var(--seene-text)]">
                   {item.title}
                 </h3>
@@ -387,6 +405,65 @@ export function LandingView() {
                 </p>
               </article>
             ))}
+          </div>
+        </div>
+      </FrameSection>
+
+      {/* Create Section */}
+      <FrameSection
+        label="Create"
+        edge="both"
+        rails={[
+          { kind: "solid", flex: 3 },
+          { kind: "solid", flex: 2 },
+          { kind: "dashed", flex: 3 },
+        ]}
+      >
+        <div className="py-16">
+          <div className="text-center max-w-2xl mx-auto">
+            <h2 className="seene-h2 text-3xl sm:text-4xl">
+              Projects, Scenes and Walkthroughs
+            </h2>
+            <p className="mt-3 text-sm text-[var(--seene-text-muted)]">
+              One workflow creates all three. Point Seene at a React application, pick the real pages and
+              components to present, then open the matching editor.
+            </p>
+          </div>
+
+          <div className="mt-12 grid gap-4 md:grid-cols-3">
+            {[
+              { title: "Project", body: "The React application and its discovery context: the routes, sections and components Seene can read." },
+              { title: "Scene", body: "A standalone cinematic composition: one component or a group of sections with camera, focus and motion." },
+              { title: "Walkthrough", body: "A connected sequence of components, navigation, scrolls and interactions that plays as one video." },
+            ].map(item => (
+              <article key={item.title} className="rounded-2xl border border-[var(--seene-border)] bg-[var(--seene-surface)] p-6">
+                <h3 className="text-base font-semibold text-[var(--seene-text)]">{item.title}</h3>
+                <p className="mt-2 text-xs sm:text-sm leading-relaxed text-[var(--seene-text-muted)]">{item.body}</p>
+              </article>
+            ))}
+          </div>
+
+          <ol className="mx-auto mt-12 grid max-w-4xl gap-4 sm:grid-cols-2">
+            {[
+              { title: "Choose what to create", body: "Start a Scene for one composition, or a Walkthrough for a connected sequence." },
+              { title: "Point Seene at your application", body: "Register a project folder or browse to it. Seene finds the framework and its routes." },
+              { title: "Pick real components", body: "Search the pages, sections and components discovered in your project and select the ones to present." },
+              { title: "Edit and export", body: "Open the editor, tune the timeline, then export one continuous MP4 locally." },
+            ].map((step, index) => (
+              <li key={step.title} className="flex gap-3 rounded-xl border border-[var(--seene-border)] bg-[var(--seene-surface)] p-5">
+                <span className="font-mono text-xs font-semibold text-[var(--seene-accent)]">{String(index + 1).padStart(2, "0")}</span>
+                <span>
+                  <strong className="block text-sm font-medium text-[var(--seene-text)]">{step.title}</strong>
+                  <span className="mt-1 block text-xs leading-relaxed text-[var(--seene-text-muted)]">{step.body}</span>
+                </span>
+              </li>
+            ))}
+          </ol>
+
+          <div className="mt-10 flex flex-wrap items-center justify-center gap-3">
+            <a className="seene-btn seene-btn-primary seene-btn-cta" href={PROJECTS_ROUTE}>Open the studio</a>
+            <a className="seene-btn seene-btn-secondary seene-btn-cta" href={createHref("scene")}>Create a scene</a>
+            <a className="seene-btn seene-btn-secondary seene-btn-cta" href={createHref("walkthrough")}>Create a walkthrough</a>
           </div>
         </div>
       </FrameSection>

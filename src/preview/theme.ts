@@ -128,6 +128,9 @@ ${studioTheme}
 .seene-studio-browser{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:4px}
 .seene-studio-browser button{display:flex;flex-direction:column;gap:2px;width:100%;text-align:left;background:#18181b;border:1px solid #27272a;border-radius:8px;padding:8px 10px;color:#e4e4e7;cursor:pointer}
 .seene-studio-browser button:hover{background:#27272a}
+.seene-studio-browser button:disabled{opacity:.55;cursor:not-allowed}
+.seene-studio-browser button:disabled:hover{background:#18181b}
+.seene-studio-browser button:disabled span{color:#f87171}
 .seene-studio-browser strong{font-weight:600}
 .seene-studio-browser span{font-size:11px;color:#71717a;overflow-wrap:anywhere}
 .seene-studio-hint{color:#71717a;font-size:12px;padding:6px}

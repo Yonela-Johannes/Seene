@@ -11,6 +11,15 @@ export function useHashRoute(): Route {
   return route;
 }
 
+export function useDebounced<T>(value: T, delay = 250): T {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const timer = setTimeout(() => setDebounced(value), delay);
+    return () => clearTimeout(timer);
+  }, [value, delay]);
+  return debounced;
+}
+
 export function useResource<T>(key: string, load: () => Promise<T>) {
   const loader = useRef(load);
   loader.current = load;

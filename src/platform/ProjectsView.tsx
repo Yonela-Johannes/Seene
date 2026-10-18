@@ -4,9 +4,10 @@
  * WHERE: Platform renders it at #/projects.
  */
 import { useState, type FormEvent } from "react";
-import { HOME_ROUTE, platformApi, settingsHref, studioHref } from "./api";
+import { createHref, HOME_ROUTE, platformApi, settingsHref, studioHref } from "./api";
 import { useResource } from "./data";
-import { Command, Notice, Panel, StatusPill, fieldClass } from "./ui";
+import { DirectoryPicker } from "./DirectoryPicker";
+import { Command, Notice, Panel, StatusPill } from "./ui";
 import { FrameSection, Kbd, PlusIcon, SeeneButton } from "./site";
 import { SEENE_BRAND, SEENE_INSTALL_COMMAND } from "../core/branding";
 
@@ -16,6 +17,7 @@ export function ProjectsView() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [confirmRemove, setConfirmRemove] = useState("");
+  const [picking, setPicking] = useState(false);
 
   const add = async (event: FormEvent) => {
     event.preventDefault();
@@ -71,7 +73,7 @@ export function ProjectsView() {
               </Notice>
             )}
 
-            <Panel title="Register project" description="Enter the folder path of your React application on this machine.">
+            <Panel title="Register project" description="Enter the folder path of your React application on this machine, or browse to it.">
               <form className="flex flex-col gap-3 sm:flex-row sm:items-start" aria-label="Register project" onSubmit={add}>
                 <label className="sr-only" htmlFor="project-path">Project folder path</label>
 <input
@@ -83,12 +85,28 @@ export function ProjectsView() {
                    placeholder="/Users/you/projects/my-app"
                    onChange={event => setTarget(event.target.value)}
                  />
+                <button type="button" className="seene-btn seene-btn-secondary seene-btn-nav" onClick={() => setPicking(true)}>Browse…</button>
 <SeeneButton variant="primary" size="nav" kbd={<Kbd onPrimary>R</Kbd>} loading={busy} disabled={!target.trim()} className="gap-1.5" type="submit">
                    <PlusIcon /> Register project
                  </SeeneButton>
               </form>
               {error && <div className="mt-3"><Notice>{error}</Notice></div>}
             </Panel>
+
+            <div className="grid gap-3 rounded-md border border-[var(--seene-border)] bg-[var(--seene-surface)] p-5 sm:grid-cols-3">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-[var(--seene-text-muted)]">Project</p>
+                <p className="mt-1 text-sm text-[var(--seene-text-muted)]">The React application Seene reads: its routes, sections and components.</p>
+              </div>
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-[var(--seene-text-muted)]">Scene</p>
+                <p className="mt-1 text-sm text-[var(--seene-text-muted)]">One cinematic composition with a camera, focus and motion timeline.</p>
+              </div>
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-[var(--seene-text-muted)]">Walkthrough</p>
+                <p className="mt-1 text-sm text-[var(--seene-text-muted)]">A connected sequence of components, scrolls and interactions that plays as one video.</p>
+              </div>
+            </div>
 
             {projects.error && <Notice>{projects.error}</Notice>}
             {projects.loading && !projects.data && <p className="text-sm text-[var(--seene-text-muted)]">Loading registered projects…</p>}
@@ -126,6 +144,8 @@ export function ProjectsView() {
 
                          <div className="flex flex-wrap items-center gap-2 border-t border-[var(--seene-border)] pt-2">
                            <a className="seene-btn seene-btn-primary seene-btn-nav" href={studioHref(project.path)}>Open studio</a>
+                           <a className="seene-btn seene-btn-secondary seene-btn-nav" href={createHref("scene", project.path)}>+ Scene</a>
+                           <a className="seene-btn seene-btn-secondary seene-btn-nav" href={createHref("walkthrough", project.path)}>+ Walkthrough</a>
                            <a className="seene-btn seene-btn-secondary seene-btn-nav" href={settingsHref(project.path)}>Settings</a>
                            {confirmRemove === project.path ? (
                              <>
@@ -155,6 +175,13 @@ export function ProjectsView() {
           <a className="hover:underline" href={SEENE_BRAND.repository} target="_blank" rel="noreferrer noopener">{SEENE_BRAND.packageName} on GitHub</a>
         </footer>
       </FrameSection>
+
+      {picking && (
+        <DirectoryPicker
+          onClose={() => setPicking(false)}
+          onSelect={path => { setPicking(false); setTarget(path); }}
+        />
+      )}
     </>
   );
 }

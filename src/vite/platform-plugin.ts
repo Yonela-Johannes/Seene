@@ -9,15 +9,16 @@ import {
   PLATFORM_API_PREFIX, PLATFORM_REGISTRY_FILE, PlatformErrorSchema, PlatformProjectSchema,
   PlatformProjectsSchema, PlatformCatalogResponseSchema, PlatformContentResponseSchema,
   PlatformSceneResponseSchema, PlatformStatusSchema, CreateSceneRequestSchema, DuplicateSceneRequestSchema, RemoveSceneRequestSchema,
+  PlatformSourceInspectRequestSchema, PlatformSourcesResponseSchema, PlatformBrowseResponseSchema,
   RegisterProjectSchema, analyzeApplicationModule, applicationRouteForContent, createSceneRecipe, isAllowedDevOrigin,
-  isApplicationSourcePath, isDocumentApplication, issueFor,
+  isApplicationSourcePath, isDocumentApplication, isLoopbackHost, issueFor,
   loadProjectRegistry, platformHome, previewUrl, registryWithout, sceneComponentSource, summarizeCatalog,
   type PlatformProject, type ProjectEntry, type SceneDraft,
 } from "../core/platform";
 import { SCENE_RECIPE_DIRECTORY } from "../core/recipes";
 import {
-  PlatformFault, componentImportSpecifier, discoverApplicationContent, duplicateSceneSourcePair, readSceneCatalog,
-  removeSceneSourcePair, resolveProjectTarget, writeSceneSourcePair,
+  PlatformFault, browseSourceDirectories, componentImportSpecifier, discoverApplicationContent, duplicateSceneSourcePair,
+  inspectSource, invalidateApplicationScan, readSceneCatalog, removeSceneSourcePair, resolveProjectTarget, writeSceneSourcePair,
 } from "./scene-files";
 
 const maxBodyBytes = 128_000;
@@ -178,6 +179,7 @@ function createHandler(options: { platformRoot?: string }) {
             const next_ = entries.some(entry => entry.path === target) ? entries
               : [...entries, { path: target, name: facts.project.name, addedAt: new Date().toISOString() }];
             await saveRegistry(home, next_);
+            invalidateApplicationScan(target);
             return void send(response, 200, PlatformProjectsSchema.parse({ home: home.directory, projects: await listProjects(next_) }));
           }
           if (request.method === "DELETE") {
@@ -251,6 +253,7 @@ function createHandler(options: { platformRoot?: string }) {
 
             if (await writeSceneSourcePair(entry.path, input.id, recipe, compSource) === "exists")
               throw new PlatformFault("conflict", `Scene "${input.id}" already exists in this project. Choose another name.`);
+            invalidateApplicationScan(entry.path);
             const catalog = summarizeCatalog(await readSceneCatalog(entry.path));
             const scene = catalog.scenes.find(item => item.id === input.id);
             if (!scene) throw new PlatformFault("conflict", "The scene was written but cannot be discovered. Check the recipe and its component.");
@@ -260,6 +263,7 @@ function createHandler(options: { platformRoot?: string }) {
             const input = parse<{ path: string; id: string }>(RemoveSceneRequestSchema, await body(request));
             const entry = await locate(input.path);
             if (!await removeSceneSourcePair(entry.path, input.id)) throw new PlatformFault("not-found", `Scene "${input.id}" is not part of this project.`);
+            invalidateApplicationScan(entry.path);
             const catalog = summarizeCatalog(await readSceneCatalog(entry.path));
             const { project } = await inspectProject(entry.path, entry);
             return void send(response, 200, PlatformCatalogResponseSchema.parse({ project, catalog }));
@@ -271,15 +275,32 @@ function createHandler(options: { platformRoot?: string }) {
           const status = await duplicateSceneSourcePair(entry.path, input.id, input.newId);
           if (status === "not-found") throw new PlatformFault("not-found", `Scene "${input.id}" is not part of this project.`);
           if (status === "exists") throw new PlatformFault("conflict", `Scene "${input.newId}" already exists. Choose another name.`);
+          invalidateApplicationScan(entry.path);
           const catalog = summarizeCatalog(await readSceneCatalog(entry.path));
           const { project } = await inspectProject(entry.path, entry);
           return void send(response, 200, PlatformCatalogResponseSchema.parse({ project, catalog }));
         }
         if (route === "/projects/content" && request.method === "GET") {
           const entry = await locate(requestUrl.searchParams.get("path"));
-          const content = await discoverApplicationContent(entry.path);
+          const query = requestUrl.searchParams.get("q") ?? "";
+          const kinds = (requestUrl.searchParams.get("kind") ?? "").split(",")
+            .map(value => value.trim())
+            .filter((value): value is "page" | "section" | "component" => value === "page" || value === "section" || value === "component");
+          const content = await discoverApplicationContent(entry.path, { query, ...(kinds.length ? { kinds } : {}) });
           const { project } = await inspectProject(entry.path, entry);
           return void send(response, 200, PlatformContentResponseSchema.parse({ project, content }));
+        }
+        if (route === "/projects/sources/inspect" && request.method === "POST") {
+          if (!isLoopbackHost(request.headers.host)) throw new PlatformFault("denied-path", "Source browsing is limited to this machine.");
+          const input = parse<{ path: string }>(PlatformSourceInspectRequestSchema, await body(request));
+          const source = await inspectSource(input.path);
+          const registered = entries.some(entry => path.resolve(entry.path) === path.resolve(source.path));
+          return void send(response, 200, PlatformSourcesResponseSchema.parse({ home: home.directory, source: { ...source, registered } }));
+        }
+        if (route === "/projects/sources/browse" && request.method === "GET") {
+          if (!isLoopbackHost(request.headers.host)) throw new PlatformFault("denied-path", "Source browsing is limited to this machine.");
+          const result = await browseSourceDirectories(requestUrl.searchParams.get("path") ?? undefined);
+          return void send(response, 200, PlatformBrowseResponseSchema.parse(result));
         }
         if (route === "/projects/status" && request.method === "GET") {
           const entry = await locate(requestUrl.searchParams.get("path"));

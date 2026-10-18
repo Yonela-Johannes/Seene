@@ -925,6 +925,9 @@ export function SceneLibrary({
                               </span>
 
                               <span className="flex items-center gap-2 font-mono text-xs text-[var(--seene-text-muted)] group-hover:text-[var(--seene-text)]">
+                                <span className="rounded-sm border border-[var(--seene-border-text)] px-1.5 py-0.5 text-[10px] uppercase tracking-wide">
+                                  {scene.definition.compositionType === "walkthrough" ? "Walkthrough" : "Scene"}
+                                </span>
                                 {duration > 0 ? `${duration}s` : "Static"}<span aria-hidden="true">↗</span>
                               </span>
                             </a>

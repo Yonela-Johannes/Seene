@@ -201,6 +201,7 @@ export function SiteHeader({ onPalette, homeHref = HOME_ROUTE, installHref = "#i
               </a>
               <div className="ml-3 hidden items-center gap-0.5 lg:flex">
                 <a className="seene-nav-item" href={installHref}>Install</a>
+                <a className="seene-nav-item" href={PROJECTS_ROUTE}>Studio</a>
                 <a className="seene-nav-item" href={SEENE_BRAND.docs} target="_blank" rel="noreferrer noopener">Docs</a>
                 <a className="seene-nav-item" href={SEENE_BRAND.examples} target="_blank" rel="noreferrer noopener">Examples</a>
               </div>
@@ -238,6 +239,7 @@ export function SiteHeader({ onPalette, homeHref = HOME_ROUTE, installHref = "#i
         >
           <nav aria-label="Site menu" className="mx-auto flex max-w-3xl flex-col gap-1 p-4 lg:p-2">
             <a ref={firstMenuLinkRef} className="seene-nav-item h-10" href={homeHref} onClick={closeMenu}>Home</a>
+            <a className="seene-nav-item h-10" href={PROJECTS_ROUTE} onClick={closeMenu}>Studio</a>
             <a className="seene-nav-item h-10" href="#demo" onClick={closeMenu}>Why I Built Seene</a>
             <a className="seene-nav-item h-10" href={WALKTHROUGH_DEMO_URL} onClick={closeMenu}>Demo</a>
             <a className="seene-nav-item h-10" href={installHref} onClick={closeMenu}>Documentation / Getting Started</a>

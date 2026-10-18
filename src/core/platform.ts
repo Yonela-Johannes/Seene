@@ -57,6 +57,7 @@ export const PlatformSceneSchema = z.strictObject({
   binding: z.string().min(1),
   durationMs: z.number().nonnegative(),
   hasSnapshot: z.boolean(),
+  compositionType: z.enum(["scene", "walkthrough"]).optional(),
   applicationRoute: z.string().min(1).optional(),
 });
 export const PlatformCatalogSchema = z.strictObject({
@@ -74,6 +75,8 @@ export const PlatformContentFileSchema = z.strictObject({
   kind: z.enum(["page", "section", "component"]).optional(),
   title: z.string().optional(),
   route: z.string().optional(),
+  previewable: z.boolean().optional(),
+  issue: z.string().max(300).optional(),
 });
 export const PlatformContentSchema = z.strictObject({
   files: z.array(PlatformContentFileSchema),
@@ -126,12 +129,54 @@ export const PlatformStatusSchema = z.strictObject({
 });
 export const PlatformErrorSchema = z.strictObject({ error: z.string().min(1) });
 
+export const PlatformSourceSchema = z.strictObject({
+  path: z.string().min(1),
+  name: z.string().min(1),
+  exists: z.boolean(),
+  isDirectory: z.boolean(),
+  react: z.boolean(),
+  hasPackageJson: z.boolean(),
+  connected: z.boolean(),
+  registered: z.boolean(),
+  sceneDirectory: z.string().min(1),
+  sceneCount: z.number().int().nonnegative(),
+  packageManager: z.enum(["npm", "pnpm", "yarn", "bun"]).optional(),
+  adapter: z.enum(["next-app", "next-pages", "react"]).optional(),
+  entry: z.string().min(1).optional(),
+  issue: z.string().max(400).optional(),
+});
+export const PlatformSourceInspectRequestSchema = z.strictObject({
+  path: z.string().trim().min(1).max(1000).refine(value => !/[\u0000-\u001f]/.test(value), "Use a filesystem path without control characters."),
+});
+export const PlatformSourcesResponseSchema = z.strictObject({
+  home: z.string().min(1),
+  source: PlatformSourceSchema,
+});
+export const PlatformDirectoryEntrySchema = z.strictObject({
+  name: z.string().min(1),
+  path: z.string().min(1),
+  isReactProject: z.boolean(),
+  hasPackageJson: z.boolean(),
+});
+export const PlatformBrowseResponseSchema = z.strictObject({
+  path: z.string().min(1),
+  parent: z.string().min(1).optional(),
+  entries: z.array(PlatformDirectoryEntrySchema),
+  truncated: z.boolean(),
+  issue: z.string().max(400).optional(),
+});
+export type PlatformSource = z.output<typeof PlatformSourceSchema>;
+export type PlatformSourcesResponse = z.output<typeof PlatformSourcesResponseSchema>;
+export type PlatformDirectoryEntry = z.output<typeof PlatformDirectoryEntrySchema>;
+export type PlatformBrowseResponse = z.output<typeof PlatformBrowseResponseSchema>;
+
 export type ProjectEntry = z.output<typeof ProjectEntrySchema>;
 export type ProjectRegistry = z.output<typeof ProjectRegistrySchema>;
 export type PlatformProject = z.output<typeof PlatformProjectSchema>;
 export type PlatformCatalog = z.output<typeof PlatformCatalogSchema>;
 export type PlatformScene = z.output<typeof PlatformSceneSchema>;
 export type PlatformContent = z.output<typeof PlatformContentSchema>;
+export type PlatformContentFile = z.output<typeof PlatformContentFileSchema>;
 export type PlatformStatus = z.output<typeof PlatformStatusSchema>;
 export type SceneDraft = z.output<typeof SceneDraftSchema>;
 
@@ -465,6 +510,28 @@ export function analyzeApplicationModule(source: string): { default: boolean; ex
   return { default: hasDefault, exports: [...found].sort((a, b) => a.localeCompare(b)) };
 }
 
+export function applicationFileReadiness(
+  filePath: string,
+  analysis: { default: boolean; exports: string[] },
+  source = "",
+): { previewable: boolean; issue?: string } {
+  const normalized = filePath.replace(/\\/g, "/");
+  if (isDocumentOrLayoutWrapper(normalized)) return { previewable: false, issue: "This Seene wrapper is generated; add your own component instead." };
+  const isRoute = /(?:^|\/)(?:page|layout|_app|_document|route)\.[a-z0-9]+$/i.test(normalized);
+  if (isRoute) return { previewable: false, issue: "Route files render the whole page; select a section or component instead." };
+  const isAsyncDefault = /export\s+default\s+async\b/i.test(source)
+    || /async\s+function\s+[A-Za-z0-9_$]+[\s\S]{0,200}?export\s+default/i.test(source);
+  if (isAsyncDefault) return { previewable: false, issue: "Async Server Components cannot be mounted in the client scene tree." };
+  if (!analysis.default && analysis.exports.length === 0) return { previewable: false, issue: "This file exports no component to present." };
+  return { previewable: true };
+}
+
+export function isLoopbackHost(host: string | undefined): boolean {
+  if (!host) return true;
+  const name = host.replace(/^\[/, "").replace(/\]/, "").split(":")[0].toLowerCase();
+  return name === "localhost" || name === "127.0.0.1" || name === "::1" || name === "0.0.0.0" || name === "";
+}
+
 export function isAllowedDevOrigin(origin: string): boolean {
   if (!origin || typeof origin !== "string") return false;
   const match = /^https?:\/\/(?:\[([a-fA-F0-9:]+)\]|([^/:]+))(?::\d+)?\/?$/.exec(origin.trim());
@@ -579,6 +646,7 @@ export function summarizeCatalog(catalog: SceneCatalog): PlatformCatalog {
       binding: scene.binding,
       durationMs: scene.definition.motion ? motionDuration(scene.definition.motion) : 0,
       hasSnapshot: scene.snapshot !== undefined,
+      ...(scene.definition.compositionType ? { compositionType: scene.definition.compositionType } : {}),
       ...(scene.application ? { applicationRoute: scene.application.route } : {}),
     })),
   };

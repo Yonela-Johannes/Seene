@@ -2,8 +2,9 @@ import { LandingView } from "./LandingView";
 import { ProjectsView } from "./ProjectsView";
 import { SettingsView } from "./SettingsView";
 import { StudioView } from "./StudioView";
+import { CreateView } from "./CreateView";
 import { PresentationView } from "./PresentationView";
-import { PROJECTS_ROUTE } from "./api";
+import { CREATE_ROUTE, PROJECTS_ROUTE } from "./api";
 import { useHashRoute } from "./data";
 import { SiteHeader, useSiteShortcuts } from "./site";
 import { useEffect, useState } from "react";
@@ -13,6 +14,8 @@ import { useEffect, useState } from "react";
 const COMMANDS = [
   { label: "Go to overview", href: "#/" },
   { label: "Open the local studio", href: PROJECTS_ROUTE },
+  { label: "Create a scene", href: `${CREATE_ROUTE}?kind=scene` },
+  { label: "Create a walkthrough", href: `${CREATE_ROUTE}?kind=walkthrough` },
 ];
 
 export function Platform() {
@@ -31,7 +34,8 @@ export function Platform() {
       <main>
         {route.view === "home" && <LandingView />}
         {route.view === "projects" && <ProjectsView />}
-        {route.view === "studio" && <StudioView project={route.project} />}
+        {route.view === "create" && <CreateView initialKind={route.kind} initialProject={route.project} />}
+        {route.view === "studio" && <StudioView project={route.project} initialScene={route.scene} />}
         {route.view === "settings" && <SettingsView project={route.project} />}
         {route.view === "present" && <PresentationView project={route.project} scene={route.scene} />}
       </main>
