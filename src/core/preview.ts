@@ -3,6 +3,7 @@ import { SceneSchema, type SceneIssue } from "./scene";
 import { MotionSchema } from "./motion";
 import { reviewAuthoring } from "./authoring";
 import { cameraFromPose, type CameraPose } from "./spatial";
+import { WalkthroughDocumentSchema } from "./walkthrough";
 
 export const SCENE_TRANSITION_DURATION = 300;
 export const TransitionTypeSchema = z.enum(["crossfade", "camera", "focus"]);
@@ -65,6 +66,7 @@ export const PreviewDefinitionSchema = z.strictObject({
   compositionType: z.enum(["scene", "walkthrough"]).optional(),
   sections: z.array(WalkthroughSectionSchema).optional(),
   walkthroughSettings: WalkthroughSettingsSchema.optional(),
+  walkthrough: WalkthroughDocumentSchema.optional(),
 });
 export type PreviewDefinitionInput = z.input<typeof PreviewDefinitionSchema>;
 export type PreviewDefinition = z.output<typeof PreviewDefinitionSchema>;

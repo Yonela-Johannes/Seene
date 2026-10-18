@@ -246,6 +246,7 @@ function createHandler(options: { platformRoot?: string }) {
               id: input.id,
               compositionType: recipe.definition.compositionType,
               sections: resolvedSections,
+              ...(recipe.definition.walkthrough ? { walkthrough: recipe.definition.walkthrough } : {}),
             });
 
             if (await writeSceneSourcePair(entry.path, input.id, recipe, compSource) === "exists")

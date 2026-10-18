@@ -3,7 +3,7 @@ import path from "node:path";
 import { SCENE_RECIPE_DIRECTORY, type SceneCatalog, type SceneRecipe, SceneRecipeSchema } from "../core/recipes";
 import type { PreviewDefinitionInput } from "../core/preview";
 import { RESOURCES } from "../core/resources";
-import { analyzeApplicationModule, classifyApplicationUnit, componentImportSpecifier, isApplicationSourcePath, isIconOrPrimitive, sceneComponentName, type PlatformContent } from "../core/platform";
+import { analyzeApplicationModule, classifyApplicationUnit, componentImportSpecifier, isApplicationSourcePath, isIconOrPrimitive, sceneComponentName, sceneComponentSource, type PlatformContent } from "../core/platform";
 import { portableCatalog } from "../project/portable";
 import type { SceneIssue } from "../core/scene";
 
@@ -341,7 +341,46 @@ export async function updateSceneRecipe(root: string, id: string, definition: Pa
   const validated = SceneRecipeSchema.safeParse(merged);
   if (!validated.success) return "not-found";
   const after = JSON.stringify(validated.data, null, 2) + "\n";
-  if (after === before) return "updated";
-  await writeFile(recipePath, after, { encoding: "utf8", flag: "w" });
+  if (after !== before) await writeFile(recipePath, after, { encoding: "utf8", flag: "w" });
+  await syncWalkthroughScaffold(root, directory, id, validated.data.definition).catch(() => undefined);
   return "updated";
+}
+
+/**
+ * Regenerate a Seene scaffold for a walkthrough so newly added component steps are rendered and
+ * tagged with their node IDs. Only files Seene generated are rewritten; hand-authored files are
+ * left untouched.
+ */
+async function syncWalkthroughScaffold(root: string, directory: string, id: string, definition: Partial<PreviewDefinitionInput>): Promise<void> {
+  const walkthrough = definition.walkthrough;
+  if (!walkthrough || definition.compositionType !== "walkthrough") return;
+  let sourcePath: string | undefined;
+  let source: string | undefined;
+  for (const ext of ["tsx", "jsx"]) {
+    const candidate = path.join(directory, `${id}.${ext}`);
+    const text = await readFile(candidate, "utf8").catch(() => undefined);
+    if (text !== undefined) {
+      sourcePath = candidate;
+      source = text;
+      break;
+    }
+  }
+  if (!sourcePath || !source || !source.startsWith("// @seene-scaffold-version")) return;
+  const resolvedSections: Array<{ importSpecifier: string; export?: string; id?: string; title?: string }> = [];
+  const seen = new Set<string>();
+  for (const node of walkthrough.nodes) {
+    const file = node.target?.file;
+    if (!file || seen.has(file)) continue;
+    seen.add(file);
+    const absolute = path.resolve(root, file);
+    const text = await readFile(absolute, "utf8").catch(() => undefined);
+    if (text === undefined) continue;
+    resolvedSections.push({
+      importSpecifier: componentImportSpecifier(file),
+      ...(node.target?.export ? { export: node.target.export } : {}),
+      ...(node.target?.label ? { title: node.target.label } : {}),
+    });
+  }
+  const next = sceneComponentSource({ id, compositionType: "walkthrough", sections: resolvedSections, walkthrough });
+  if (next !== source) await writeFile(sourcePath, next, "utf8");
 }

@@ -165,6 +165,7 @@ export function seeneCreateScenePlugin(): Plugin {
               id: parsed.data.id,
               compositionType: parsed.data.definition.compositionType,
               sections: resolvedSections,
+              ...(parsed.data.definition.walkthrough ? { walkthrough: parsed.data.definition.walkthrough } : {}),
             });
             const outcome = await writeSceneSourcePair(root, parsed.data.id, parsed.data, compSource);
             if (outcome === "exists") {

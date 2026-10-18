@@ -95,6 +95,7 @@ async function createScene(payload: unknown, root: string): Promise<Result> {
       id: parsed.data.id,
       compositionType: parsed.data.definition.compositionType,
       sections: resolvedSections,
+      ...(parsed.data.definition.walkthrough ? { walkthrough: parsed.data.definition.walkthrough } : {}),
     });
     const outcome = await writeSceneSourcePair(root, parsed.data.id, parsed.data, compSource);
     if (outcome === "exists") return jsonError(409, `Scene "${parsed.data.id}" already exists or has an incomplete source pair.`);

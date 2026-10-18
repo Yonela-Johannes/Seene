@@ -11,6 +11,7 @@ import { PresentationPicker } from "./PresentationPicker";
 import { TransitionPicker } from "./TransitionPicker";
 import { SceneInspector } from "./SceneInspector";
 import { WebsiteWalkthrough } from "./WebsiteWalkthrough";
+import { WalkthroughStudio } from "./WalkthroughStudio";
 import { previewTheme } from "./theme";
 import { useSceneBackdrop } from "./backdrop";
 
@@ -36,7 +37,8 @@ export type ScenePreviewProps = {
   onSeek?: (time: number) => void;
   timelineRef?: React.RefObject<HTMLDivElement>;
   formatTime?: (ms: number) => string;
-  onSaveDefinition?: (definition: PreviewDefinitionInput) => Promise<void> | void;
+  onSaveDefinition?: (definition: PreviewDefinitionInput, sections?: Array<{ file: string; export?: string; title?: string }>) => Promise<void> | void;
+  createSceneEndpoint?: string;
 };
 
 const timeLabel = (ms: number) => `${Math.floor(ms / 60000)}:${String(Math.floor(ms / 1000) % 60).padStart(2, "0")}`;
@@ -217,6 +219,7 @@ export function ScenePreview({
   timelineRef,
   formatTime,
   onSaveDefinition,
+  createSceneEndpoint,
 }: ScenePreviewProps) {
   const [compositionMode, setCompositionMode] = useState<"scene" | "walkthrough">(() => {
     const mode = typeof window === "undefined" ? null : new URL(window.location.href).searchParams.get("seene-mode");
@@ -397,6 +400,24 @@ export function ScenePreview({
             : session.playing
               ? "Playing"
               : "Live preview";
+
+  if (compositionMode === "walkthrough" && definition?.walkthrough) {
+    return (
+      <WalkthroughStudio
+        definition={definition}
+        session={session}
+        title={title}
+        {...(backHref ? { backHref } : {})}
+        {...(onBack ? { onBack } : {})}
+        onExit={() => changeCompositionMode("scene")}
+        onDefinitionChange={next => setLocalDef(next)}
+        {...(onSaveDefinition ? { onSaveDefinition } : {})}
+        {...(createSceneEndpoint ? { createSceneEndpoint } : {})}
+      >
+        {children}
+      </WalkthroughStudio>
+    );
+  }
 
   return (
     <main

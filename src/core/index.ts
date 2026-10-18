@@ -14,6 +14,8 @@ export * from "./presentation";
 
 export * from "./recipes";
 
+export * from "./walkthrough";
+
 export * from "./platform";
 
 export * from "./branding";

@@ -2,6 +2,7 @@ import { z } from "zod";
 import { SceneRecipeSchema, SCENE_RECIPE_DIRECTORY, SceneRecipeIdSchema, type SceneCatalog, type SceneRecipe } from "./recipes";
 import { motionDuration } from "./motion";
 import { applyPresentationPreset, type PreviewDefinitionInput } from "./preview";
+import { createWalkthroughFromSections, compileWalkthrough, type WalkthroughDocumentInput } from "./walkthrough";
 import type { SceneIssue } from "./scene";
 
 export const PLATFORM_HOME_DIRECTORY = ".seene";
@@ -179,11 +180,25 @@ export function createSceneRecipe(input: {
   applicationRoute?: string;
   compositionType?: "scene" | "walkthrough";
   sections?: Array<{ id: string; title: string; file: string; export?: string; durationMs?: number }>;
+  walkthrough?: WalkthroughDocumentInput;
   width?: number;
   height?: number;
 }): SceneRecipe {
   const isWalkthrough = input.compositionType === "walkthrough";
   const def = defaultSceneDefinition();
+  const walkthrough = input.walkthrough
+    ?? (isWalkthrough && input.sections?.length
+      ? createWalkthroughFromSections({
+          title: input.title,
+          sections: input.sections.map(section => ({
+            file: section.file,
+            ...(section.export ? { export: section.export } : {}),
+            title: section.title,
+          })),
+        })
+      : undefined);
+  const compiled = walkthrough ? compileWalkthrough(walkthrough) : null;
+  const settings = walkthrough?.settings;
   return SceneRecipeSchema.parse({
     version: 1,
     id: input.id,
@@ -192,13 +207,14 @@ export function createSceneRecipe(input: {
     ...(input.applicationRoute ? { application: { route: input.applicationRoute } } : {}),
     definition: {
       ...def,
-      ...(isWalkthrough ? { motion: { durationMs: 10000, speed: 1, tracks: [] } } : {}),
-      ...(input.width ? { width: input.width } : {}),
-      ...(input.height ? { height: input.height } : {}),
+      ...(compiled ? { motion: compiled.motion } : isWalkthrough ? { motion: { durationMs: 10000, speed: 1, tracks: [] } } : {}),
+      ...(input.width && !settings ? { width: input.width } : settings ? { width: settings.width } : {}),
+      ...(input.height && !settings ? { height: input.height } : settings ? { height: settings.height } : {}),
       compositionType: isWalkthrough ? "walkthrough" : "scene",
       ...(isWalkthrough ? { walkthroughSettings: { durationAuto: true } } : {}),
       ...(isWalkthrough ? { sizingMode: "viewport", minHeight: "100vh" } : {}),
       ...(input.sections ? { sections: input.sections } : {}),
+      ...(walkthrough ? { walkthrough } : {}),
     },
   });
 }
@@ -208,6 +224,7 @@ export function sceneComponentSource(input: {
   compositionType?: "scene" | "walkthrough";
   content?: { importSpecifier: string; export?: string; id?: string; title?: string } | Array<{ importSpecifier: string; export?: string; id?: string; title?: string }>;
   sections?: Array<{ importSpecifier: string; export?: string; id?: string; title?: string }>;
+  walkthrough?: WalkthroughDocumentInput;
 }): string {
   const name = sceneComponentName(input.id);
   const isWalkthrough = input.compositionType === "walkthrough";
@@ -237,6 +254,9 @@ export default function ${name}() {
     const imports: string[] = [];
     const elements: string[] = [];
     const usedNames = new Set<string>();
+    const taggedIds = input.walkthrough
+      ? input.walkthrough.nodes.filter(node => node.type === "show" && node.target?.file).map(node => node.id)
+      : [];
 
     rawSections.forEach((sec, idx) => {
       const sourceName = sec.export && sec.export !== "default"
@@ -250,12 +270,17 @@ export default function ${name}() {
       usedNames.add(compName);
       const binding = sec.export ? `{ ${sec.export} as ${compName} }` : compName;
       imports.push(`import ${binding} from ${JSON.stringify(sec.importSpecifier)};`);
-      elements.push(`<${compName} />`);
+      const sectionId = taggedIds[idx];
+      elements.push(sectionId
+        ? `<WebsiteSection id=${JSON.stringify(sectionId)} label=${JSON.stringify(sec.title ?? compName)}><${compName} /></WebsiteSection>`
+        : `<${compName} />`);
     });
+
+    const previewImport = taggedIds.length ? `\nimport { WebsiteSection } from "@thatg33k/seene/preview";` : "";
 
     return `// @seene-scaffold-version 1
 "use client";
-import { Surface } from "@thatg33k/seene";
+import { Surface } from "@thatg33k/seene";${previewImport}
 ${imports.join("\n")}
 
 export default function ${name}() {

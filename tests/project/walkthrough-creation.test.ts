@@ -72,7 +72,9 @@ describe("Website Walkthrough First-Class Scene Type Regression Tests", () => {
     expect(recipe.definition.sizingMode).toBe("viewport");
     expect(recipe.definition.minHeight).toBe("100vh");
     expect(recipe.definition.sections?.length).toBe(3);
-    expect(recipe.definition.motion?.durationMs).toBe(10000);
+    expect(recipe.definition.walkthrough?.nodes.length).toBe(5);
+    // The recipe carries a real compiled timeline: start + three 2.4s steps + end.
+    expect(recipe.definition.motion?.durationMs).toBe(8600);
     expect(recipe.definition.motion?.speed).toBe(1);
     expect(recipe.definition.walkthroughSettings?.durationAuto).toBe(true);
 
@@ -118,5 +120,31 @@ describe("Website Walkthrough First-Class Scene Type Regression Tests", () => {
     expect(pos1).toBeGreaterThan(-1);
     expect(pos2).toBeGreaterThan(pos1);
     expect(pos3).toBeGreaterThan(pos2);
+  });
+
+  it("tags scaffold sections with walkthrough node IDs so targets resolve", () => {
+    const sections = [
+      { id: "sec-1", title: "Hero", file: "src/components/Hero.tsx" },
+      { id: "sec-2", title: "Footer", file: "src/components/Footer.tsx" },
+    ];
+    const recipe = createSceneRecipe({ id: "tagged-tour", title: "Tagged Tour", compositionType: "walkthrough", sections });
+    const walkthrough = recipe.definition.walkthrough!;
+    const source = sceneComponentSource({
+      id: "tagged-tour",
+      compositionType: "walkthrough",
+      sections: [
+        { importSpecifier: "@/components/Hero", title: "Hero" },
+        { importSpecifier: "@/components/Footer", title: "Footer" },
+      ],
+      walkthrough,
+    });
+
+    expect(source).toContain('import { WebsiteSection } from "@thatg33k/seene/preview";');
+    const showIds = walkthrough.nodes.filter(node => node.type === "show").map(node => node.id);
+    for (const id of showIds) expect(source).toContain(`<WebsiteSection id="${id}"`);
+    // Every show step targets its own tagged section.
+    for (const node of walkthrough.nodes.filter(node => node.type === "show")) {
+      expect(node.target?.sectionId).toBe(node.id);
+    }
   });
 });

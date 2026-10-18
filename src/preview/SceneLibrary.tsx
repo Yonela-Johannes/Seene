@@ -4,6 +4,8 @@ import { SCENE_TRANSITION_DURATION } from "../core";
 import {
   AUTHORED_PRESENTATION,
   RESOURCES,
+  compileWalkthrough,
+  createWalkthroughFromSections,
   defaultSceneDefinition,
   motionDuration,
   matrixFor,
@@ -465,6 +467,21 @@ export function SceneLibrary({
           ? [{ file: choice.split("#")[0], export: choice.split("#")[1] }]
           : [];
 
+    const walkthroughDocument = compositionType === "walkthrough"
+      ? createWalkthroughFromSections({
+          title,
+          sections: walkthroughSections.map(section => {
+            const entry = section as { file: string; export?: string; title?: string };
+            return {
+              file: entry.file,
+              ...(entry.export ? { export: entry.export } : {}),
+              ...(entry.title ? { title: entry.title } : {}),
+            };
+          }),
+        })
+      : undefined;
+    const walkthroughMotion = walkthroughDocument ? compileWalkthrough(walkthroughDocument)?.motion : undefined;
+
     const recipe = {
       version: 1,
       id,
@@ -473,7 +490,15 @@ export function SceneLibrary({
       definition: {
         ...defaultSceneDefinition(),
         compositionType,
-        ...(compositionType === "walkthrough" ? { sizingMode: "viewport", minHeight: "100vh", walkthroughSettings: { durationAuto: true } } : { width: createWidth, height: createHeight }),
+        ...(compositionType === "walkthrough"
+          ? {
+              sizingMode: "viewport",
+              minHeight: "100vh",
+              walkthroughSettings: { durationAuto: true },
+              ...(walkthroughDocument ? { walkthrough: walkthroughDocument, width: walkthroughDocument.settings.width, height: walkthroughDocument.settings.height } : {}),
+              ...(walkthroughMotion ? { motion: walkthroughMotion } : {}),
+            }
+          : { width: createWidth, height: createHeight }),
       },
     };
 
@@ -591,14 +616,15 @@ export function SceneLibrary({
     }
   };
 
-  const saveSceneDefinition = useCallback((definition: PreviewDefinitionInput) => {
+  const saveSceneDefinition = useCallback((definition: PreviewDefinitionInput, sections?: Array<{ file: string; export?: string; title?: string }>) => {
     if (!createSceneEndpoint || !selectedScene) return;
-    void fetch(createSceneEndpoint, {
+    return fetch(createSceneEndpoint, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         id: selectedScene.id,
         recipe: { definition: { ...definition, backdrop: definition.backdrop ?? "site" } },
+        ...(sections && sections.length > 0 ? { sections } : {}),
       }),
     }).then((res) => {
       void res;
@@ -631,6 +657,7 @@ export function SceneLibrary({
         transition={transition}
         onTransitionChange={onTransitionChange}
         onSaveDefinition={saveSceneDefinition}
+        createSceneEndpoint={createSceneEndpoint}
       >
         {effectiveRoute ? (
           <Surface
