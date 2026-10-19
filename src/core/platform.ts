@@ -165,10 +165,30 @@ export const PlatformBrowseResponseSchema = z.strictObject({
   truncated: z.boolean(),
   issue: z.string().max(400).optional(),
 });
+export const PlatformDiscoveredProjectSchema = z.strictObject({
+  path: z.string().min(1),
+  name: z.string().min(1),
+  framework: z.enum(["next", "vite", "react"]),
+  reactVersion: z.string().max(40).optional(),
+  packageManager: z.enum(["npm", "pnpm", "yarn", "bun"]).optional(),
+  hasSeene: z.boolean(),
+  sceneCount: z.number().int().nonnegative(),
+  registered: z.boolean(),
+  modifiedMs: z.number().nonnegative().optional(),
+});
+export const PlatformScanResponseSchema = z.strictObject({
+  home: z.string().min(1),
+  roots: z.array(z.string().min(1)),
+  projects: z.array(PlatformDiscoveredProjectSchema),
+  scanned: z.number().int().nonnegative(),
+  truncated: z.boolean(),
+});
 export type PlatformSource = z.output<typeof PlatformSourceSchema>;
 export type PlatformSourcesResponse = z.output<typeof PlatformSourcesResponseSchema>;
 export type PlatformDirectoryEntry = z.output<typeof PlatformDirectoryEntrySchema>;
 export type PlatformBrowseResponse = z.output<typeof PlatformBrowseResponseSchema>;
+export type PlatformDiscoveredProject = z.output<typeof PlatformDiscoveredProjectSchema>;
+export type PlatformScanResponse = z.output<typeof PlatformScanResponseSchema>;
 
 export type ProjectEntry = z.output<typeof ProjectEntrySchema>;
 export type ProjectRegistry = z.output<typeof ProjectRegistrySchema>;

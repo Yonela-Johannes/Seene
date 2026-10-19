@@ -1,5 +1,5 @@
 import { createRoot } from "react-dom/client";
-import { useLayoutEffect, useState, type CSSProperties } from "react";
+import { useEffect, useLayoutEffect, useState, type CSSProperties } from "react";
 import "../../src/index.css";
 import { ScenePreview } from "../../src/preview";
 import { Surface, type PreviewDefinitionInput } from "../../src";
@@ -21,7 +21,40 @@ const definition: PreviewDefinitionInput = {
   motion: { durationMs: 20000, speed: 1, tracks: [] },
 };
 
-function Page() {
+/** Follow the walkthrough scroll container so the story can show real progress. */
+function useStoryScroll(): { progress: number; started: boolean } {
+  const [state, setState] = useState({ progress: 0, started: false });
+  useEffect(() => {
+    let element: HTMLElement | null = null;
+    let frame = 0;
+    const update = () => {
+      frame = 0;
+      if (!element) return;
+      const max = element.scrollHeight - element.clientHeight;
+      setState({ progress: max > 0 ? Math.min(1, Math.max(0, element.scrollTop / max)) : 0, started: element.scrollTop > 24 });
+    };
+    const onScroll = () => { if (!frame) frame = requestAnimationFrame(update); };
+    const attach = () => {
+      const next = document.querySelector<HTMLElement>(".website-walkthrough-viewport");
+      if (!next || next === element) return;
+      element?.removeEventListener("scroll", onScroll);
+      element = next;
+      element.addEventListener("scroll", onScroll, { passive: true });
+      update();
+    };
+    attach();
+    const observer = new MutationObserver(attach);
+    observer.observe(document.body, { childList: true, subtree: true });
+    return () => {
+      observer.disconnect();
+      element?.removeEventListener("scroll", onScroll);
+      if (frame) cancelAnimationFrame(frame);
+    };
+  }, []);
+  return state;
+}
+
+function Page({ started }: { started: boolean }) {
   return (
     <Surface id="host" style={{ width: "100%", height: "auto", minHeight: "100vh" }}>
       <main className="demo-founder-story-page" data-testid="walkthrough-page" style={{ height: "500vh" }}>
@@ -39,15 +72,32 @@ function Page() {
                 <p className="demo-founder-story-kicker">{screen.label}</p>
                 <h1 className="demo-founder-story-title">{screen.title}</h1>
                 <p className="demo-founder-story-copy">{screen.body}</p>
-                <div className="demo-founder-story-progress" aria-hidden="true">
-                  <span>{String(index + 1).padStart(2, "0")}</span>
-                  <span className="demo-founder-story-progress-line" />
-                  <span>05</span>
+                <div className="demo-founder-story-steps" aria-hidden="true">
+                  {FOUNDER_STORY_SCREENS.map((step, stepIndex) => (
+                    <span
+                      key={step.label}
+                      className="demo-founder-story-step"
+                      data-active={stepIndex === index ? "true" : undefined}
+                    />
+                  ))}
+                  <span className="demo-founder-story-step-count">
+                    {String(index + 1).padStart(2, "0")} / {String(FOUNDER_STORY_SCREENS.length).padStart(2, "0")}
+                  </span>
                 </div>
+                {index === 0 && !started ? (
+                  <p className="demo-founder-story-hint">
+                    <i aria-hidden="true">↓</i> Scroll to continue
+                  </p>
+                ) : null}
                 {index === FOUNDER_STORY_SCREENS.length - 1 ? (
-                  <a className="demo-founder-story-cta" href={`${import.meta.env.BASE_URL}#install`}>
-                    Experience Seene <span aria-hidden="true" style={{ marginLeft: 8 }}>→</span>
-                  </a>
+                  <>
+                    <a className="demo-founder-story-cta" href={`${import.meta.env.BASE_URL}#install`}>
+                      Experience Seene <span aria-hidden="true" style={{ marginLeft: 8 }}>→</span>
+                    </a>
+                    <a className="demo-founder-story-cta-quiet" href={`${import.meta.env.BASE_URL}#/projects`}>
+                      Open the studio
+                    </a>
+                  </>
                 ) : null}
               </div>
             </FrameSection>
@@ -60,6 +110,7 @@ function Page() {
 
 function BrowserFixture() {
   const [scrollbarWidth, setScrollbarWidth] = useState(0);
+  const story = useStoryScroll();
   const [sceneDefinition, setSceneDefinition] = useState<PreviewDefinitionInput>(() => {
     const saved = localStorage.getItem("walkthrough-fixture-definition");
     return saved ? JSON.parse(saved) as PreviewDefinitionInput : definition;
@@ -108,8 +159,11 @@ function BrowserFixture() {
           localStorage.setItem("walkthrough-fixture-definition", JSON.stringify(updated));
         }}
       >
-        <Page />
+        <Page started={story.started} />
       </ScenePreview>
+      <div className="demo-story-progress" aria-hidden="true" style={{ "--demo-story-progress": String(story.progress) } as CSSProperties}>
+        <i />
+      </div>
     </div>
   );
 }

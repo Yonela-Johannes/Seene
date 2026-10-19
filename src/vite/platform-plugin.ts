@@ -9,7 +9,7 @@ import {
   PLATFORM_API_PREFIX, PLATFORM_REGISTRY_FILE, PlatformErrorSchema, PlatformProjectSchema,
   PlatformProjectsSchema, PlatformCatalogResponseSchema, PlatformContentResponseSchema,
   PlatformSceneResponseSchema, PlatformStatusSchema, CreateSceneRequestSchema, DuplicateSceneRequestSchema, RemoveSceneRequestSchema,
-  PlatformSourceInspectRequestSchema, PlatformSourcesResponseSchema, PlatformBrowseResponseSchema,
+  PlatformSourceInspectRequestSchema, PlatformSourcesResponseSchema, PlatformBrowseResponseSchema, PlatformScanResponseSchema,
   RegisterProjectSchema, analyzeApplicationModule, applicationRouteForContent, createSceneRecipe, isAllowedDevOrigin,
   isApplicationSourcePath, isDocumentApplication, isLoopbackHost, issueFor,
   loadProjectRegistry, platformHome, previewUrl, registryWithout, sceneComponentSource, summarizeCatalog,
@@ -17,7 +17,7 @@ import {
 } from "../core/platform";
 import { SCENE_RECIPE_DIRECTORY } from "../core/recipes";
 import {
-  PlatformFault, browseSourceDirectories, componentImportSpecifier, discoverApplicationContent, duplicateSceneSourcePair,
+  PlatformFault, browseSourceDirectories, componentImportSpecifier, defaultProjectContainers, discoverApplicationContent, discoverLocalProjects, duplicateSceneSourcePair,
   inspectSource, invalidateApplicationScan, readSceneCatalog, removeSceneSourcePair, resolveProjectTarget, writeSceneSourcePair,
 } from "./scene-files";
 
@@ -301,6 +301,19 @@ function createHandler(options: { platformRoot?: string }) {
           if (!isLoopbackHost(request.headers.host)) throw new PlatformFault("denied-path", "Source browsing is limited to this machine.");
           const result = await browseSourceDirectories(requestUrl.searchParams.get("path") ?? undefined);
           return void send(response, 200, PlatformBrowseResponseSchema.parse(result));
+        }
+        if (route === "/projects/sources/discover" && request.method === "GET") {
+          if (!isLoopbackHost(request.headers.host)) throw new PlatformFault("denied-path", "Project discovery is limited to this machine.");
+          const requested = requestUrl.searchParams.getAll("root").map(value => value.trim()).filter(Boolean);
+          const containers = requested.length ? requested : [process.cwd(), ...defaultProjectContainers()];
+          const result = await discoverLocalProjects(containers);
+          const projects = result.projects
+            .filter(project => !options.platformRoot || (project.path !== options.platformRoot && !options.platformRoot.startsWith(project.path + path.sep)))
+            .map(project => ({ ...project, registered: entries.some(entry => path.resolve(entry.path) === project.path) }))
+            .sort((a, b) => Number(b.registered) - Number(a.registered));
+          return void send(response, 200, PlatformScanResponseSchema.parse({
+            home: home.directory, roots: result.roots, projects, scanned: result.scanned, truncated: result.truncated,
+          }));
         }
         if (route === "/projects/status" && request.method === "GET") {
           const entry = await locate(requestUrl.searchParams.get("path"));

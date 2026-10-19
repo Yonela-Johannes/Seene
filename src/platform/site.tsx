@@ -89,7 +89,7 @@ export function SeeneButton(props: ButtonProps) {
   const inner = (
     <>
       {loading ? <span className="seene-spinner" aria-hidden="true" /> : null}
-      <span>{loading ? "Working…" : children}</span>
+      <span className="seene-btn-label">{loading ? "Working…" : children}</span>
       {kbd && !loading ? kbd : null}
     </>
   );

@@ -59,6 +59,7 @@ describe("unified creation flow", () => {
   it("walks from kind to targets to a created scene and opens the studio on it", async () => {
     installFetch([
       { match: /\/projects\/content/, body: { project: PROJECT, content: CONTENT } },
+      { match: /\/projects\/sources\/discover/, body: { home: "/home/x/.seene", roots: [], projects: [], scanned: 0, truncated: false } },
       { match: /\/projects\/scenes$/, method: "POST", body: { project: PROJECT, scene: { id: "hero", title: "Hero" }, catalog: { issues: [], scenes: [] } } },
       { match: /\/projects$/, body: { home: "/home/x/.seene", projects: [PROJECT] } },
     ]);
@@ -98,6 +99,7 @@ describe("unified creation flow", () => {
         home: "/home/x/.seene",
         source: { path: "/nope", name: "nope", exists: false, isDirectory: false, react: false, hasPackageJson: false, connected: false, registered: false, sceneDirectory: "src/seene/scenes", sceneCount: 0, issue: "That folder does not exist. Check the path and try again." },
       } },
+      { match: /\/projects\/sources\/discover/, body: { home: "/home/x/.seene", roots: [], projects: [], scanned: 0, truncated: false } },
       { match: /\/projects$/, body: { home: "/home/x/.seene", projects: [] } },
     ]);
 

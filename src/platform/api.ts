@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import {
   PLATFORM_API_PREFIX, SEENE_PROTOCOL_VERSION, isAllowedDevOrigin, type PlatformBrowseResponse, type PlatformCatalog,
-  type PlatformContent, type PlatformProject, type PlatformSourcesResponse, type PlatformStatus,
+  type PlatformContent, type PlatformProject, type PlatformScanResponse, type PlatformSourcesResponse, type PlatformStatus,
 } from "../core/platform";
 
 export type ProjectsResponse = { home: string; projects: PlatformProject[] };
@@ -10,6 +10,7 @@ export type ContentResponse = { project: PlatformProject; content: PlatformConte
 export type SceneResponse = { project: PlatformProject; scene: PlatformCatalog["scenes"][number]; catalog: PlatformCatalog };
 export type SourceInspectResponse = PlatformSourcesResponse;
 export type BrowseResponse = PlatformBrowseResponse;
+export type ScanResponse = PlatformScanResponse;
 
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
   let response: Response;
@@ -38,6 +39,12 @@ export const platformApi = {
   inspectSource: (target: string) => request<SourceInspectResponse>(`${PLATFORM_API_PREFIX}/projects/sources/inspect`, body({ path: target })),
   browseSource: (target?: string) =>
     request<BrowseResponse>(`${PLATFORM_API_PREFIX}/projects/sources/browse${target ? `?path=${encodeURIComponent(target)}` : ""}`),
+  discoverProjects: (roots?: string[]) => {
+    const params = new URLSearchParams();
+    for (const root of roots ?? []) if (root.trim()) params.append("root", root.trim());
+    const query = params.toString();
+    return request<ScanResponse>(`${PLATFORM_API_PREFIX}/projects/sources/discover${query ? `?${query}` : ""}`);
+  },
   status: (target: string, origin: string) => request<PlatformStatus>(`${PLATFORM_API_PREFIX}/projects/status?path=${encodeURIComponent(target)}&origin=${encodeURIComponent(origin)}`),
   createScene: (draft: {
     path: string;

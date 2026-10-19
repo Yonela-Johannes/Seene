@@ -6,6 +6,7 @@ import {
 import type { ContentResponse } from "./api";
 import { PROJECTS_ROUTE, platformApi, studioHref, type CompositionKind } from "./api";
 import { useDebounced, useResource } from "./data";
+import { DiscoveryPanel } from "./DiscoveryPanel";
 import { DirectoryPicker } from "./DirectoryPicker";
 import { Notice, Panel, buttonPrimary, buttonQuiet, fieldClass } from "./ui";
 import { SearchIcon, SeeneButton } from "./site";
@@ -329,6 +330,10 @@ export function CreateView({ initialKind, initialProject }: { initialKind?: Comp
               </div>
             )}
           </Panel>
+
+          <div className="lg:col-span-2">
+            <DiscoveryPanel onRegistered={projects.reload} compact />
+          </div>
         </div>
       )}
 

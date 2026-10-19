@@ -177,4 +177,38 @@ describe("platform source discovery endpoints", () => {
     );
     expect(refreshed.content.files.some(file => file.path.endsWith("AddedLater.tsx"))).toBe(true);
   });
+
+  it("finds React applications in a folder, skips the rest and marks registered ones", async () => {
+    const { origin } = await start();
+    const scanRoot = await mkdtemp(path.join(os.tmpdir(), "seene-scan-"));
+    roots.push(scanRoot);
+    const write = async (name: string, pkg: Record<string, unknown>) => {
+      await mkdir(path.join(scanRoot, name), { recursive: true });
+      await writeFile(path.join(scanRoot, name, "package.json"), JSON.stringify(pkg));
+    };
+    await write("vite-app", { name: "vite-app", dependencies: { react: "^18.2.0", vite: "^5.0.0" } });
+    await write("next-app", { name: "next-app", dependencies: { react: "^19.0.0", next: "^15.0.0" } });
+    await write("server-lib", { name: "server-lib", dependencies: { express: "^4.0.0" } });
+    await write(".hidden-app", { name: "hidden-app", dependencies: { react: "^19.0.0" } });
+
+    type Scan = { roots: string[]; projects: Array<{ path: string; name: string; framework: string; reactVersion?: string; registered: boolean; hasSeene: boolean; sceneCount: number }>; scanned: number; truncated: boolean };
+    const scan = await json<Scan>(await fetch(`${origin}/__seene/platform/projects/sources/discover?root=${encodeURIComponent(scanRoot)}`));
+    expect(scan.roots).toEqual([path.resolve(scanRoot)]);
+    expect(scan.projects.map(project => project.name).sort()).toEqual(["next-app", "vite-app"]);
+    expect(scan.truncated).toBe(false);
+    const vite = scan.projects.find(project => project.name === "vite-app");
+    expect(vite).toMatchObject({ framework: "vite", reactVersion: "18.2.0", registered: false, hasSeene: false, sceneCount: 0 });
+    expect(scan.projects.find(project => project.name === "next-app")?.framework).toBe("next");
+
+    await fetch(`${origin}/__seene/platform/projects`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ path: path.join(scanRoot, "vite-app") }),
+    });
+    const again = await json<Scan>(await fetch(`${origin}/__seene/platform/projects/sources/discover?root=${encodeURIComponent(scanRoot)}`));
+    expect(again.projects.find(project => project.name === "vite-app")?.registered).toBe(true);
+    expect(again.projects[0].name).toBe("vite-app");
+
+    expect(await rawStatus(origin, "/__seene/platform/projects/sources/discover", "192.168.1.5:4173")).toBe(400);
+  });
 });

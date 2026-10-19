@@ -4,7 +4,7 @@ import path from "node:path";
 import { SCENE_RECIPE_DIRECTORY, type SceneCatalog, type SceneRecipe, SceneRecipeSchema } from "../core/recipes";
 import type { PreviewDefinitionInput } from "../core/preview";
 import { RESOURCES } from "../core/resources";
-import { analyzeApplicationModule, applicationFileReadiness, classifyApplicationUnit, componentImportSpecifier, isApplicationSourcePath, isIconOrPrimitive, sceneComponentName, sceneComponentSource, type PlatformContent, type PlatformContentFile, type PlatformDirectoryEntry, type PlatformSource } from "../core/platform";
+import { analyzeApplicationModule, applicationFileReadiness, classifyApplicationUnit, componentImportSpecifier, isApplicationSourcePath, isIconOrPrimitive, sceneComponentName, sceneComponentSource, type PlatformContent, type PlatformContentFile, type PlatformDirectoryEntry, type PlatformDiscoveredProject, type PlatformSource } from "../core/platform";
 import { ProjectStateSchema } from "../core/project";
 import { portableCatalog } from "../project/portable";
 import type { SceneIssue } from "../core/scene";
@@ -392,6 +392,22 @@ async function readManifestAt(root: string): Promise<SourceManifest | undefined>
   try { return JSON.parse(text) as SourceManifest; } catch { return undefined; }
 }
 
+function declaredManager(manifest: SourceManifest | undefined): PlatformSource["packageManager"] | undefined {
+  const declared = typeof manifest?.packageManager === "string" ? manifest.packageManager.split(/[@/]/)[0] : "";
+  return (["npm", "pnpm", "yarn", "bun"] as const).find(manager => manager === declared);
+}
+
+async function lockfileManager(root: string): Promise<PlatformSource["packageManager"] | undefined> {
+  for (const [file, manager] of Object.entries(sourceLockfiles)) {
+    if (await stat(path.join(root, file)).then(() => true, () => false)) return manager;
+  }
+  return undefined;
+}
+
+async function isDirectoryAt(root: string, relative: string): Promise<boolean> {
+  return stat(path.join(root, relative)).then(info => info.isDirectory(), () => false);
+}
+
 /**
  * Read a candidate source folder without registering it. This powers the creation flow's
  * "check this path" step so users learn whether Seene can work with a folder before committing.
@@ -419,13 +435,9 @@ export async function inspectSource(target: string): Promise<Omit<PlatformSource
   const name = typeof manifest?.name === "string" && manifest.name.trim() ? manifest.name.trim() : path.basename(root) || root;
   const react = manifest ? typeof { ...manifest.dependencies, ...manifest.devDependencies }.react === "string" : false;
 
-  const declaredManager = typeof manifest?.packageManager === "string" ? manifest.packageManager.split(/[@/]/)[0] : "";
-  let packageManager = (["npm", "pnpm", "yarn", "bun"] as const).find(manager => manager === declaredManager);
-  if (!packageManager) {
-    for (const [file, manager] of Object.entries(sourceLockfiles)) {
-      if (await stat(path.join(root, file)).then(() => true, () => false)) { packageManager = manager; break; }
-    }
-  }
+  const declaredManagerValue = declaredManager(manifest);
+  let packageManager = declaredManagerValue;
+  if (!packageManager) packageManager = await lockfileManager(root);
 
   let recorded: PlatformSource | undefined;
   const stateText = await readFile(path.join(root, ".seene", "project.json"), "utf8").catch(() => undefined);
@@ -505,6 +517,97 @@ export async function browseSourceDirectories(
     entries,
     truncated: directories.length > selected.length,
   };
+}
+
+const discoverSkip = new Set([
+  ...browseSkip,
+  "Library", "Applications", "System", "Volumes", "Media", "Movies", "Music", "Pictures",
+  "Public", "Templates", "venv", "__pycache__", "vendor", "Pods", "tmp", "temp",
+]);
+
+export type DiscoveredProject = Omit<PlatformDiscoveredProject, "registered">;
+
+/**
+ * Places on this machine that commonly hold checked-out applications. Scanning is explicit
+ * (a user action) and shallow: each container plus its immediate children are considered.
+ */
+export function defaultProjectContainers(home = homedir()): string[] {
+  const names = ["Projects", "projects", "dev", "code", "repos", "repositories", "workspace", "work", "src"];
+  const parents = ["", "Desktop", "Documents", "Downloads", "Code"];
+  const containers = [
+    path.join(home, "Projects"), path.join(home, "dev"), path.join(home, "code"),
+    path.join(home, "repos"), path.join(home, "workspace"),
+  ];
+  for (const parent of parents) {
+    for (const name of names) {
+      const candidate = path.join(home, parent, name);
+      if (!containers.includes(candidate)) containers.push(candidate);
+    }
+  }
+  return containers;
+}
+
+async function describeLocalProject(root: string): Promise<DiscoveredProject | undefined> {
+  const manifest = await readManifestAt(root);
+  if (!manifest) return undefined;
+  const dependencies = { ...manifest.dependencies, ...manifest.devDependencies };
+  const reactVersion = dependencies.react;
+  if (typeof reactVersion !== "string") return undefined;
+
+  const packageManager = declaredManager(manifest) ?? await lockfileManager(root);
+  const isNext = typeof dependencies.next === "string";
+  const framework: DiscoveredProject["framework"] = isNext ? "next" : typeof dependencies.vite === "string" ? "vite" : "react";
+  const hasSeene = await readFile(path.join(root, ".seene", "project.json"), "utf8").then(() => true, () => false);
+  const catalog = hasSeene ? await readSceneCatalog(root).catch(() => ({ scenes: [] })) : { scenes: [] };
+  const modifiedMs = await stat(path.join(root, "package.json")).then(info => info.mtimeMs, () => undefined);
+
+  return {
+    path: root,
+    name: typeof manifest.name === "string" && manifest.name.trim() ? manifest.name.trim() : path.basename(root) || root,
+    framework,
+    reactVersion: reactVersion.replace(/^[\^~>=<\s]+/, ""),
+    ...(packageManager ? { packageManager } : {}),
+    hasSeene,
+    sceneCount: catalog.scenes.length,
+    ...(modifiedMs !== undefined ? { modifiedMs } : {}),
+  };
+}
+
+/**
+ * Find React applications on this machine so a project can be registered with one click.
+ * Only folder names and package.json facts leave the process; no source is uploaded.
+ */
+export async function discoverLocalProjects(
+  containers: string[],
+  limit = 40,
+): Promise<{ roots: string[]; projects: DiscoveredProject[]; scanned: number; truncated: boolean }> {
+  const roots: string[] = [];
+  const candidates = new Set<string>();
+  for (const container of containers) {
+    const resolved = path.resolve(container);
+    if (roots.includes(resolved)) continue;
+    const info = await stat(resolved).catch(() => undefined);
+    if (!info?.isDirectory()) continue;
+    roots.push(resolved);
+    candidates.add(resolved);
+    const children = await readdir(resolved, { withFileTypes: true }).catch(() => []);
+    for (const child of children) {
+      if (!child.isDirectory() || child.name.startsWith(".") || discoverSkip.has(child.name)) continue;
+      candidates.add(path.join(resolved, child.name));
+    }
+  }
+
+  const projects: DiscoveredProject[] = [];
+  let scanned = 0;
+  let truncated = false;
+  for (const candidate of candidates) {
+    if (projects.length >= limit) { truncated = true; break; }
+    scanned += 1;
+    const described = await describeLocalProject(candidate).catch(() => undefined);
+    if (described) projects.push(described);
+  }
+  projects.sort((a, b) => (b.modifiedMs ?? 0) - (a.modifiedMs ?? 0));
+  return { roots, projects, scanned, truncated };
 }
 
 export { componentImportSpecifier };

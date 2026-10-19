@@ -341,6 +341,13 @@ test('local studio explains its project registration flow using the platform API
  await expect(page.getByRole('form',{name:'Register project'})).toBeVisible();
  await expect(page.getByLabel('Project folder path')).toBeVisible();
  await expect(page.getByRole('button',{name:/Register project/})).toBeDisabled();
+ // The "+" icon and its label share one line (Tailwind preflight makes `svg`
+ // display:block, which used to stack the icon above the label).
+ const registerButton=page.getByRole('button',{name:/Register project/});
+ const buttonBox=await registerButton.boundingBox();
+ const plusBox=await registerButton.locator('svg').boundingBox();
+ expect(buttonBox&&plusBox).toBeTruthy();
+ expect(Math.abs((plusBox!.y+plusBox!.height/2)-(buttonBox!.y+buttonBox!.height/2))).toBeLessThan(3);
  await expect(page.getByRole('link',{name:'Back to overview'})).toHaveAttribute('href','#/');
  expect(requests).toBe(1);
 });
