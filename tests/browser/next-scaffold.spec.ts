@@ -101,6 +101,38 @@ async function prepareNextProject(env: FixtureEnv) {
   env.hostDir = hostDir;
   await mkdir(hostDir, { recursive: true });
 
+  // The generator writes `@/...` import specifiers for host components, which assumes the
+  // common `@/* -> src/*` alias. Next only writes its own tsconfig when none exists, and its
+  // default maps `@/*` to the project root, so declare the src-rooted alias up front.
+  await writeFile(
+    path.join(hostDir, "tsconfig.json"),
+    JSON.stringify(
+      {
+        compilerOptions: {
+          target: "ES2017",
+          lib: ["dom", "dom.iterable", "esnext"],
+          allowJs: true,
+          skipLibCheck: true,
+          strict: false,
+          noEmit: true,
+          esModuleInterop: true,
+          module: "esnext",
+          moduleResolution: "bundler",
+          resolveJsonModule: true,
+          isolatedModules: true,
+          jsx: "preserve",
+          incremental: true,
+          baseUrl: ".",
+          paths: { "@/*": ["./src/*"] },
+        },
+        include: ["next-env.d.ts", "**/*.ts", "**/*.tsx"],
+        exclude: ["node_modules"],
+      },
+      null,
+      2,
+    ),
+  );
+
   await writeFile(
     path.join(hostDir, "package.json"),
     JSON.stringify({

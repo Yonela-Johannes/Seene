@@ -19,6 +19,7 @@
 - `src/react/index.tsx` registers live `Surface` nodes and applies the evaluated transforms, opacity and leaf blur to the host React DOM tree.
 - `WebsiteWalkthrough.tsx` renders real children or ordered explicit sections in a scroll viewport. `websiteTimeline.ts` maps section positions and elapsed time. The controlled timeline is opt-in; recipes without a walkthrough document keep this legacy path unchanged.
 - `src/vite/seene-plugin.ts` serves Vite development endpoints for content discovery and scene create/update/delete. `src/vite/next-handler.ts` provides the Next API handlers; the generated Next Studio route is development-only.
+- `src/vite/platform-plugin.ts` serves the local studio console API under `/__seene/platform`: project registration, project-local content discovery, scene create/update/delete and `/projects/sources/discover`. Discovery scans only the `?root=` folders it is given, or common project containers such as `~/Projects`, and returns folder names plus `package.json` facts such as framework, React version and package manager — never source. Every endpoint is loopback-guarded so the console stays on the developer's machine.
 - `src/export/` and `src/cli/` own snapshot and MP4 export orchestration. The exporter seeks the live capture bridge at frame times and invokes local FFmpeg; it does not start the host server.
 
 ## Validation boundaries
