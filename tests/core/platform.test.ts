@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applicationFileReadiness, isLoopbackHost } from "../../src/core/platform";
+import { applicationFileReadiness, isLoopbackHost, validateHostComponent } from "../../src/core/platform";
 
 describe("application file readiness", () => {
   it("reports route files as not previewable and explains why", () => {
@@ -33,6 +33,26 @@ describe("application file readiness", () => {
   it("accepts default exports and named-only exports", () => {
     expect(applicationFileReadiness("src/components/Hero.tsx", { default: true, exports: [] }).previewable).toBe(true);
     expect(applicationFileReadiness("src/components/Hero.tsx", { default: false, exports: ["Hero"] }).previewable).toBe(true);
+  });
+});
+
+describe("host component validation", () => {
+  it("accepts a default export when no named export is requested", () => {
+    expect(validateHostComponent("src/Hero.tsx", "export default function Hero() {}")).toEqual({ valid: true, warning: undefined });
+  });
+
+  it("accepts a requested named export", () => {
+    const source = "export const Hero = () => null;\nexport const Button = () => null;";
+    expect(validateHostComponent("src/lib.tsx", source, "Hero")).toEqual({ valid: true, warning: undefined });
+    expect(validateHostComponent("src/lib.tsx", source, "Button")).toEqual({ valid: true, warning: undefined });
+  });
+
+  it("rejects a requested named export that does not exist", () => {
+    expect(() => validateHostComponent("src/lib.tsx", "export const Hero = () => null;", "Missing")).toThrow('has no export named "Missing"');
+  });
+
+  it("still requires a default export when none is requested", () => {
+    expect(() => validateHostComponent("src/lib.tsx", "export const Hero = () => null;")).toThrow("has no default export");
   });
 });
 

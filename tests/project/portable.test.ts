@@ -40,6 +40,9 @@ describe("portable host connections",()=>{
     const apiRoute=await readFile(path.join(root,"app/api/seene/create-scene/route.js"),"utf8");
     expect(apiRoute).toContain('from "@thatg33k/seene/next"');
     expect(apiRoute).toContain("DELETE");
+    const contentRoute=await readFile(path.join(root,"app/api/seene/content/route.js"),"utf8");
+    expect(contentRoute).toContain('from "@thatg33k/seene/next"');
+    expect(contentRoute).toContain("GET");
    const studio=await readFile(path.join(root,"src/seene/Studio.jsx"),"utf8");
    expect(studio).toContain('createSceneEndpoint="/api/seene/create-scene"');
    expect(studio).toContain("createPortal");
@@ -47,6 +50,7 @@ describe("portable host connections",()=>{
   }
   if(kind==="next-pages") {
    expect(await readFile(path.join(root,"pages/api/seene/create-scene.js"),"utf8")).toContain("createPagesHandler");
+   expect(await readFile(path.join(root,"pages/api/seene/content.js"),"utf8")).toContain("createPagesHandler");
    expect(await readFile(path.join(root,"src/seene/Studio.jsx"),"utf8")).toContain('createSceneEndpoint="/api/seene/create-scene"');
   }
  });
@@ -108,6 +112,7 @@ describe("portable host connections",()=>{
   expect(await readFile(path.join(root,"src/app/(app)/page.tsx"),"utf8")).toBe(page);
   expect(await readFile(path.join(root,"src/app/(app)/seene/page.jsx"),"utf8")).toContain("SeeneStudio");
   expect(await readFile(path.join(root,"src/app/(app)/api/seene/create-scene/route.js"),"utf8")).toContain("@thatg33k/seene/next");
+  expect(await readFile(path.join(root,"src/app/(app)/api/seene/content/route.js"),"utf8")).toContain("GET");
   success(await run(root,"validate-project"));
  });
  it("gives an actionable unavailable-server error for the generated Next route",async()=>{
@@ -173,11 +178,14 @@ describe("portable host connections",()=>{
   const manifestPath=path.join(root,".seene/integration.json");
   const manifest=JSON.parse(await readFile(manifestPath,"utf8"));
   delete manifest.files["app/api/seene/create-scene/route.js"];
+  delete manifest.files["app/api/seene/content/route.js"];
   await writeFile(manifestPath,JSON.stringify(manifest,null,2)+"\n");
   await rm(path.join(root,"app/api/seene/create-scene/route.js"));
+  await rm(path.join(root,"app/api/seene/content/route.js"));
   const upgraded=success(await run(root));
   expect(upgraded.changed).toBe(true);
   expect(await readFile(path.join(root,"app/api/seene/create-scene/route.js"),"utf8")).toContain("@thatg33k/seene/next");
+  expect(await readFile(path.join(root,"app/api/seene/content/route.js"),"utf8")).toContain("GET");
   success(await run(root,"validate-project"));
  });
  it("can explicitly use the generic connection in any Next host",async()=>{

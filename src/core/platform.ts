@@ -401,11 +401,16 @@ export default function ${name}() {
 `;
 }
 
-export function validateHostComponent(hostPath: string, source: string): { valid: boolean; warning?: string } {
+export function validateHostComponent(hostPath: string, source: string, exportName?: string): { valid: boolean; warning?: string } {
   const normPath = hostPath.replace(/\\/g, "/");
   const analysis = analyzeApplicationModule(source);
+  const named = exportName && exportName !== "default" ? exportName : undefined;
 
-  if (!analysis.default) {
+  if (named) {
+    if (!analysis.exports.includes(named)) {
+      throw new Error(`Host component "${hostPath}" has no export named "${named}".`);
+    }
+  } else if (!analysis.default) {
     throw new Error(`Host component "${hostPath}" has no default export.`);
   }
 

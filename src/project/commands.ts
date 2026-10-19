@@ -429,6 +429,7 @@ async function portableHost(root:string, requested?:string):Promise<PortableHost
       if(routeDirectory) {
         await ensureNextRouteAvailable(root,routeDirectory+"/seene","page");
         await ensureNextRouteAvailable(root,routeDirectory+"/api/seene/create-scene","route");
+        await ensureNextRouteAvailable(root,routeDirectory+"/api/seene/content","route");
         return {adapter:"next-app",entry:routeDirectory+"/seene/page.jsx"};
       }
     }
@@ -436,6 +437,7 @@ async function portableHost(root:string, requested?:string):Promise<PortableHost
       if ((await services.scanDirectory(root,base,1024)).length) {
         await ensureNextRouteAvailable(root,base,"seene");
         await ensureNextRouteAvailable(root,base+"/api/seene","create-scene");
+        await ensureNextRouteAvailable(root,base+"/api/seene","content");
         return {adapter:"next-pages",entry:base+"/seene.jsx"};
       }
     }

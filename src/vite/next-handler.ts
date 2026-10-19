@@ -77,7 +77,7 @@ async function createScene(payload: unknown, root: string): Promise<Result> {
         const source = await readFile(absolute, "utf8").catch(() => undefined);
         if (source === undefined) return jsonError(400, `Host component path "${targetFile}" could not be read.`);
         try {
-          const val = validateHostComponent(targetFile, source);
+          const val = validateHostComponent(targetFile, source, sec.export);
           if (val.warning) warning = val.warning;
         } catch (err: any) {
           return jsonError(400, err?.message || String(err));

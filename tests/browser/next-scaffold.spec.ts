@@ -157,6 +157,10 @@ async function prepareNextProject(env: FixtureEnv) {
     path.join(hostDir, "src/components/Header.tsx"),
     '"use client";\nimport React from "react";\nexport default function Header() { return <header data-testid="next-host-header">Real Next.js Header</header>; }\n',
   );
+  await writeFile(
+    path.join(hostDir, "src/components/NamedExport.tsx"),
+    '"use client";\nimport React from "react";\nexport const NamedExport = () => <span data-testid="next-host-named-export">Named Export</span>;\n',
+  );
 
   if (env.isPages) {
     await mkdir(path.join(hostDir, "pages"), { recursive: true });
@@ -364,6 +368,43 @@ for (const env of matrix) {
 
       const validSceneLink = page.locator('main[data-seene-library] a[data-scene-id="header"]');
       await expect(validSceneLink).toBeVisible();
+    });
+
+    test("discovers host components for a Single Scene through the generated content route", async ({ page }) => {
+      const statuses: number[] = [];
+      page.on("response", (response) => {
+        if (response.url().endsWith("/api/seene/content")) statuses.push(response.status());
+      });
+
+      await page.goto(`${env.devUrl}/seene?seene-preview=1`);
+      await expect(page.locator("main[data-seene-library]")).toBeVisible({ timeout: 20000 });
+      await page.getByRole("button", { name: "+ Create scene" }).click();
+      const dialog = page.locator('section[role="dialog"]');
+      await expect(dialog).toBeVisible();
+
+      // The Single Scene composer lists real host components discovered by the content API,
+      // instead of falling back to a "Blank Canvas"-only dialog.
+      await expect(dialog.getByText("src/components/Header.tsx")).toBeVisible({ timeout: 20000 });
+      await expect(page.getByText("Could not reach development server for component discovery.")).toHaveCount(0);
+      expect(statuses).toContain(200);
+    });
+
+    test("creates a Single Scene from a named export discovered in the host", async ({ page }) => {
+      await page.goto(`${env.devUrl}/seene?seene-preview=1`);
+      await expect(page.locator("main[data-seene-library]")).toBeVisible({ timeout: 20000 });
+      await page.getByRole("button", { name: "+ Create scene" }).click();
+      const dialog = page.locator('section[role="dialog"]');
+      await expect(dialog).toBeVisible();
+
+      // The component has no default export; the composer must offer its named export.
+      await dialog.getByText("src/components/NamedExport.tsx#NamedExport").click();
+      await page.locator("#seene-create-title").fill("Named Export Scene");
+      await page.getByRole("button", { name: "Create scene", exact: true }).click();
+
+      const componentPath = path.join(env.hostDir!, "src/seene/scenes/named-export-scene.tsx");
+      await waitForFile(componentPath, 20000);
+      const component = await readFile(componentPath, "utf8");
+      expect(component).toContain('import { NamedExport as HostComponent } from "@/components/NamedExport";');
     });
 
     test("creates a scene from the Studio UI and writes recipe + component files to disk, then renders it", async ({ page }) => {

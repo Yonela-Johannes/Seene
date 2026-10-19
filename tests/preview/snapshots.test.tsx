@@ -48,6 +48,62 @@ it("keeps the preview create-scene dialog accessible and explains a missing Next
   expect(request).toHaveBeenCalledWith("/api/seene/create-scene", expect.objectContaining({ method: "POST" }));
 });
 
+it("discovers project components from the create endpoint when no dedicated content route exists", async () => {
+  enterLibrary();
+  const content = {
+    success: true,
+    content: {
+      files: [{ path: "src/components/Header.tsx", default: true, exports: ["default"], kind: "component", title: "Header" }],
+    },
+  };
+  const request = vi.fn(async (url: string) =>
+    url === "/api/seene/content"
+      ? { ok: false, status: 404, headers: { get: () => "text/html" }, json: async () => { throw new Error("not json"); } }
+      : { ok: true, status: 200, headers: { get: () => "application/json" }, json: async () => content },
+  );
+  vi.stubGlobal("fetch", request);
+  render(<ProjectPreview projectId="next-project" enabled sceneModules={{}} createSceneEndpoint="/api/seene/create-scene" />);
+  fireEvent.click(await screen.findByRole("button", { name: "+ Create scene" }));
+  expect(await screen.findByText("src/components/Header.tsx")).toBeTruthy();
+  expect(request).toHaveBeenCalledWith("/api/seene/content");
+  expect(request).toHaveBeenCalledWith("/api/seene/create-scene");
+});
+
+it("offers named exports and disables non-previewable files in the Single Scene composer", async () => {
+  enterLibrary();
+  const issue = "Route files render the whole page; select a section or component instead.";
+  const content = {
+    success: true,
+    content: {
+      files: [
+        { path: "src/components/Heading.tsx", default: false, exports: ["Heading"], kind: "component", title: "Heading" },
+        { path: "src/app/dashboard/page.tsx", default: true, exports: ["Page"], kind: "page", previewable: false, issue },
+      ],
+    },
+  };
+  const request = vi.fn(async (_url: string, options?: RequestInit) =>
+    options?.method === "POST"
+      ? { ok: true, status: 200, headers: { get: () => "application/json" }, json: async () => ({ success: true }) }
+      : { ok: true, status: 200, headers: { get: () => "application/json" }, json: async () => content },
+  );
+  vi.stubGlobal("fetch", request);
+  render(<ProjectPreview projectId="next-project" enabled sceneModules={{}} createSceneEndpoint="/api/seene/create-scene" />);
+  fireEvent.click(await screen.findByRole("button", { name: "+ Create scene" }));
+
+  // A named export is offered and selectable even without a default export.
+  fireEvent.click(await screen.findByText("src/components/Heading.tsx#Heading"));
+  // A route file is disabled and explains why instead of failing on submit.
+  const disabledRow = screen.getByText(issue).closest("button") as HTMLButtonElement;
+  expect(disabledRow.disabled).toBe(true);
+
+  fireEvent.change(screen.getByLabelText("Scene Title"), { target: { value: "Named export scene" } });
+  fireEvent.submit(screen.getByRole("button", { name: "Create scene" }).closest("form")!);
+  await waitFor(() => expect(request).toHaveBeenCalledWith("/api/seene/create-scene", expect.objectContaining({ method: "POST" })));
+  const post = request.mock.calls.find(call => call[0] === "/api/seene/create-scene" && (call[1] as RequestInit)?.method === "POST")!;
+  const body = JSON.parse((post[1] as RequestInit).body as string);
+  expect(body.content).toEqual({ file: "src/components/Heading.tsx", export: "Heading" });
+});
+
 it("submits a creation request, closes the dialog on success, and opens the generated scene once files are available", async () => {
   enterLibrary();
   const request = vi.fn(async (_url: string, _options: RequestInit) => ({

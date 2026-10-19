@@ -68,13 +68,50 @@ it("creates Next.js scene pairs through JSON, refreshes the generated catalog an
   expect((await executeProjectCommand("validate-project", {}, { root })).success).toBe(true);
 });
 
+it("creates a single scene that presents a named export from a host component", async () => {
+  vi.stubEnv("NODE_ENV", "development");
+  const root = await nextProject();
+  await put(root, "src/components/Heading.tsx", "export const Heading = () => <h1>Heading</h1>;\nexport const Subheading = () => <h2>Subheading</h2>;\n");
+  const response = await handleNextScenePost(new Request("http://localhost/api/seene/create-scene", {
+    method: "POST",
+    headers: { origin: "http://localhost", "content-type": "application/json" },
+    body: JSON.stringify({
+      id: "named-export-scene",
+      recipe: { version: 1, id: "named-export-scene", title: "Named export", definition: defaultSceneDefinition() },
+      content: { file: "src/components/Heading.tsx", export: "Subheading" },
+    }),
+  }), root);
+  expect(response.status, await response.clone().text()).toBe(200);
+  const component = await readFile(path.join(root, "src/seene/scenes/named-export-scene.tsx"), "utf8");
+  expect(component).toContain('import { Subheading as HostComponent } from "@/components/Heading";');
+});
+
+it("rejects a single scene that requests a named export the component does not have", async () => {
+  vi.stubEnv("NODE_ENV", "development");
+  const root = await nextProject();
+  await put(root, "src/components/Card.tsx", "export const Card = () => null;\n");
+  const response = await handleNextScenePost(new Request("http://localhost/api/seene/create-scene", {
+    method: "POST",
+    headers: { origin: "http://localhost", "content-type": "application/json" },
+    body: JSON.stringify({
+      id: "missing-export",
+      recipe: { version: 1, id: "missing-export", title: "Missing", definition: defaultSceneDefinition() },
+      content: { file: "src/components/Card.tsx", export: "Nope" },
+    }),
+  }), root);
+  expect(response.status).toBe(400);
+  await expect(response.json()).resolves.toMatchObject({ error: expect.stringContaining('has no export named "Nope"') });
+});
+
 it("exports the GET content discovery route for Next App Router and returns project files", async () => {
   vi.stubEnv("NODE_ENV", "development");
   const root = await nextProject();
   const routeText = await readFile(path.join(root, "app/api/seene/create-scene/route.js"), "utf8");
   expect(routeText).toContain("GET");
+  const contentRouteText = await readFile(path.join(root, "app/api/seene/content/route.js"), "utf8");
+  expect(contentRouteText).toContain("GET");
 
-  const response = await handleNextSceneGetContent(new Request("http://localhost/api/seene/create-scene/content"), root);
+  const response = await handleNextSceneGetContent(new Request("http://localhost/api/seene/content"), root);
   expect(response.status).toBe(200);
   await expect(response.json()).resolves.toMatchObject({
     success: true,

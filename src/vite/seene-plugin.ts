@@ -147,7 +147,7 @@ export function seeneCreateScenePlugin(): Plugin {
                 const source = await readFile(absolute, "utf8").catch(() => undefined);
                 if (source === undefined) return send(response, 400, { error: `Host component path "${targetFile}" could not be read.` });
                 try {
-                  const val = validateHostComponent(targetFile, source);
+                  const val = validateHostComponent(targetFile, source, sec.export);
                   if (val.warning) warning = val.warning;
                 } catch (err: any) {
                   return send(response, 400, { error: err?.message || String(err) });

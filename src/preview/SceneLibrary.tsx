@@ -189,7 +189,7 @@ export function SceneLibrary({
   const [createError, setCreateError] = useState("");
   const [createSubmitting, setCreateSubmitting] = useState(false);
 
-  const [contentFiles, setContentFiles] = useState<Array<{ path: string; default: boolean; exports: string[]; kind?: "page" | "section" | "component"; title?: string; route?: string }> | null>(null);
+  const [contentFiles, setContentFiles] = useState<Array<{ path: string; default: boolean; exports: string[]; kind?: "page" | "section" | "component"; title?: string; route?: string; previewable?: boolean; issue?: string }> | null>(null);
   const [contentLoading, setContentLoading] = useState(false);
   const [contentError, setContentError] = useState("");
 
@@ -264,23 +264,39 @@ export function SceneLibrary({
     setContentLoading(true);
     setContentError("");
     const contentUrl = createSceneEndpoint.replace(/\/create-scene\/?$/, "/content");
-    fetch(contentUrl)
-      .then(res => res.json())
-      .then(data => {
-        if (data.content?.files) {
-          setContentFiles(data.content.files);
-        } else if (Array.isArray(data.files)) {
-          setContentFiles(data.files);
-        } else if (data.success && data.content) {
-          setContentFiles(data.content.files || []);
-        } else {
-          setContentError(data.error || "Could not discover project components.");
+    // Integrations that split content discovery onto its own route serve `contentUrl`.
+    // Setups generated before that route existed only expose content via GET on the
+    // create endpoint, so fall back to it when the dedicated route is unavailable.
+    const candidates = contentUrl === createSceneEndpoint ? [contentUrl] : [contentUrl, createSceneEndpoint];
+    const loadContent = async () => {
+      let data: any;
+      let reachable = false;
+      for (const url of candidates) {
+        try {
+          const res = await fetch(url);
+          if (!res.ok) continue;
+          data = await res.json();
+          reachable = true;
+          break;
+        } catch {
+          // Not a JSON content response (for example an HTML 404 page); try the next endpoint.
         }
-      })
-      .catch(() => {
+      }
+      if (!reachable) {
         setContentError("Could not reach development server for component discovery.");
-      })
-      .finally(() => setContentLoading(false));
+        return;
+      }
+      if (data.content?.files) {
+        setContentFiles(data.content.files);
+      } else if (Array.isArray(data.files)) {
+        setContentFiles(data.files);
+      } else if (data.success && data.content) {
+        setContentFiles(data.content.files || []);
+      } else {
+        setContentError(data.error || "Could not discover project components.");
+      }
+    };
+    loadContent().finally(() => setContentLoading(false));
   }, [isCreating, createSceneEndpoint]);
 
   useEffect(() => {
@@ -456,9 +472,12 @@ export function SceneLibrary({
     const layoutComponents = includeLayoutChrome
       ? (contentFiles ?? []).filter(file => /(?:^|\/)components\/common\/(?:navbar|footer)\.[jt]sx?$/i.test(file.path))
       : [];
-    const layoutNavbar = layoutComponents.filter(file => /\/navbar\.[jt]sx?$/i.test(file.path)).map(file => ({ file: file.path, title: file.title }));
-    const layoutFooter = layoutComponents.filter(file => /\/footer\.[jt]sx?$/i.test(file.path)).map(file => ({ file: file.path, title: file.title }));
-    const walkthroughSections = [...layoutNavbar, ...selectedSections, ...layoutFooter].filter((section, index, items) => items.findIndex(candidate => candidate.file === section.file) === index);
+    const layoutNavbar: Array<{ file: string; export?: string; title?: string }> = layoutComponents.filter(file => /\/navbar\.[jt]sx?$/i.test(file.path)).map(file => ({ file: file.path, title: file.title }));
+    const layoutFooter: Array<{ file: string; export?: string; title?: string }> = layoutComponents.filter(file => /\/footer\.[jt]sx?$/i.test(file.path)).map(file => ({ file: file.path, title: file.title }));
+    const walkthroughSections = [...layoutNavbar, ...selectedSections, ...layoutFooter].filter((section, index, items) => {
+      const key = section.export ? `${section.file}#${section.export}` : section.file;
+      return items.findIndex(candidate => (candidate.export ? `${candidate.file}#${candidate.export}` : candidate.file) === key) === index;
+    });
     const rawSections = compositionType === "walkthrough"
       ? walkthroughSections
       : createHostPath.trim()
@@ -1312,49 +1331,74 @@ export function SceneLibrary({
                         {search ? `No components match "${search}"` : contentError || "No project components discovered in src/, app/ or pages/"}
                       </div>
                     ) : (
-                      filteredContentFiles.map((file, idx) => {
-                        const val = file.path;
-                        const isSelected = compositionType === "scene" ? choice === val : selectedSections.some(s => s.file === val);
+                      filteredContentFiles.flatMap((file, idx) => {
+                        const baseLabel = file.title || file.path.split("/").pop()?.replace(/\.[jt]sx$/, "") || file.path;
                         const indexStr = String(idx + 1).padStart(2, "0");
+                        // A file can export a default, several named components, or be
+                        // non-previewable (route files, async Server Components, generated
+                        // wrappers). Enumerate what can actually be mounted and explain the
+                        // rest instead of letting the server reject the selection.
+                        const options: Array<{ exportName?: string; label: string }> = file.previewable === false
+                          ? [{ label: baseLabel }]
+                          : file.default
+                            ? [{ label: baseLabel }]
+                            : file.exports.map(name => ({ exportName: name, label: name }));
+                        const disabled = file.previewable === false;
 
-                        return (
-                          <button
-                            key={file.path}
-                            type="button"
-                            onClick={() => handleSelectComponent(file.path, undefined, file.title)}
-                            className={`w-full flex items-center justify-between gap-3 rounded-lg px-3 py-2 text-left text-xs transition-colors cursor-pointer ${
-                              isSelected
-                                ? "border border-[var(--seene-accent)] bg-[var(--seene-surface-2)] text-white"
-                                : "border border-transparent hover:bg-[var(--seene-surface-2)] text-[var(--seene-text-muted)] hover:text-white"
-                            }`}
-                          >
-                            <div className="flex items-center gap-2.5 min-w-0">
-                              <span className="font-mono text-[11px] text-[var(--seene-text-muted)] shrink-0">{indexStr}</span>
-                              <div className="min-w-0 flex-1">
-                                <div className="flex items-center gap-1.5">
-                                  <strong className="font-medium text-[var(--seene-text)] truncate">
-                                    {file.title || file.path.split("/").pop()?.replace(/\.[jt]sx$/, "")}
-                                  </strong>
-                                  {file.kind ? (
-                                    <span className="rounded bg-[var(--seene-surface-2)] px-1.5 py-0.2 font-mono text-[9px] uppercase border border-[var(--seene-border-text)] shrink-0">
-                                      {file.kind}
-                                    </span>
-                                  ) : null}
-                                  {file.route ? (
-                                    <span className="rounded bg-blue-500/10 px-1.5 py-0.2 font-mono text-[9px] text-blue-400 border border-blue-500/20 shrink-0">
-                                      {file.route}
-                                    </span>
+                        return options.map(option => {
+                          const key = option.exportName ? `${file.path}#${option.exportName}` : file.path;
+                          const isSelected = compositionType === "scene"
+                            ? choice === key
+                            : selectedSections.some(s => (s.export ? `${s.file}#${s.export}` : s.file) === key);
+
+                          return (
+                            <button
+                              key={key}
+                              type="button"
+                              disabled={disabled}
+                              title={disabled ? file.issue : undefined}
+                              onClick={() => handleSelectComponent(file.path, option.exportName, option.exportName ?? file.title)}
+                              className={`w-full flex items-center justify-between gap-3 rounded-lg px-3 py-2 text-left text-xs transition-colors ${
+                                disabled
+                                  ? "cursor-not-allowed opacity-60 border border-transparent"
+                                  : `cursor-pointer ${
+                                      isSelected
+                                        ? "border border-[var(--seene-accent)] bg-[var(--seene-surface-2)] text-white"
+                                        : "border border-transparent hover:bg-[var(--seene-surface-2)] text-[var(--seene-text-muted)] hover:text-white"
+                                    }`
+                              }`}
+                            >
+                              <div className="flex items-center gap-2.5 min-w-0">
+                                <span className="font-mono text-[11px] text-[var(--seene-text-muted)] shrink-0">{indexStr}</span>
+                                <div className="min-w-0 flex-1">
+                                  <div className="flex items-center gap-1.5">
+                                    <strong className="font-medium text-[var(--seene-text)] truncate">
+                                      {option.label}
+                                    </strong>
+                                    {file.kind ? (
+                                      <span className="rounded bg-[var(--seene-surface-2)] px-1.5 py-0.2 font-mono text-[9px] uppercase border border-[var(--seene-border-text)] shrink-0">
+                                        {file.kind}
+                                      </span>
+                                    ) : null}
+                                    {file.route ? (
+                                      <span className="rounded bg-blue-500/10 px-1.5 py-0.2 font-mono text-[9px] text-blue-400 border border-blue-500/20 shrink-0">
+                                        {file.route}
+                                      </span>
+                                    ) : null}
+                                  </div>
+                                  <span className="block truncate font-mono text-[10px] opacity-60">
+                                    {option.exportName ? `${file.path}#${option.exportName}` : file.path}
+                                  </span>
+                                  {disabled && file.issue ? (
+                                    <span className="mt-0.5 block text-[10px] text-[var(--seene-text-muted)]">{file.issue}</span>
                                   ) : null}
                                 </div>
-                                <span className="block truncate font-mono text-[10px] opacity-60">
-                                  {file.path}
-                                </span>
                               </div>
-                            </div>
 
-                            {isSelected ? <span className="text-[var(--seene-accent)] font-bold text-xs shrink-0">{compositionType === "walkthrough" ? "+ Added" : "✓"}</span> : null}
-                          </button>
-                        );
+                              {isSelected ? <span className="text-[var(--seene-accent)] font-bold text-xs shrink-0">{compositionType === "walkthrough" ? "+ Added" : "✓"}</span> : null}
+                            </button>
+                          );
+                        });
                       })
                     )}
                   </div>
