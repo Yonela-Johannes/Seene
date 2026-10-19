@@ -1,9 +1,22 @@
-import { defineConfig } from "vite";
+import { defineConfig, type Plugin } from "vite";
 import tailwindcss from "@tailwindcss/vite";
+import { namespaceCssLayers } from "./scripts/css-layers";
+
+function namespaceTailwindLayers(): Plugin {
+  return {
+    name: "seene-namespace-tailwind-layers",
+    enforce: "post",
+    generateBundle(_options, bundle) {
+      for (const output of Object.values(bundle)) {
+        if (output.type !== "asset" || !output.fileName.endsWith(".css")) continue;
+        const source = output.source;
+        output.source = namespaceCssLayers(typeof source === "string" ? source : Buffer.from(source).toString("utf8"));
+      }
+    },
+  };
+}
 export default defineConfig({
-  plugins: [tailwindcss()],
-  // public/ holds the platform site's own imagery (served at "/" by vite.config.ts).
-  // Copying it here would ship ~4MB of unrelated assets inside the published npm package.
+  plugins: [tailwindcss(), namespaceTailwindLayers()],
   publicDir: false,
   build: {
     outDir: "dist/library",

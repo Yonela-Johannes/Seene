@@ -1,4 +1,5 @@
 import { ProjectPreview } from "@thatg33k/seene/preview";
+import "@thatg33k/seene/style.css";
 import type { ComponentProps } from "react";
 
 const sceneModules = import.meta.env.DEV ? import.meta.glob("/src/seene/scenes/*.{scene.json,tsx,jsx}") : undefined;

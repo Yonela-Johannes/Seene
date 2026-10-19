@@ -57,6 +57,9 @@ try {
   assert.notEqual(metadata.private,true);
   assert.ok(packed.files.some(f=>f.path==='dist/library/preview.js'));
   assert.ok(!packed.files.some(f=>f.path.includes('.env')));
+  const libraryCss=await readFile(path.join(root,'dist/library/seene.css'),'utf8');
+  for(const directive of ['@layer base','@layer components','@layer utilities'])
+    assert.ok(!libraryCss.includes(directive),`dist/library/seene.css must not use Tailwind v3's \`${directive}\` name; namespace it in vite.lib.config.ts so host Tailwind v3 pipelines can parse the stylesheet`);
   }
   await ok('npm',['install','--ignore-scripts','--no-audit','--no-fund']);
   const chosen=await port();const origin=`http://127.0.0.1:${chosen}`;

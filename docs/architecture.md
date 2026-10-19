@@ -26,4 +26,4 @@
 
 The architecture tests enforce ownership between pure core logic, React DOM runtime, preview UI, project filesystem services, framework handlers and CLI effects. Browser tests cover rendered behavior; unit tests alone do not prove host styles, providers or visual fidelity. Local scene APIs are development tools: keep host development servers on trusted interfaces and do not expose them to untrusted networks. The host remains responsible for its own providers, data, authentication, routes and production security.
 
-Public package exports are declared in `package.json`: the core entry, `/preview`, `/style.css`, `/vite`, and `/next`. The CLI is the `seene` binary in `dist/cli/`.
+Public package exports are declared in `package.json`: the core entry, `/preview`, `/style.css`, `/vite`, and `/next`. The CLI is the `seene` binary in `dist/cli/`. The published `/style.css` is compiled by Tailwind v4, so `build:library` namespaces its `@layer` names (`base` becomes `seene-base`); hosts that compile CSS with Tailwind v3 through PostCSS otherwise reject `@layer base` for lack of a matching `@tailwind base` directive and fail the development-only Studio route.
