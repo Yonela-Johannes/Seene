@@ -255,7 +255,8 @@ describe("Scene Management and Walkthrough Integration Regression Tests", () => 
 
     // Verify mode toggle shows "Scroll" active
     const scrollPill = screen.getByRole("button", { name: "Scroll" });
-    expect(scrollPill.className).toContain("bg-zinc-800");
+    expect(scrollPill.getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByRole("button", { name: "Scene" }).getAttribute("aria-pressed")).toBe("false");
 
     expect(screen.getByTestId("walkthrough-scene-content")).toBeTruthy();
   });

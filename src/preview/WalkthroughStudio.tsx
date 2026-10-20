@@ -53,6 +53,7 @@ export type WalkthroughStudioProps = {
   backHref?: string;
   onBack?: () => void;
   onExit: () => void;
+  onModeChange?: (mode: "scene" | "walkthrough") => void;
   onDefinitionChange: (definition: PreviewDefinitionInput) => void;
   onSaveDefinition?: (definition: PreviewDefinitionInput, sections: StudioSection[]) => Promise<void> | void;
   createSceneEndpoint?: string;
@@ -94,6 +95,7 @@ export function WalkthroughStudio({
   backHref,
   onBack,
   onExit,
+  onModeChange,
   onDefinitionChange,
   onSaveDefinition,
   createSceneEndpoint,
@@ -359,6 +361,7 @@ export function WalkthroughStudio({
       <style>{previewTheme}</style>
       <div className="seene-studio-topbar" data-seene-chrome="studio-topbar">
         <div className="seene-studio-topbar-group">
+          <h1 className="seene-title">{walkthrough.title || title}</h1>
           {backHref ? (
             <a
               className="seene-control"
@@ -386,6 +389,22 @@ export function WalkthroughStudio({
           <span className="seene-studio-badge" data-state={review.valid ? "valid" : "invalid"}>
             {review.valid ? `${schedule.steps.length} steps` : `${review.issues.length} issue${review.issues.length === 1 ? "" : "s"}`}
           </span>
+          {onModeChange ? (
+            <div className="seene-studio-modes" role="group" aria-label="Composition mode">
+              <button
+                type="button"
+                className="seene-control seene-small"
+                aria-pressed={false}
+                data-seene-chrome="composition-mode-scene"
+                onClick={() => onModeChange("scene")}
+              >
+                Scene
+              </button>
+              <button type="button" className="seene-control seene-small" aria-pressed={true} data-seene-chrome="composition-mode-scroll" onClick={() => onModeChange("walkthrough")}>
+                Scroll
+              </button>
+            </div>
+          ) : null}
         </div>
         <div className="seene-studio-topbar-group">
           <button type="button" className="seene-control" onClick={undo} disabled={undoStack.current.length === 0} aria-label="Undo">

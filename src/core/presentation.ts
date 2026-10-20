@@ -2,7 +2,7 @@ import { z } from "zod";
 import { CameraSchema, FocusSchema } from "./scene";
 import { MotionSchema, MotionTrackSchema, type MotionTrack } from "./motion";
 import { CascadeSchema, createCascadeTracks, type CascadeInput } from "./choreography";
-import type { PreviewDefinitionInput } from "./preview";
+import { subjectFocusDistance, type PreviewDefinitionInput } from "./preview";
 
 type Keyframes = readonly (readonly [number, number])[];
 
@@ -75,7 +75,8 @@ const orbit: Presentation = {
   tracks: [
     cameraTrack("rotateY", [[0, -15], [10000, -165]]),
     cameraTrack("perspective", [[0, 1600], [10000, 1200]]),
-    focusTrack("distance", [[0, 1600], [10000, 800]]),
+    // With the camera parked at z 0 the subject stays on the focal plane as perspective tightens.
+    focusTrack("distance", [[0, 1600], [10000, 1200]]),
   ],
   entrance: { depth: 50, depthStep: 8, staggerMs: 180, entranceMs: 2000 },
 };
@@ -89,7 +90,7 @@ const reveal: Presentation = {
   durationMs: 9000,
   tracks: [
     cameraTrack("perspective", [[0, 1800], [9000, 600]]),
-    focusTrack("distance", [[0, 1800], [9000, 900]]),
+    focusTrack("distance", [[0, 1800], [9000, 600]]),
     focusTrack("fStop", [[0, 2], [9000, 0.8]]),
   ],
   entrance: { depth: 60, depthStep: 10, staggerMs: 150, entranceMs: 2200 },
@@ -105,7 +106,6 @@ const productTour: Presentation = {
   tracks: [
     cameraTrack("x", [[0, -80], [12000, 80]]),
     cameraTrack("rotateY", [[0, -18], [12000, -18]]),
-    focusTrack("distance", [[0, 1500], [12000, 1200]]),
   ],
   entrance: { depth: 40, depthStep: 6, staggerMs: 120, entranceMs: 1800 },
 };
@@ -120,6 +120,7 @@ const editorial: Presentation = {
   tracks: [
     cameraTrack("y", [[0, -20], [8000, 20]]),
     cameraTrack("perspective", [[0, 2000], [8000, 1800]]),
+    focusTrack("distance", [[0, 2000], [8000, 1800]]),
     focusTrack("fStop", [[0, 8], [8000, 10]]),
   ],
   entrance: { depth: 30, depthStep: 5, staggerMs: 100, entranceMs: 1500 },
@@ -135,7 +136,8 @@ const parallax: Presentation = {
   tracks: [
     cameraTrack("z", [[0, -180], [9000, -220]]),
     cameraTrack("perspective", [[0, 1400], [9000, 1600]]),
-    focusTrack("distance", [[0, 1400], [9000, 1000]]),
+    // Focus follows the subject as it recedes: (perspective + z) at each end of the rail.
+    focusTrack("distance", [[0, 1220], [9000, 1380]]),
   ],
   entrance: { depth: 70, depthStep: 15, staggerMs: 200, entranceMs: 2500 },
 };
@@ -151,7 +153,7 @@ const dramaticPush: Presentation = {
     cameraTrack("z", [[0, -400], [7000, -120]]),
     cameraTrack("perspective", [[0, 1200], [7000, 2000]]),
     cameraTrack("rotateY", [[0, -20], [7000, -20]]),
-    focusTrack("distance", [[0, 1200], [7000, 1500]]),
+    focusTrack("distance", [[0, 800], [7000, 1860]]),
     focusTrack("fStop", [[0, 1.4], [7000, 5]]),
   ],
   entrance: { depth: 80, depthStep: 20, staggerMs: 250, entranceMs: 3000 },
@@ -168,6 +170,7 @@ const overview: Presentation = {
     cameraTrack("z", [[0, -300], [6000, 0]]),
     cameraTrack("perspective", [[0, 800], [6000, 1200]]),
     cameraTrack("rotateY", [[0, -6], [6000, -6]]),
+    focusTrack("distance", [[0, 500], [6000, 1200]]),
     focusTrack("fStop", [[0, 16], [6000, 20]]),
   ],
   entrance: { depth: 20, depthStep: 4, staggerMs: 80, entranceMs: 1000 },
@@ -184,6 +187,7 @@ const detailFocus: Presentation = {
     cameraTrack("perspective", [[0, 1800], [5000, 1200]]),
     cameraTrack("z", [[0, -250], [5000, -50]]),
     cameraTrack("rotateY", [[0, -3], [5000, -3]]),
+    focusTrack("distance", [[0, 1550], [5000, 1150]]),
     focusTrack("fStop", [[0, 1.8], [5000, 2.8]]),
     focusTrack("focalLength", [[0, 85], [5000, 100]]),
   ],
@@ -238,11 +242,10 @@ const focus: Presentation = {
   label: "Focus",
   summary: "A single focal plane that racks sharp while the surroundings fall away.",
   camera: { perspective: 1800, x: 0, y: 0, z: 0, rotateX: 4, rotateY: -10, rotateZ: 0 },
-  focus: { distance: 1830, fStop: 4, focalLength: 50, maxBlur: 6 },
+  focus: { distance: 1800, fStop: 4, focalLength: 50, maxBlur: 6 },
   durationMs: 6000,
   tracks: [
     cameraTrack("x", [[0, 0], [6000, -40]]),
-    focusTrack("distance", [[0, 1830], [6000, 1800]]),
   ],
   entrance: { depth: 50, depthStep: 10, staggerMs: 180, entranceMs: 2400 },
 };
@@ -256,6 +259,7 @@ const showcase: Presentation = {
   durationMs: 7000,
   tracks: [
     cameraTrack("z", [[0, -260], [7000, 0]]),
+    // The surface starts distant (1340) and settles on the lens as z reaches 0.
     focusTrack("distance", [[0, 1340], [7000, 1600]]),
   ],
   entrance: { depth: 70, depthStep: 10, staggerMs: 150, entranceMs: 2000 },
@@ -317,6 +321,7 @@ export function applyPresentation(
     }),
   };
 }
+
 
 function flatWalkthroughPresentation(definition: PreviewDefinitionInput): PreviewDefinitionInput {
   if (definition.compositionType !== "walkthrough") return definition;

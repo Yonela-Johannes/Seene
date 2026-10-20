@@ -44,8 +44,8 @@ it("saves the complete edited scene definition when Save Backdrop is clicked in 
     />,
   );
 
-  await screen.findByRole("button", { name: "Scene Inspector" });
-  fireEvent.click(screen.getByRole("button", { name: "Scene Inspector" }));
+  // Scene mode renders the inspector as a docked studio panel; expand it from the top bar.
+  fireEvent.click(await screen.findByRole("button", { name: "Scene Inspector" }));
   fireEvent.click(screen.getByTestId("seene-inspector-save"));
 
   await waitFor(() =>

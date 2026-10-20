@@ -54,7 +54,9 @@ it("keeps every preview action in the bottom region and preserves host context, 
   expect(within(c).getByRole("button", {name: "Play"})).toBeTruthy();
   expect(within(c).getByRole("button", {name: "Restart"})).toBeTruthy();
   expect(within(c).getByRole("slider", {name: "Scene time"})).toBeTruthy();
-  const exportDetails = c.querySelector("details.seene-export");
+  // Export lives in the studio top bar alongside the mode switch and inspector toggle.
+  const topbar = screen.getByRole("group", {name: "Composition mode"}).closest(".seene-studio-topbar")!;
+  const exportDetails = topbar.querySelector("details.seene-export");
   expect(exportDetails).toBeTruthy();
   expect(exportDetails?.querySelector("summary")?.textContent).toContain("Export");
   expect(within(c).queryByRole("button", {name: "Export"})).toBeNull();

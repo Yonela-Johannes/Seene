@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { SceneSchema, type SceneIssue } from "./scene";
+import { CameraSchema, SceneSchema, type CameraInput, type FocusInput, type SceneIssue } from "./scene";
 import { MotionSchema } from "./motion";
 import { reviewAuthoring } from "./authoring";
 import { cameraFromPose, type CameraPose } from "./spatial";
@@ -94,47 +94,55 @@ export const PRESENTATION_PRESETS = {
     name: "Soft Blur",
     description: "Soft ambient lens blur, high perspective",
     camera: { x: 0, y: 0, z: 20, rotateX: 2, rotateY: -4, rotateZ: 0, perspective: 2000 },
-    focus: { distance: 2000, fStop: 2.0, focalLength: 50, maxBlur: 10 },
+    focus: { distance: 2020, fStop: 2.0, focalLength: 50, maxBlur: 10 },
   },
   cinematic: {
     name: "Cinematic",
     description: "Dramatic angles, rich depth of field and lens focal blur",
     camera: { x: -40, y: -20, z: 80, rotateX: 12, rotateY: -18, rotateZ: 3, perspective: 1500 },
-    focus: { distance: 1500, fStop: 2.8, focalLength: 85, maxBlur: 12 },
+    focus: { distance: 1580, fStop: 2.8, focalLength: 85, maxBlur: 12 },
   },
   product: {
     name: "Product",
     description: "Clean 3D product angle with balanced studio light perspective",
     camera: { x: 0, y: -15, z: 50, rotateX: 10, rotateY: -12, rotateZ: 0, perspective: 1600 },
-    focus: { distance: 1600, fStop: 5.6, focalLength: 50, maxBlur: 6 },
+    focus: { distance: 1650, fStop: 5.6, focalLength: 50, maxBlur: 6 },
   },
   hero: {
     name: "Hero",
     description: "Hero perspective angle with slight elevation",
     camera: { x: 20, y: -10, z: 60, rotateX: 8, rotateY: -15, rotateZ: 0, perspective: 1400 },
-    focus: { distance: 1400, fStop: 4.0, focalLength: 50, maxBlur: 8 },
+    focus: { distance: 1460, fStop: 4.0, focalLength: 50, maxBlur: 8 },
   },
   wide: {
     name: "Wide",
     description: "Wide dynamic perspective with minimal distortion",
     camera: { x: 0, y: 0, z: -100, rotateX: 5, rotateY: -8, rotateZ: 0, perspective: 800 },
-    focus: { distance: 800, fStop: 8.0, focalLength: 35, maxBlur: 4 },
+    focus: { distance: 700, fStop: 8.0, focalLength: 35, maxBlur: 4 },
   },
   close: {
     name: "Close",
     description: "Tight focal crop for hero element inspection",
     camera: { x: 0, y: 0, z: 200, rotateX: 3, rotateY: -4, rotateZ: 0, perspective: 1800 },
-    focus: { distance: 1800, fStop: 2.8, focalLength: 100, maxBlur: 14 },
+    focus: { distance: 2000, fStop: 2.8, focalLength: 100, maxBlur: 14 },
   },
   dramatic: {
     name: "Dramatic",
     description: "Extreme angled perspective and high focal contrast",
     camera: { x: -60, y: -30, z: 100, rotateX: 18, rotateY: -25, rotateZ: 5, perspective: 1100 },
-    focus: { distance: 1100, fStop: 2.0, focalLength: 85, maxBlur: 15 },
+    focus: { distance: 1200, fStop: 2.0, focalLength: 85, maxBlur: 15 },
   },
 } as const;
 
 export type PresentationPresetName = keyof typeof PRESENTATION_PRESETS;
+
+function keepSubjectFocused(
+  camera: Partial<CameraInput> | undefined,
+  focus: Partial<FocusInput>,
+): Partial<FocusInput> {
+  if (focus.maxBlur === 0) return focus;
+  return { ...focus, distance: subjectFocusDistance(camera) };
+}
 
 export function applyPresentationPreset(definition: PreviewDefinitionInput, presetName: PresentationPresetName): PreviewDefinitionInput {
   const preset = PRESENTATION_PRESETS[presetName];
@@ -147,12 +155,25 @@ export function applyPresentationPreset(definition: PreviewDefinitionInput, pres
         ...definition.scene?.camera,
         ...preset.camera,
       },
-      focus: {
-        ...definition.scene?.focus,
-        ...preset.focus,
-      },
+      focus: keepSubjectFocused(
+        { ...definition.scene?.camera, ...preset.camera },
+        { ...definition.scene?.focus, ...preset.focus },
+      ),
     },
   };
+}
+
+export function subjectFocusDistance(camera?: CameraInput): number {
+  const resolved = CameraSchema.parse(camera ?? {});
+  return resolved.perspective + resolved.z;
+}
+
+const FOCUS_MATCH_TOLERANCE = 0.5;
+
+export function subjectIsFocused(definition: PreviewDefinitionInput): boolean {
+  const focus = definition.scene?.focus;
+  if (!focus || typeof focus.distance !== "number") return false;
+  return Math.abs(focus.distance - subjectFocusDistance(definition.scene?.camera)) <= FOCUS_MATCH_TOLERANCE;
 }
 
 export function presentPreview(input: unknown):

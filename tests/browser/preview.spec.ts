@@ -275,27 +275,39 @@ test('one product shell preserves real host context and state through seek and p
  expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBe(390);
 });
 
-test('scene cover fills every viewport and the bottom backdrop progressively blurs real pixels',async({page})=>{
+test('scene cover fills the studio viewport and the bottom backdrop progressively blurs real pixels',async({page})=>{
  await page.goto('/tests/preview/fixture.html');
  await expect(page.getByRole('button',{name:'Play',exact:true})).toBeEnabled();
+ const pane=page.locator('.seene-studio-viewport');
  for(const size of [{width:1920,height:1080},{width:390,height:844},{width:667,height:320}]){
   await page.setViewportSize(size);
-  await expect.poll(()=>page.locator('[data-seene-capture="scene"]').boundingBox()).toEqual({x:0,y:0,...size});
-  await expect.poll(async()=>(await page.locator('[data-seene-scene]').boundingBox())!.width).toBeGreaterThanOrEqual(size.width-1);
-  await expect.poll(async()=>(await page.locator('[data-seene-scene]').boundingBox())!.height).toBeGreaterThanOrEqual(size.height-1);
-  const geometry=await page.locator('[data-seene-scene]').boundingBox();
-  expect(geometry!.width/geometry!.height).toBeCloseTo(1400/980,3);
+  // The studio frames the scene with chrome; the scene must fill that viewport pane
+  // edge-to-edge and cover it with its authored aspect ratio (never letterboxed).
+  await expect.poll(async()=>page.evaluate(()=>{
+   const pane=document.querySelector('.seene-studio-viewport')!.getBoundingClientRect();
+   const canvas=document.querySelector('[data-seene-capture="scene"]')!.getBoundingClientRect();
+   const scene=document.querySelector('[data-seene-scene]')!.getBoundingClientRect();
+   return {
+    inset:Math.max(Math.abs(canvas.x-pane.x),Math.abs(canvas.y-pane.y),Math.abs(canvas.width-pane.width),Math.abs(canvas.height-pane.height)),
+    covers:scene.width>=pane.width-1&&scene.height>=pane.height-1,
+    ratioOk:Math.abs(scene.width/scene.height-1400/980)<0.001,
+   };
+  })).toEqual({inset:0,covers:true,ratioOk:true});
  }
  await page.setViewportSize({width:1440,height:1000});
  // A diagnostic pattern on the actual capture viewport isolates backdrop blur
  // from scene depth of field. A tint/gradient alone cannot remove stripe contrast.
  await page.addStyleTag({content:'.seene-canvas{background:repeating-linear-gradient(90deg,#000 0 12px,#fff 12px 24px)!important}.seene-canvas>*{visibility:hidden}'});
+ const box=await pane.boundingBox();
+ if(!box) throw new Error('studio viewport not measured');
+ const sampleX=Math.round(box.x+24);
+ const sampleYs=[Math.round(box.y+box.height-360),Math.round(box.y+box.height-220),Math.round(box.y+box.height-20)];
  const contrast=async()=>{
   const shot=await page.screenshot();
-  return page.evaluate(async data=>{
+  return page.evaluate(async ({data,x,ys})=>{
    const img=new Image();img.src=data;await img.decode();const canvas=document.createElement('canvas');canvas.width=img.width;canvas.height=img.height;const ctx=canvas.getContext('2d')!;ctx.drawImage(img,0,0);
-   return [650,760,940].map(y=>{const p=ctx.getImageData(24,y,48,4).data;const values=Array.from({length:p.length/4},(_,i)=>p[i*4]);return Math.max(...values)-Math.min(...values)});
-  },'data:image/png;base64,'+shot.toString('base64'));
+   return ys.map(y=>{const p=ctx.getImageData(x,y,48,4).data;const values=Array.from({length:p.length/4},(_,i)=>p[i*4]);return Math.max(...values)-Math.min(...values)});
+  },{data:'data:image/png;base64,'+shot.toString('base64'),x:sampleX,ys:sampleYs});
  };
  // ResizeObserver layout and Chromium's backdrop compositor settle separately.
  // Wait for the rendered result after rapid viewport changes; retain every pixel

@@ -42,20 +42,19 @@ describe("Item 4: Chrome Isolation (BUG-3) Tests", () => {
       </ScenePreview>
     );
 
-    // Verify namespaced studio chrome elements exist
+    // Scene mode uses the same studio shell as the walkthrough: top bar, motion panel, viewport and bottom timeline.
+    const main = container.querySelector("main[data-seene-preview].seene-scene-studio");
+    expect(main).not.toBeNull();
+    expect(container.querySelector(".seene-studio-topbar")).not.toBeNull();
+    expect(container.querySelector(".seene-studio-body")).not.toBeNull();
+    expect(container.querySelector(".seene-studio-sequence")).not.toBeNull();
+    expect(container.querySelector(".seene-studio-main .seene-studio-viewport")).not.toBeNull();
+
     const footer = container.querySelector("footer.seene-footer");
-    expect(footer).not.toBeNull();
-
-    const controls = container.querySelector(".seene-controls");
-    expect(controls).not.toBeNull();
-
-    const dock = container.querySelector(".seene-dock");
+    expect(footer).toBeNull();
+    const dock = container.querySelector('[data-seene-chrome="preview-footer"]');
     expect(dock).not.toBeNull();
-
-    // Verify computed or inline layout properties exist on namespaced classes
-    expect(footer!.className).toContain("seene-footer");
-    expect(controls!.className).toContain("seene-controls");
-    expect(dock!.className).toContain("seene-dock");
+    expect(dock!.querySelector(".seene-studio-transport")).not.toBeNull();
   });
 
   it("checks studio chrome rendering and scene backdrop resolution on light host vs dark host", () => {

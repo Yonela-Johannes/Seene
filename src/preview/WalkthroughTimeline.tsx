@@ -8,8 +8,10 @@
 import type { ReactNode } from "react";
 import type { WalkthroughStep } from "../core";
 
+export type TimelineSegment = Pick<WalkthroughStep, "nodeId" | "title" | "startTime" | "endTime"> & { type: string };
+
 export type WalkthroughTimelineProps = {
-  steps: WalkthroughStep[];
+  steps: Array<TimelineSegment & { nodeId: string }>;
   durationMs: number;
   timeMs: number;
   playing: boolean;
@@ -22,6 +24,9 @@ export type WalkthroughTimelineProps = {
   onToggle: () => void;
   onRestart: () => void;
   onStep: (direction: -1 | 1) => void;
+  label?: string;
+  showScrubber?: boolean;
+  showTransport?: boolean;
 };
 
 export function WalkthroughTimeline({
@@ -38,27 +43,32 @@ export function WalkthroughTimeline({
   onToggle,
   onRestart,
   onStep,
+  label = "walkthrough",
+  showScrubber = true,
+  showTransport = true,
 }: WalkthroughTimelineProps): ReactNode {
   const total = durationMs || 1;
   return (
     <div className="seene-studio-timeline" data-seene-chrome="studio-timeline">
+      {showTransport ? (
       <div className="seene-studio-transport">
-        <button type="button" className="seene-control seene-icon" onClick={onRestart} aria-label="Restart walkthrough">
+        <button type="button" className="seene-control seene-icon" onClick={onRestart} aria-label={label === "walkthrough" ? "Restart walkthrough" : "Restart scene"}>
           ⏮
         </button>
-        <button type="button" className="seene-control seene-icon" onClick={() => onStep(-1)} aria-label="Previous step">
+        <button type="button" className="seene-control seene-icon" onClick={() => onStep(-1)} aria-label={`Previous ${label} step`}>
           ◀|
         </button>
-        <button type="button" className="seene-control seene-primary seene-icon" onClick={onToggle} aria-label={playing ? "Pause" : "Play"}>
+        <button type="button" className="seene-control seene-primary seene-icon" onClick={onToggle} aria-label={label === "walkthrough" ? (playing ? "Pause" : "Play") : (playing ? "Pause scene" : "Play scene")}>
           {playing ? "❚❚" : "▶"}
         </button>
-        <button type="button" className="seene-control seene-icon" onClick={() => onStep(1)} aria-label="Next step">
+        <button type="button" className="seene-control seene-icon" onClick={() => onStep(1)} aria-label={`Next ${label} step`}>
           |▶
         </button>
         <output className="seene-studio-time" data-testid="walkthrough-time">
           {formatTime(timeMs)} / {formatTime(durationMs)}
         </output>
       </div>
+      ) : null}
       <div className="seene-studio-track" data-seene-chrome="studio-track">
         {steps.map(step => {
           const left = (step.startTime / total) * 100;
@@ -82,9 +92,10 @@ export function WalkthroughTimeline({
         })}
         <div className="seene-studio-playhead" style={{ left: `${(timeMs / total) * 100}%` }} aria-hidden="true" />
       </div>
+      {showScrubber ? (
       <input
         className="seene-studio-scrub"
-        aria-label="Walkthrough time"
+        aria-label={`${label === "walkthrough" ? "Walkthrough" : "Scene"} time`}
         type="range"
         min={0}
         max={durationMs || 1}
@@ -93,6 +104,7 @@ export function WalkthroughTimeline({
         disabled={!durationMs}
         onChange={event => onSeek(Number(event.target.value))}
       />
+      ) : null}
     </div>
   );
 }

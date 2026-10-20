@@ -11,6 +11,7 @@ import { PresentationPicker } from "./PresentationPicker";
 import { TransitionPicker } from "./TransitionPicker";
 import { SceneInspector } from "./SceneInspector";
 import { WebsiteWalkthrough } from "./WebsiteWalkthrough";
+import { WalkthroughTimeline, type TimelineSegment } from "./WalkthroughTimeline";
 import { WalkthroughStudio } from "./WalkthroughStudio";
 import { previewTheme } from "./theme";
 import { useSceneBackdrop } from "./backdrop";
@@ -42,6 +43,63 @@ export type ScenePreviewProps = {
 };
 
 const timeLabel = (ms: number) => `${Math.floor(ms / 60000)}:${String(Math.floor(ms / 1000) % 60).padStart(2, "0")}`;
+
+const MODE_TABS: Array<{ id: "scene" | "walkthrough"; label: string }> = [
+  { id: "scene", label: "Scene" },
+  { id: "walkthrough", label: "Scroll" },
+];
+
+function BackControl({ backHref, onBack, className = "seene-control" }: { backHref?: string; onBack?: () => void; className?: string }) {
+  if (backHref) {
+    return (
+      <a
+        className={className}
+        href={backHref}
+        onClick={event => {
+          if (onBack && event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey) {
+            event.preventDefault();
+            onBack();
+          }
+        }}
+      >
+        {onBack ? "Back to scenes" : "Back to app"}
+      </a>
+    );
+  }
+  return onBack ? (
+    <button type="button" className={className} onClick={onBack}>
+      Back to scenes
+    </button>
+  ) : null;
+}
+
+/** Groups motion keyframes into one named segment per target, in first-keyframe order. */
+function motionSegments(definition: PreviewDefinition): { segments: TimelineSegment[]; durationMs: number } {
+  const tracks = definition.motion?.tracks ?? [];
+  const groups = new Map<string, { label: string; start: number; end: number; targetKind: string }>();
+  for (const track of tracks) {
+    const target = track.target as { kind: string; id?: string };
+    const key = `${target.kind}:${target.id ?? ""}`;
+    const entry = groups.get(key) ?? { label: target.id ?? target.kind, start: Infinity, end: 0, targetKind: target.kind };
+    for (const frame of track.keyframes) {
+      entry.start = Math.min(entry.start, frame.timeMs);
+      entry.end = Math.max(entry.end, frame.timeMs);
+    }
+    groups.set(key, entry);
+  }
+  const authored = definition.motion?.durationMs ?? 0;
+  const durationMs = Math.max(authored, ...[...groups.values()].map(group => group.end), 0);
+  const ordered = [...groups.entries()].sort(([, a], [, b]) => a.start - b.start);
+  const segments = ordered.map(([id, group], index) => ({
+    id,
+    nodeId: id,
+    title: group.label,
+    type: group.targetKind,
+    startTime: Number.isFinite(group.start) ? group.start : 0,
+    endTime: index === ordered.length - 1 ? Math.max(group.end, durationMs) : group.end,
+  }));
+  return { segments, durationMs };
+}
 
 function Glyph({ kind }: { kind: "play" | "pause" | "restart" | "export" }) {
   return (
@@ -386,6 +444,16 @@ export function ScenePreview({
   const scale = definition && size.width && size.height && !isViewportSizing
     ? Math.max(size.width / definition.width, size.height / definition.height)
     : 1;
+  const motion = useMemo<{ segments: Array<TimelineSegment & { nodeId: string }>; durationMs: number }>(() => definition ? motionSegments(definition) : { segments: [], durationMs: 0 }, [definition]);
+  const [sidebar, setSidebar] = useState(true);
+  const [inspectorOpen, setInspectorOpen] = useState(false);
+  const [selectedSegmentId, setSelectedSegmentId] = useState<string | null>(null);
+  const inspectorButtonRef = useRef<HTMLButtonElement>(null);
+  // Closing returns focus to the top-bar toggle (the docked panel unmounts on close).
+  const closeInspector = useCallback(() => {
+    setInspectorOpen(false);
+    requestAnimationFrame(() => inspectorButtonRef.current?.focus());
+  }, []);
 
   const stateText = !connection.connected
     ? "Reconnecting to your app…"
@@ -410,6 +478,7 @@ export function ScenePreview({
         {...(backHref ? { backHref } : {})}
         {...(onBack ? { onBack } : {})}
         onExit={() => changeCompositionMode("scene")}
+        onModeChange={changeCompositionMode}
         onDefinitionChange={next => setLocalDef(next)}
         {...(onSaveDefinition ? { onSaveDefinition } : {})}
         {...(createSceneEndpoint ? { createSceneEndpoint } : {})}
@@ -419,59 +488,157 @@ export function ScenePreview({
     );
   }
 
+  const messages = session.issues.length > 0 || connection.error || !connection.connected ? (
+    <section className="seene-message seene-chrome" role="alert">
+      <strong>{stateText}</strong>
+      {session.issues.length > 0 && (
+        <>
+          <p>Your last valid scene settings are retained. Correct the source to continue.</p>
+          <ul>
+            {session.issues.map((issue, index) => (
+              <li key={index}>
+                {issue.path}: {issue.message}
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+      {connection.error && <p>{connection.error}</p>}
+      {!connection.connected && <p>Keep your development server running. The preview reconnects automatically.</p>}
+    </section>
+  ) : null;
+
+  const seekSegment = (id: string, seek = true) => {
+    setSelectedSegmentId(id);
+    if (!seek) return;
+    const start = motion.segments.find(segment => segment.nodeId === id)?.startTime ?? 0;
+    session.seek(Math.min(start, session.durationMs || start));
+  };
+
+  const stepSegment = (direction: -1 | 1) => {
+    if (motion.segments.length === 0) return;
+    const index = motion.segments.findIndex(segment => segment.nodeId === selectedSegmentId);
+    const next = motion.segments[Math.min(motion.segments.length - 1, Math.max(0, (index < 0 ? 0 : index) + direction))];
+    if (next) seekSegment(next.nodeId);
+  };
+
   return (
     <main
       data-seene-preview=""
       data-seene-state={blocked ? "unavailable" : "ready"}
       style={{ "--seene-scene-backdrop": sceneBackdrop } as CSSProperties}
+      className={`seene-scene-studio${compositionMode === "walkthrough" ? " seene-walkthrough-mode" : ""}`}
     >
+      {definition ? (
+        <>
       <style>{previewTheme}</style>
-      <div className="seene-viewport" ref={setViewport} aria-label="Scene preview">
-        {!definition && (
-          <div className="seene-empty seene-chrome">
-            <span className="seene-empty-symbol" aria-hidden="true">
-              ↗
-            </span>
-            <h1>
-              A new perspective
-              <br />
-              on your product.
-            </h1>
-            <p>Your live scene will appear here. Open Seene inside your app, then use the studio inspector to compose its motion.</p>
+      <div className="seene-studio-topbar" data-seene-chrome="studio-topbar">
+        <div className="seene-studio-topbar-group">
+          <BackControl {...(backHref ? { backHref } : {})} {...(onBack ? { onBack } : {})} />
+          <h1 className="seene-title">{title}</h1>
+          <div className="seene-studio-modes" role="group" aria-label="Composition mode">
+            {MODE_TABS.map(tab => (
+              <button
+                key={tab.id}
+                type="button"
+                className="seene-control seene-small"
+                aria-pressed={compositionMode === tab.id}
+                data-seene-chrome={tab.id === "scene" ? "composition-mode-scene" : "composition-mode-scroll"}
+                onClick={() => changeCompositionMode(tab.id)}
+              >
+                {tab.label}
+              </button>
+            ))}
           </div>
-        )}
-      </div>
-
-      <div className="seene-bottom-blur" data-seene-preview-chrome="" data-seene-chrome="preview-blur" aria-hidden="true">
-        <i />
-        <i />
-        <i />
-      </div>
-
-      <footer className="seene-footer seene-chrome" data-seene-preview-chrome="" data-seene-chrome="preview-footer" aria-label="Scene controls">
-        <div className="seene-controls">
+          <span className="seene-studio-badge" data-state={blocked ? "invalid" : "valid"} role="status">
+            {stateText}
+          </span>
+        </div>
+        <div className="seene-studio-topbar-group">
+          <button type="button" className="seene-control" onClick={() => setSidebar(value => !value)} aria-pressed={sidebar}>
+            Motion
+          </button>
+          <button
+            type="button"
+            ref={inspectorButtonRef}
+            className="seene-control"
+            onClick={() => setInspectorOpen(value => !value)}
+            aria-label={inspectorOpen ? "Close Inspector" : "Scene Inspector"}
+            aria-expanded={inspectorOpen}
+            aria-controls="scene-inspector-panel"
+          >
+            Inspector
+          </button>
           <div className="seene-export-slot" ref={setExportPanel} />
+          <ExportMenu disabled={blocked || !session.durationMs} panelHost={exportPanel} />
+        </div>
+      </div>
 
-          {session.issues.length > 0 || connection.error || !connection.connected ? (
-            <section className="seene-message seene-chrome" role="alert">
-              <strong>{stateText}</strong>
-              {session.issues.length > 0 && (
-                <>
-                  <p>Your last valid scene settings are retained. Correct the source to continue.</p>
-                  <ul>
-                    {session.issues.map((issue, index) => (
-                      <li key={index}>
-                        {issue.path}: {issue.message}
-                      </li>
-                    ))}
-                  </ul>
-                </>
-              )}
-              {connection.error && <p>{connection.error}</p>}
-              {!connection.connected && <p>Keep your development server running. The preview reconnects automatically.</p>}
-            </section>
-          ) : null}
+      <div className="seene-studio-body">
+        {sidebar && compositionMode !== "walkthrough" ? (
+          <aside className="seene-studio-sequence" aria-label="Scene motion" data-seene-chrome="scene-sequence">
+            <header className="seene-studio-panel-head">
+              <h2>Motion</h2>
+            </header>
+            {onPresentationChange ? (
+              <div className="seene-studio-stack">
+                <PresentationPicker value={presentation} onChange={onPresentationChange} />
+              </div>
+            ) : null}
+            {onTransitionChange ? (
+              <div className="seene-studio-stack">
+                <TransitionPicker value={transition} onChange={onTransitionChange} />
+              </div>
+            ) : null}
+            {motion.segments.length > 0 ? (
+              <ol className="seene-studio-nodes seene-studio-motion-list">
+                {motion.segments.map((segment, index) => (
+                  <li key={segment.nodeId} data-selected={selectedSegmentId === segment.nodeId}>
+                    <div className="seene-studio-node-connector" data-first={index === 0} data-last={index === motion.segments.length - 1} />
+                    <button
+                      type="button"
+                      className="seene-studio-node"
+                      data-type={segment.type}
+                      onClick={() => seekSegment(segment.nodeId)}
+                      onDoubleClick={() => seekSegment(segment.nodeId)}
+                    >
+                      <span className="seene-studio-node-type">{segment.type}</span>
+                      <span className="seene-studio-node-title">{segment.title}</span>
+                      <span className="seene-studio-node-time">{timeLabel(segment.startTime)}</span>
+                    </button>
+                  </li>
+                ))}
+              </ol>
+            ) : (
+              <p className="seene-studio-hint">
+                {definition ? "This scene has no motion keyframes yet. Pick a presentation or add motion in the inspector." : "Waiting for a scene from your app."}
+              </p>
+            )}
+            <div className="seene-studio-attribution">
+              <BrandAttribution />
+            </div>
+          </aside>
+        ) : null}
 
+        <section className="seene-studio-main">
+          {!definition ? (
+            <div className="seene-studio-viewport seene-viewport" ref={setViewport} aria-label="Scene preview">
+              <div className="seene-empty seene-chrome">
+                <span className="seene-empty-symbol" aria-hidden="true">
+                  ↗
+                </span>
+                <h1>
+                  A new perspective
+                  <br />
+                  on your product.
+                </h1>
+                <p>Your live scene will appear here. Open Seene inside your app, then use the studio inspector to compose its motion.</p>
+                {messages}
+                <GettingStarted />
+              </div>
+            </div>
+          ) : (
+            <div className="seene-studio-viewport seene-viewport" ref={setViewport} aria-label="Scene preview">
           <SceneErrorBoundary resetKey={resetKey} onError={failure} onReset={() => setRenderError("")}>
             {definition && viewport
               ? createPortal(
@@ -577,120 +744,111 @@ export function ScenePreview({
                 )
               : null}
           </SceneErrorBoundary>
-
-          {/* Editor Header Bar */}
-          <div className="seene-header flex items-center justify-between gap-4" data-seene-chrome="preview-header">
-            <div className="seene-heading flex items-center gap-3">
-              {backHref ? (
-                <a
-                  className="seene-control"
-                  href={backHref}
-                  onClick={event => {
-                    if (onBack && event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey) {
-                      event.preventDefault();
-                      onBack();
-                    }
-                  }}
-                >
-                  {onBack ? "Back to scenes" : "Back to app"}
-                </a>
-              ) : onBack ? (
-                <button type="button" className="seene-control" onClick={onBack}>
-                  Back to scenes
-                </button>
-              ) : null}
-
-              <h1 className="seene-title">{title}</h1>
-
-              {/* Mode indicator pill */}
-              <div className="flex items-center gap-1 bg-zinc-900 border border-zinc-800 rounded-full p-0.5 text-[11px]">
-                  <button
-                  type="button"
-                  onClick={() => changeCompositionMode("scene")}
-                  aria-pressed={compositionMode === "scene"}
-                  data-seene-chrome="composition-mode-scene"
-                  className={`px-2.5 py-0.5 rounded-full font-medium transition-colors ${
-                    compositionMode === "scene" ? "bg-zinc-800 text-white font-semibold" : "text-zinc-400 hover:text-zinc-200"
-                  }`}
-                >
-                  Scene
-                </button>
-                  <button
-                  type="button"
-                  onClick={() => changeCompositionMode("walkthrough")}
-                  aria-pressed={compositionMode === "walkthrough"}
-                  data-seene-chrome="composition-mode-scroll"
-                  className={`px-2.5 py-0.5 rounded-full font-medium transition-colors ${
-                    compositionMode === "walkthrough" ? "bg-zinc-800 text-white font-semibold" : "text-zinc-400 hover:text-zinc-200"
-                  }`}
-                >
-                  Scroll
-                </button>
+            <div className="seene-bottom-blur" data-seene-preview-chrome="" data-seene-chrome="preview-blur" aria-hidden="true">
+              <i />
+              <i />
+              <i />
+            </div>
+            {messages}
+            </div>
+          )}
+          <div className={definition ? "seene-studio-bottom" : "seene-studio-bottom seene-hidden"} data-seene-preview-chrome="" data-seene-chrome="preview-footer" role="contentinfo" aria-label="Scene controls" aria-hidden={!definition || undefined}>
+            {compositionMode === "walkthrough" && onPresentationChange ? (
+              <div className="seene-studio-stack seene-studio-stack--inline">
+                <PresentationPicker value={presentation} onChange={onPresentationChange} disabled />
               </div>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <SceneInspector
-                definition={localDef}
-                onChange={updated => setLocalDef(updated)}
-                onSaveDefinition={onSaveDefinition}
-                compositionMode={compositionMode}
-                onCompositionModeChange={changeCompositionMode}
+            ) : null}
+            <div className="seene-studio-timeline-segments" aria-label="Scene motion segments" role="group">
+              <WalkthroughTimeline
+                label="scene"
+                showScrubber={false}
+                showTransport={false}
+                steps={motion.segments}
+                durationMs={session.durationMs || motion.durationMs}
+                timeMs={session.timeMs}
+                playing={session.playing}
+                activeNodeId={selectedSegmentId}
+                selectedNodeId={selectedSegmentId}
+                formatTime={timeLabel}
+                onSeek={ms => session.seek(ms)}
+                onSelect={id => seekSegment(id, false)}
+                onPreview={id => seekSegment(id)}
+                onToggle={session.toggle}
+                onRestart={() => session.seek(0)}
+                onStep={stepSegment}
               />
-              <ExportMenu disabled={blocked || !session.durationMs} panelHost={exportPanel} />
+            </div>
+            <div className="seene-studio-transport" data-seene-chrome="scene-transport">
+              <button
+                type="button"
+                className="seene-control seene-icon cursor-pointer"
+                aria-label="Restart"
+                disabled={!definition}
+                onClick={() => session.seek(0)}
+              >
+                <Glyph kind="restart" />
+              </button>
+              <button
+                type="button"
+                className="seene-control seene-icon cursor-pointer"
+                aria-label="Previous motion segment"
+                disabled={!definition || motion.segments.length === 0}
+                onClick={() => stepSegment(-1)}
+              >
+                ◀|
+              </button>
+              <button
+                type="button"
+                className="seene-control seene-primary seene-icon cursor-pointer"
+                disabled={blocked || !session.durationMs}
+                aria-label={session.playing ? "Pause" : session.timeMs >= session.durationMs && session.durationMs ? "Replay" : "Play"}
+                onClick={session.toggle}
+              >
+                <Glyph kind={session.playing ? "pause" : "play"} />
+              </button>
+              <button
+                type="button"
+                className="seene-control seene-icon cursor-pointer"
+                aria-label="Next motion segment"
+                disabled={!definition || motion.segments.length === 0}
+                onClick={() => stepSegment(1)}
+              >
+                |▶
+              </button>
+              <input
+                className="seene-timeline"
+                aria-label="Scene time"
+                aria-valuetext={timeLabel(session.timeMs)}
+                type="range"
+                min={0}
+                max={session.durationMs || 1}
+                step={10}
+                value={session.timeMs}
+                disabled={blocked || !session.durationMs}
+                onChange={event => session.seek(Number(event.target.value))}
+              />
+              <output className="seene-time font-mono" data-testid="scene-time">
+                {timeLabel(session.timeMs)} / {timeLabel(session.durationMs)}
+              </output>
             </div>
           </div>
+        </section>
 
-          {onPresentationChange ? <PresentationPicker value={presentation} onChange={onPresentationChange} disabled={compositionMode === "walkthrough"} /> : null}
-          {onTransitionChange ? <TransitionPicker value={transition} onChange={onTransitionChange} /> : null}
-          {!definition ? <GettingStarted /> : null}
-
-          {/* Playback Dock & Timeline */}
-          <div className="seene-dock" data-seene-chrome="preview-dock">
-            <button
-              type="button"
-              className="seene-control seene-primary seene-icon cursor-pointer"
-              disabled={blocked || !session.durationMs}
-              aria-label={session.playing ? "Pause" : session.timeMs >= session.durationMs && session.durationMs ? "Replay" : "Play"}
-              onClick={session.toggle}
-            >
-              <Glyph kind={session.playing ? "pause" : "play"} />
-            </button>
-            <button
-              type="button"
-              className="seene-control seene-icon cursor-pointer"
-              aria-label="Restart"
-              disabled={!definition}
-              onClick={() => session.seek(0)}
-            >
-              <Glyph kind="restart" />
-            </button>
-            <input
-              className="seene-timeline"
-              aria-label="Scene time"
-              aria-valuetext={timeLabel(session.timeMs)}
-              type="range"
-              min={0}
-              max={session.durationMs || 1}
-              step={10}
-              value={session.timeMs}
-              disabled={blocked || !session.durationMs}
-              onChange={event => session.seek(Number(event.target.value))}
-            />
-            <output className="seene-time font-mono" data-testid="scene-time">
-              {timeLabel(session.timeMs)} / {timeLabel(session.durationMs)}
-            </output>
-          </div>
-
-          <div className="seene-preview-meta">
-            <span className="seene-status" role="status">
-              <span className="seene-status-dot" />
-              {stateText}
-            </span>
-            <BrandAttribution />
-          </div>
-        </div>
-      </footer>
+        {inspectorOpen ? (
+          <SceneInspector
+            definition={localDef}
+            onChange={updated => setLocalDef(updated)}
+            onSaveDefinition={onSaveDefinition}
+            isOpen
+            docked
+            onToggle={closeInspector}
+            compositionMode={compositionMode}
+            onCompositionModeChange={changeCompositionMode}
+          />
+        ) : null}
+      </div>
+        </>
+      ) : null}
     </main>
   );
 }
