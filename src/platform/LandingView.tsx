@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from "react";
-import { SEENE_BRAND, SEENE_INSTALL_COMMAND } from "../core/branding";
+import { SEENE_BRAND, SEENE_INIT_COMMAND, SEENE_INSTALL_COMMAND, SEENE_NPM_INSTALL_COMMAND } from "../core/branding";
 import { FrameSection, Kbd } from "./site";
 import { StudioPreviewDemo } from "./StudioPreviewDemo";
 import { createHref, PROJECTS_ROUTE, WALKTHROUGH_DEMO_URL } from "./api";
@@ -14,33 +14,33 @@ function Glyph({ children }: { children: ReactNode }) {
 
 const CAPABILITIES = [
   {
-    title: "Scene Studio and Library",
-    body: "Create, select, reopen and delete source-backed scenes while keeping each composition editable.",
+    title: "Focused scenes",
+    body: "Frame one real component or a group of sections on a virtual canvas with a camera, perspective and a chosen aspect ratio.",
     icon: <Glyph><rect x="3" y="4" width="18" height="16" rx="2" /><path d="M3 9h18M9 4l-2 5M15 4l-2 5" /></Glyph>,
   },
   {
-    title: "Walkthrough Studio",
-    body: "Connect components, pages, scrolls and interactions into one sequence with a single timeline.",
+    title: "Website walkthroughs",
+    body: "Chain components, pages, scrolls and interactions into one ordered sequence that drives the live site as a single timeline.",
     icon: <Glyph><path d="M4 5h16M4 12h16M4 19h9" /><circle cx="19" cy="19" r="2" /></Glyph>,
   },
   {
-    title: "Camera and Focus",
-    body: "Adjust camera position, rotation and perspective, then tune focus distance, aperture and blur limits.",
+    title: "Camera, focus and depth",
+    body: "Move the camera in 3D and tune f-stop, focal length and focus distance to get real depth of field on your own markup.",
     icon: <Glyph><circle cx="12" cy="12" r="3.5" /><path d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22" /></Glyph>,
   },
   {
-    title: "Seekable Motion Timeline",
-    body: "Keyframe camera, focus and surface properties on one millisecond timeline; seek and replay deterministically.",
+    title: "Seekable motion timeline",
+    body: "Keyframe camera, focus and surface properties on one millisecond timeline, then seek, step and replay it deterministically.",
     icon: <Glyph><circle cx="12" cy="13" r="8" /><path d="M12 9v4l2.5 2M9 2h6" /></Glyph>,
   },
   {
-    title: "Your Existing React UI",
-    body: "Present project components with their existing providers, data, styles and responsive behavior.",
+    title: "Your existing React UI",
+    body: "Scene previews render inside your app, with its providers, router, data, fonts and responsive styles still in charge.",
     icon: <Glyph><circle cx="12" cy="12" r="2" /><path d="M12 4c3.5 0 6 3.6 6 8s-2.5 8-6 8-6-3.6-6-8 2.5-8 6-8Z" /><path d="M5.5 8c3-1.7 6.7-1.7 9.7 0" /><path d="M5.5 16c3 1.7 6.7 1.7 9.7 0" /></Glyph>,
   },
   {
-    title: "Local MP4 Export",
-    body: "Capture the rendered sequence with Chromium and encode one continuous MP4 locally at 30, 60 or 120 FPS.",
+    title: "Local MP4 export",
+    body: "Capture the rendered sequence with Chromium and encode one continuous MP4 on your machine at 30, 60 or 120 fps.",
     icon: <Glyph><path d="M12 3v10m0 0 3.5-3.5M12 13 8.5 9.5" /><path d="M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3" /></Glyph>,
   },
 ];
@@ -49,33 +49,44 @@ const RECIPE_EXAMPLE = `{
   "version": 1,
   "id": "hero-showcase",
   "title": "Hero Showcase",
+  "compositionType": "scene",
   "definition": {
-    "scene": { "nodes": [{ "id": "host" }] },
+    "scene": {
+      "camera": { "perspective": 1600, "z": 120, "rotateY": -6 },
+      "focus": { "distance": 1280, "fStop": 2.8, "maxBlur": 8 },
+      "nodes": [{ "id": "host" }]
+    },
     "motion": {
       "durationMs": 5000,
-      "speed": 0.8,
-      "tracks": [
-        {
-          "target": { "kind": "camera" },
-          "property": "x",
-          "keyframes": [
-            { "timeMs": 0, "value": 0, "easing": "linear" },
-            { "timeMs": 5000, "value": 120 }
-          ]
-        }
-      ]
+      "speed": 1,
+      "tracks": [{
+        "target": { "kind": "camera" },
+        "property": "z",
+        "keyframes": [
+          { "timeMs": 0, "value": 120, "easing": "easeInOut" },
+          { "timeMs": 5000, "value": 20, "easing": "easeInOut" }
+        ]
+      }]
     }
   }
 }`;
 
-const COMPONENT_EXAMPLE = `import { Surface } from "@thatg33k/seene";
-import HeroSection from "../../components/HeroSection";
+const COMPONENT_EXAMPLE = `import { Scene, Surface } from "@thatg33k/seene";
+import HeroSection from "@/components/HeroSection";
+import recipe from "./hero-showcase.scene.json";
 
 export default function HeroScene() {
   return (
-    <Surface id="host">
-      <HeroSection />
-    </Surface>
+    <Scene
+      camera={recipe.definition.scene.camera}
+      focus={recipe.definition.scene.focus}
+      motion={recipe.definition.motion}
+      recipeNodes={recipe.definition.scene.nodes}
+    >
+      <Surface id="host">
+        <HeroSection />
+      </Surface>
+    </Scene>
   );
 }`;
 
@@ -142,6 +153,13 @@ function InteractiveDemoCard() {
   return <StudioPreviewDemo />;
 }
 
+const WORKFLOW = [
+  { title: "Choose what to create", body: "Start a Scene for one composition, or a Walkthrough for a connected sequence of sections." },
+  { title: "Point Seene at your application", body: "Register the project folder or browse to it. Seene finds the framework, routes and components." },
+  { title: "Pick real components", body: "Search the pages, sections and components it discovered and choose the ones to present." },
+  { title: "Compose, preview and export", body: "Fine-tune camera, focus and motion on the timeline, then export one continuous MP4." },
+];
+
 export function LandingView() {
   return (
     <>
@@ -155,7 +173,7 @@ export function LandingView() {
           { kind: "solid", flex: 4 },
         ]}
       >
-        <div className="relative py-16 text-center sm:py-24">
+        <div className="relative py-14 text-center sm:py-20">
           <p className="inline-flex items-center gap-2 rounded-full border border-[var(--seene-border)] bg-[var(--seene-surface)] px-4 py-1.5 font-mono text-xs text-[var(--seene-text-muted)] shadow-sm">
             <span
               className="h-2 w-2 rounded-full bg-[var(--seene-accent)]"
@@ -164,19 +182,20 @@ export function LandingView() {
             {SEENE_BRAND.packageName} · {SEENE_BRAND.license} licensed
           </p>
 
-          <h1 className="seene-hero-rise mx-auto mt-6 max-w-4xl text-balance text-4xl font-semibold tracking-tight sm:text-6xl lg:text-7xl">
+          <h1 className="seene-hero-rise mx-auto mt-6 max-w-4xl text-balance text-[2.15rem] font-semibold tracking-tight leading-[1.08] sm:text-6xl lg:text-7xl">
             Present your React interfaces as cinematic scenes.
           </h1>
 
-          <p className="seene-hero-rise mx-auto mt-6 max-w-2xl text-balance text-base sm:text-lg leading-relaxed text-[var(--seene-text-muted)]">
-            Seene is a cinematic presentation studio for real React
-            applications. Keep your components, providers, and styles, and add
-            camera movement, depth of field, motion timelines, and video export.
+          <p className="seene-hero-rise mx-auto mt-6 max-w-2xl text-pretty text-base sm:text-lg leading-relaxed text-[var(--seene-text-muted)]">
+            Seene is a cinematic presentation studio for real React applications.
+            Keep your components, providers and styles, then layer on camera
+            movement, depth of field, motion timelines and local video export.
           </p>
 
-          <div className="mx-auto mt-8 max-w-2xl">
-            <CommandLine value={SEENE_INSTALL_COMMAND} />
-            <p className="mt-3 font-mono text-xs text-[var(--seene-text-muted)]">
+          <div className="mx-auto mt-8 max-w-2xl space-y-2">
+            <CommandLine value={SEENE_NPM_INSTALL_COMMAND} />
+            <CommandLine value={SEENE_INIT_COMMAND} />
+            <p className="font-mono text-xs text-[var(--seene-text-muted)]">
               Requires Node 22.12+ and React 18.2+ or 19. Installs as{" "}
               {SEENE_BRAND.packageName}.
             </p>
@@ -191,27 +210,21 @@ export function LandingView() {
             </a>
             <a
               className="seene-btn seene-btn-secondary seene-btn-cta"
-              href="#install"
+              href="#demo"
             >
-              Get started <Kbd onPrimary>I</Kbd>
+              Try the demo <Kbd>D</Kbd>
             </a>
             <a
               className="seene-btn seene-btn-secondary seene-btn-cta"
               href={WALKTHROUGH_DEMO_URL}
             >
-              Watch the demo
+              Watch the walkthrough
             </a>
             <ExternalLink
               className="seene-btn seene-btn-secondary seene-btn-cta"
               href={SEENE_BRAND.repository}
             >
               View on GitHub
-            </ExternalLink>
-            <ExternalLink
-              className="seene-btn seene-btn-secondary seene-btn-cta"
-              href={SEENE_BRAND.npm}
-            >
-              npm package
             </ExternalLink>
           </div>
 
@@ -295,12 +308,7 @@ export function LandingView() {
           </div>
 
           <ol className="mx-auto mt-12 grid max-w-4xl gap-4 sm:grid-cols-2">
-            {[
-              { title: "Choose what to create", body: "Start a Scene for one composition, or a Walkthrough for a connected sequence." },
-              { title: "Point Seene at your application", body: "Register a project folder or browse to it. Seene finds the framework and its routes." },
-              { title: "Pick real components", body: "Search the pages, sections and components discovered in your project and select the ones to present." },
-              { title: "Edit and export", body: "Open the editor, tune the timeline, then export one continuous MP4 locally." },
-            ].map((step, index) => (
+            {WORKFLOW.map((step, index) => (
               <li key={step.title} className="flex gap-3 rounded-xl border border-[var(--seene-border)] bg-[var(--seene-surface)] p-5">
                 <span className="font-mono text-xs font-semibold text-[var(--seene-accent)]">{String(index + 1).padStart(2, "0")}</span>
                 <span>
@@ -349,18 +357,20 @@ export function LandingView() {
                   STEP 01
                 </span>
                 <h3 className="text-base font-semibold text-[var(--seene-text)]">
-                  Initialize Seene in Your Project
+                  Install and Initialize Seene
                 </h3>
               </div>
               <p className="text-sm text-[var(--seene-text-muted)] leading-relaxed">
-                Run init from your application root. Seene installs the package
-                and generates instructions in{" "}
+                From your application root, install the package with npm, then
+                run init. Init connects the host and writes instructions to{" "}
                 <code className="font-mono text-xs bg-[var(--seene-surface-2)] px-1.5 py-0.5 rounded">
                   SEENE.md
                 </code>
-                .
+                . Do not fetch Seene with npx: the project should depend on the
+                installed version.
               </p>
-              <CommandLine value={SEENE_INSTALL_COMMAND} />
+              <CommandLine value={SEENE_NPM_INSTALL_COMMAND} />
+              <CommandLine value={SEENE_INIT_COMMAND} />
             </div>
 
             {/* Step 2 */}
@@ -384,7 +394,7 @@ export function LandingView() {
               </p>
               <div className="grid gap-3 md:grid-cols-2">
                 <div className="min-w-0">
-                  <p className="mb-2 font-mono text-xs text-[var(--seene-text-muted)]">
+                  <p className="mb-2 font-mono text-xs text-[var(--seene-text-muted)]" data-seene-example="recipe">
                     hero-showcase.scene.json
                   </p>
                   <pre className="w-full min-w-0 max-w-full overflow-x-auto rounded-xl border border-[var(--seene-border)] bg-[var(--seene-surface)] p-4 font-mono text-xs leading-relaxed text-[var(--seene-text)]">
@@ -392,7 +402,7 @@ export function LandingView() {
                   </pre>
                 </div>
                 <div className="min-w-0">
-                  <p className="mb-2 font-mono text-xs text-[var(--seene-text-muted)]">
+                  <p className="mb-2 font-mono text-xs text-[var(--seene-text-muted)]" data-seene-example="component">
                     hero-showcase.tsx
                   </p>
                   <pre className="w-full min-w-0 max-w-full overflow-x-auto rounded-xl border border-[var(--seene-border)] bg-[var(--seene-surface)] p-4 font-mono text-xs leading-relaxed text-[var(--seene-text)]">
@@ -488,18 +498,15 @@ export function LandingView() {
                 href={SEENE_BRAND.maintainerProfile}
               >
                 {SEENE_BRAND.maintainer}
-              </ExternalLink>{" "}
-              under{" "}
+            <p className="text-xs text-[var(--seene-text-muted)]">
+              Released under the{" "}
               <ExternalLink
-                className="font-medium underline underline-offset-2"
-                href={SEENE_BRAND.organization}
+                className="underline underline-offset-2"
+                href={`${SEENE_BRAND.repository}/blob/main/LICENSE`}
               >
-                {SEENE_BRAND.creator}
+                {SEENE_BRAND.license} License
               </ExternalLink>
               .
-            </p>
-            <p className="text-xs text-[var(--seene-text-muted)]">
-              Released under the {SEENE_BRAND.license} License.
             </p>
           </div>
         </div>

@@ -10,6 +10,7 @@ import { GettingStarted } from "./GettingStarted";
 import { PresentationPicker } from "./PresentationPicker";
 import { TransitionPicker } from "./TransitionPicker";
 import { SceneInspector } from "./SceneInspector";
+import { StudioAttribution } from "./StudioAttribution";
 import { WebsiteWalkthrough } from "./WebsiteWalkthrough";
 import { WalkthroughTimeline, type TimelineSegment } from "./WalkthroughTimeline";
 import { WalkthroughStudio } from "./WalkthroughStudio";
@@ -120,6 +121,32 @@ function Glyph({ kind }: { kind: "play" | "pause" | "restart" | "export" }) {
 function Capture({ durationMs, seek }: { durationMs: number; seek: (ms: number) => void }) {
   useSceneCapture({ durationMs, seek });
   return null;
+}
+
+function viewportFrameStyle(
+  definition: PreviewDefinition,
+  paneWidth = 0,
+  paneHeight = 0,
+  scale = 1,
+): CSSProperties {
+  if (definition.sizingMode === "viewport" || definition.sizingMode === "content") {
+    return {
+      left: 0,
+      top: 0,
+      width: Math.max(paneWidth, 1),
+      height: Math.max(paneHeight, 1),
+      transform: "none",
+      transformOrigin: "center",
+    };
+  }
+  return {
+    left: "50%",
+    top: "50%",
+    width: definition.width,
+    height: definition.height,
+    transform: `translate(-50%, -50%) scale(${scale})`,
+    transformOrigin: "center",
+  };
 }
 
 function ExportMenu({ disabled, panelHost }: { disabled: boolean; panelHost: HTMLDivElement | null }) {
@@ -441,7 +468,7 @@ export function ScenePreview({
   );
 
   const isViewportSizing = definition?.sizingMode === "viewport" || definition?.sizingMode === "content";
-  const scale = definition && size.width && size.height && !isViewportSizing
+  const scale = size.width && size.height && definition && !isViewportSizing
     ? Math.max(size.width / definition.width, size.height / definition.height)
     : 1;
   const motion = useMemo<{ segments: Array<TimelineSegment & { nodeId: string }>; durationMs: number }>(() => definition ? motionSegments(definition) : { segments: [], durationMs: 0 }, [definition]);
@@ -614,9 +641,6 @@ export function ScenePreview({
                 {definition ? "This scene has no motion keyframes yet. Pick a presentation or add motion in the inspector." : "Waiting for a scene from your app."}
               </p>
             )}
-            <div className="seene-studio-attribution">
-              <BrandAttribution />
-            </div>
           </aside>
         ) : null}
 
@@ -636,6 +660,7 @@ export function ScenePreview({
                 {messages}
                 <GettingStarted />
               </div>
+              <StudioAttribution />
             </div>
           ) : (
             <div className="seene-studio-viewport seene-viewport" ref={setViewport} aria-label="Scene preview">
@@ -682,15 +707,11 @@ export function ScenePreview({
                       <>
                         {prevDefinition && transitionProgress < 1 ? (
                           <div
+                            data-seene-frame={isViewportSizing ? prevDefinition.sizingMode : "fixed"}
                             style={{
+                              ...viewportFrameStyle(prevDefinition, size.width, size.height, scale),
                               position: "absolute",
-                              left: "50%",
-                              top: "50%",
-                              width: isViewportSizing ? "100%" : prevDefinition.width,
-                              height: isViewportSizing ? "100%" : prevDefinition.height,
-                              minHeight: isViewportSizing ? prevDefinition.minHeight || "100vh" : undefined,
-                              transform: isViewportSizing ? "none" : `translate(-50%, -50%) scale(${scale})`,
-                              transformOrigin: "center",
+                              boxSizing: "border-box",
                               opacity: 1 - easeInOut(transitionProgress),
                               transition: `opacity ${SCENE_TRANSITION_DURATION}ms ease-out`,
                               pointerEvents: "none",
@@ -711,15 +732,11 @@ export function ScenePreview({
                         ) : null}
 
                         <div
+                          data-seene-frame={isViewportSizing ? definition.sizingMode : "fixed"}
                           style={{
+                            ...viewportFrameStyle(definition, size.width, size.height, scale),
                             position: "absolute",
-                            left: "50%",
-                            top: "50%",
-                            width: isViewportSizing ? "100%" : definition.width,
-                            height: isViewportSizing ? "100%" : definition.height,
-                            minHeight: isViewportSizing ? definition.minHeight || "100vh" : undefined,
-                            transform: isViewportSizing ? "none" : `translate(-50%, -50%) scale(${scale})`,
-                            transformOrigin: "center",
+                            boxSizing: "border-box",
                             opacity: prevDefinition && transitionProgress < 1 ? easeInOut(transitionProgress) : 1,
                             transition: `opacity ${SCENE_TRANSITION_DURATION}ms ease-out`,
                           }}
@@ -738,11 +755,12 @@ export function ScenePreview({
                         </div>
                       </>
                     )}
-                    <Capture durationMs={session.durationMs} seek={captureSeek} />
                   </div>,
                   viewport,
                 )
               : null}
+
+            <Capture durationMs={session.durationMs} seek={captureSeek} />
           </SceneErrorBoundary>
             <div className="seene-bottom-blur" data-seene-preview-chrome="" data-seene-chrome="preview-blur" aria-hidden="true">
               <i />
@@ -750,6 +768,7 @@ export function ScenePreview({
               <i />
             </div>
             {messages}
+            <StudioAttribution />
             </div>
           )}
           <div className={definition ? "seene-studio-bottom" : "seene-studio-bottom seene-hidden"} data-seene-preview-chrome="" data-seene-chrome="preview-footer" role="contentinfo" aria-label="Scene controls" aria-hidden={!definition || undefined}>

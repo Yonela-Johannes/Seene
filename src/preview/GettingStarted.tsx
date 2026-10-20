@@ -1,5 +1,5 @@
 import { useState } from "react";
-
+import { SEENE_BRAND } from "../core/branding";
 const STEPS = [
   {
     number: "01",
@@ -177,7 +177,7 @@ export function GettingStarted({ onStartCreating }: GettingStartedProps) {
           <span className="text-xs tracking-[0.08em] text-[var(--seene-text-muted)]">
             SEENE BY{" "}
             <a
-              href="https://yonela-johannes.vercel.app"
+              href={SEENE_BRAND.organization}
               target="_blank"
               rel="noopener noreferrer"
               className="text-[var(--seene-text-muted)] transition-colors hover:text-[var(--seene-text)]"
@@ -186,7 +186,7 @@ export function GettingStarted({ onStartCreating }: GettingStartedProps) {
             </a>
             <span className="mx-2 text-[var(--seene-border-text)]">·</span>
             <a
-              href="https://github.com/orgs/thatg33k-t33/"
+              href={SEENE_BRAND.repository}
               target="_blank"
               rel="noopener noreferrer"
               className="text-[var(--seene-text-muted)] transition-colors hover:text-[var(--seene-text)]"

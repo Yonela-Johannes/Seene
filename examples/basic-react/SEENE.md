@@ -1,7 +1,5 @@
 # Seene by THATG33K
-
-https://thatg33k-t33.github.io/Seene/
-
+https://yonela-johannes.github.io/Seene/seene/
 ## This example host
 
 This is a standard Vite + React DOM project. Seene init connects the existing React root and creates `src/seene/ProjectPreview.tsx`; it does not replace the Vite config or React plugin. Run the host with its own `pnpm dev` command, then open it with `pnpm exec seene open --url http://localhost:5173`.

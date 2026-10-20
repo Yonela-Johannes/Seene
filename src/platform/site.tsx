@@ -264,6 +264,8 @@ export function useSiteShortcuts() {
         window.dispatchEvent(new CustomEvent("seene:palette"));
       } else if (!mod && !event.altKey && (event.key === "i" || event.key === "I")) {
         document.getElementById("install")?.scrollIntoView({ behavior: "smooth" });
+      } else if (!mod && !event.altKey && (event.key === "d" || event.key === "D") && document.getElementById("demo")) {
+        document.getElementById("demo")?.scrollIntoView({ behavior: "smooth" });
       }
     };
     window.addEventListener("keydown", onKey);

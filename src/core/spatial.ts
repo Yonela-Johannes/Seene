@@ -85,19 +85,9 @@ export function evaluateScene(
   const nodeMap = new Map(scene.nodes.map((node) => [node.id, node]));
   const cache = new Map<string, Matrix>();
   const issues: SceneIssue[] = [];
-  const camera = matrixFor(
-    TransformSchema.parse(
-      scene.camera
-        ? {
-            x: -(scene.camera.x ?? 0),
-            y: -(scene.camera.y ?? 0),
-            z: -(scene.camera.z ?? 0),
-            rotateX: scene.camera.rotateX ?? 0,
-            rotateY: scene.camera.rotateY ?? 0,
-            rotateZ: scene.camera.rotateZ ?? 0,
-          }
-        : {},
-    ),
+  const camera = multiply(
+    matrixFor({ rotateX: scene.camera?.rotateX ?? 0, rotateY: scene.camera?.rotateY ?? 0, rotateZ: scene.camera?.rotateZ ?? 0 }),
+    matrixFor({ x: -(scene.camera?.x ?? 0), y: -(scene.camera?.y ?? 0), z: -(scene.camera?.z ?? 0) }),
   );
   const getWorld = (id: string): Matrix => {
     if (cache.has(id)) return cache.get(id)!;

@@ -2,15 +2,15 @@
 
 [![npm](https://img.shields.io/npm/v/@thatg33k/seene)](https://www.npmjs.com/package/@thatg33k/seene)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Pages](https://img.shields.io/badge/site-thatg33k--t33.github.io%2FSeene-5b8cff)](https://thatg33k-t33.github.io/Seene/)
+[![Pages](https://img.shields.io/badge/site-yonela--johannes.github.io%2FSeene%2Fseene-5b8cff)](https://yonela-johannes.github.io/Seene/seene/)
 
 **Seene** is a cinematic scene studio for existing React DOM interfaces. It presents your components with camera perspective, depth of field, keyframed motion and local video export while leaving your framework, routes, providers, components and styles in place.
 
 It runs locally: no account, cloud service or subscription is required.
 
-- **Homepage:** <https://thatg33k-t33.github.io/Seene/>
+- **Homepage:** <https://yonela-johannes.github.io/Seene/seene/>
 - **Package:** [`@thatg33k/seene`](https://www.npmjs.com/package/@thatg33k/seene)
-- **Repository:** <https://github.com/thatg33k-t33/Seene>
+- **Repository:** <https://github.com/Yonela-Johannes/Seene>
 
 ## Compatibility
 
@@ -26,10 +26,11 @@ Run these commands from the consuming application's package directory. Seene nev
 ### 1. Install and initialize
 
 ```sh
+npm install @thatg33k/seene
 npx @thatg33k/seene init
 ```
 
-The CLI installs `@thatg33k/seene` using the package manager detected for your project, then creates the Seene project state and `SEENE.md` instructions.
+Install the package with npm so the project depends on the version it uses, then run init from the same project root. Init connects the host, creates the Seene project state and writes `SEENE.md` instructions. Do not fetch Seene with `npx` alone; that downloads a throwaway copy instead of installing it in your project.
 
 The generated connection depends on the host:
 
@@ -194,6 +195,8 @@ pnpm dev
 ```
 
 Build the package and CLI locally with `pnpm build`. Build the static landing page locally with `pnpm build:pages` (output: `dist-pages/`). Neither command publishes or deploys anything.
+
+The public site is published by `.github/workflows/pages.yml` at <https://yonela-johannes.github.io/Seene/seene/>. GitHub Pages serves the repository site under `/Seene/`; the site itself lives under the `/seene/` path, so `vite.pages.config.ts` uses `/Seene/seene/` as its base and the workflow sets `SEENE_PAGES_BASE` explicitly. Every link on the site, in the README and in the npm metadata uses that same `/seene/` URL.
 
 ## Project credits
 

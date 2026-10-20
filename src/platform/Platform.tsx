@@ -8,6 +8,7 @@ import { CREATE_ROUTE, PROJECTS_ROUTE } from "./api";
 import { useHashRoute } from "./data";
 import { SiteHeader, useSiteShortcuts } from "./site";
 import { useEffect, useState } from "react";
+import { SEENE_INSTALL_COMMAND } from "../core/branding";
 
 /** The command menu offers real navigation and the install command.
  * There is no account, so nothing here signs a user in or out. */
@@ -47,7 +48,7 @@ export function Platform() {
               {COMMANDS.map(command => (
                 <a key={command.href} className="seene-nav-item" href={command.href} onClick={() => setPaletteOpen(false)}>{command.label}</a>
               ))}
-              <button type="button" className="seene-nav-item" onClick={() => { void navigator.clipboard?.writeText("npx @thatg33k/seene init"); setPaletteOpen(false); }}>Copy install command</button>
+              <button type="button" className="seene-nav-item" onClick={() => { void navigator.clipboard?.writeText(SEENE_INSTALL_COMMAND); setPaletteOpen(false); }}>Copy install command</button>
             </div>
           </div>
         </div>

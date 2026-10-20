@@ -10,7 +10,7 @@ test('site navigation menu works on desktop and mobile with keyboard and scroll 
   await expect(page.getByRole('button',{name:'Close navigation menu'})).toHaveAttribute('aria-expanded','true');
   const menu=page.getByRole('navigation',{name:'Site menu'});
   await expect(menu).toBeVisible();
-  for(const [label,href] of [['Home','#/'],['Why I Built Seene','#demo'],['Demo','/tests/preview/walkthrough-fixture.html?seene-mode=scroll'],['Documentation / Getting Started','#install'],['GitHub','https://github.com/thatg33k-t33/Seene']]){
+  for(const [label,href] of [['Home','#/'],['Why I Built Seene','#demo'],['Demo','/tests/preview/walkthrough-fixture.html?seene-mode=scroll'],['Documentation / Getting Started','#install'],['GitHub','https://github.com/Yonela-Johannes/Seene']]){
    await expect(menu.getByRole('link',{name:label,exact:true})).toHaveAttribute('href',href);
   }
   if(viewport.width<1024) await expect.poll(()=>page.locator('body').evaluate(element=>getComputedStyle(element).overflowY)).toBe('hidden');
@@ -26,7 +26,7 @@ test('site navigation menu works on desktop and mobile with keyboard and scroll 
   await expect(page).toHaveURL(/#demo$/);
   await expect(page.getByRole('button',{name:'Open navigation menu'})).toHaveAttribute('aria-expanded','false');
   await expect(page.locator('#demo')).toBeInViewport();
-  await page.locator('#demo').getByRole('button',{name:'Website Walkthrough'}).click();
+  await page.locator('#demo').getByRole('button',{name:'Website Walkthrough',exact:true}).click();
   await expect(page.locator('[data-testid^="home-demo-story-"]')).toHaveCount(5);
  }
 });
@@ -37,12 +37,12 @@ test('homepage demo presents the founder story in its existing walkthrough previ
  await expect(page.locator('.founder-story-page')).toHaveCount(0);
  await page.goto('/#demo');
  await expect(page.locator('#demo')).toBeInViewport();
- await page.locator('#demo').getByRole('button',{name:'Website Walkthrough'}).click();
+ await page.locator('#demo').getByRole('button',{name:'Website Walkthrough',exact:true}).click();
  const screens=page.locator('[data-testid^="home-demo-story-"]');
  await expect(screens).toHaveCount(5);
  await expect(screens.nth(0)).toContainText('Every project deserved to be seen.');
  await expect(screens.nth(4)).toContainText('So I built Seene.');
- await expect(page.getByRole('region',{name:'Overview'}).getByRole('link',{name:'Watch the demo',exact:true})).toHaveAttribute('href','/tests/preview/walkthrough-fixture.html?seene-mode=scroll');
+ await expect(page.getByRole('region',{name:'Overview'}).getByRole('link',{name:'Watch the walkthrough',exact:true})).toHaveAttribute('href','/tests/preview/walkthrough-fixture.html?seene-mode=scroll');
  await expect(page.getByRole('link',{name:'Experience Seene'})).toHaveAttribute('href','#install');
  await page.getByRole('button',{name:'Open navigation menu'}).click();
  await page.getByRole('navigation',{name:'Site menu'}).getByRole('link',{name:'Demo',exact:true}).click();
@@ -213,25 +213,30 @@ test('public landing page documents installation, scene authoring, discovery and
  await expect(page).toHaveTitle('Seene — cinematic scenes for real React interfaces');
  await expect(page.getByRole('heading',{name:'Present your React interfaces as cinematic scenes.'})).toBeVisible();
  await expect(page.getByText('Requires Node 22.12+ and React 18.2+ or 19. Installs as @thatg33k/seene.')).toBeVisible();
- await page.getByLabel('Overview').getByRole('link',{name:'Get started'}).click();
- await expect(page).toHaveURL(/#install$/);
+  await page.getByLabel('Overview').getByRole('link',{name:'Try the demo'}).click();
+ await expect(page).toHaveURL(/#demo$/);
+ await expect(page.locator('#demo')).toBeInViewport();
  await expect(page.getByRole('heading',{name:'Simple Setup in Minutes'})).toBeVisible();
  const guide=page.getByLabel('Workflow');
  await expect(guide.getByText('STEP 01')).toBeVisible();
  await expect(guide.getByText('STEP 02')).toBeVisible();
  await expect(guide.getByText('STEP 03')).toBeVisible();
- await expect(guide.getByRole('heading',{name:'Initialize Seene in Your Project'})).toBeVisible();
+ await expect(guide.getByRole('heading',{name:'Install and Initialize Seene'})).toBeVisible();
+ await expect(guide.getByText('npm install @thatg33k/seene',{exact:true})).toBeVisible();
+ await expect(guide.getByText('Do not fetch Seene with npx: the project should depend on the installed version.')).toBeVisible();
  await expect(guide.getByRole('heading',{name:'Author a Recipe and Component'})).toBeVisible();
  await expect(guide.getByRole('heading',{name:'Open Studio & Compose Motion'})).toBeVisible();
  await expect(guide.getByText(/Choose Website Walkthrough in Create Scene/)).toBeVisible();
  await expect(guide.getByText(/seeneCreateScenePlugin\(\)/)).toBeVisible();
- await expect(guide.getByText('npx @thatg33k/seene init')).toBeVisible();
- await expect(guide.getByText('hero-showcase.scene.json')).toBeVisible();
- await expect(guide.getByText('hero-showcase.tsx')).toBeVisible();
+ await expect(guide.getByText('npx @thatg33k/seene init',{exact:true})).toBeVisible();
+ await expect(guide.locator('[data-seene-example="recipe"]')).toHaveText('hero-showcase.scene.json');
+ await expect(guide.locator('[data-seene-example="component"]')).toHaveText('hero-showcase.tsx');
  const exampleRecipe=JSON.parse((await guide.locator('pre code').nth(0).textContent())!);
  expect(exampleRecipe.id).toBe('hero-showcase');
  expect(exampleRecipe.definition.motion.tracks).toHaveLength(1);
- await expect(guide.locator('pre code').nth(1)).toContainText('../../components/HeroSection');
+ await expect(guide.locator('pre code').nth(1)).toContainText('@/components/HeroSection');
+ await expect(guide.locator('pre code').nth(1)).toContainText('<Scene');
+ await expect(guide.locator('pre code').nth(0)).toContainText('"focus"');
  await expect(guide.getByText('npx seene open --url http://localhost:3000')).toBeVisible();
  await expect(guide.getByText('npx seene open --url http://localhost:5173')).toBeVisible();
 });
@@ -328,13 +333,13 @@ test('landing page remains usable at narrow viewports and its install call to ac
  await expect(page).toHaveTitle('Seene — cinematic scenes for real React interfaces');
  for(const size of [{width:1440,height:1000},{width:390,height:844},{width:667,height:320},{width:320,height:568}]){
   await page.setViewportSize(size);
-  const start=page.getByLabel('Overview').getByRole('link',{name:'Get started'});
+  const start=page.getByLabel('Overview').getByRole('link',{name:'Watch the walkthrough',exact:true});
   await start.scrollIntoViewIfNeeded();
   await expect(start).toBeInViewport();
         expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBe(size.width);
  }
- await page.getByLabel('Overview').getByRole('link',{name:'Get started'}).focus();
- await expect(page.getByLabel('Overview').getByRole('link',{name:'Get started'})).toBeFocused();
+ await page.getByLabel('Overview').getByRole('link',{name:'Watch the walkthrough',exact:true}).focus();
+ await expect(page.getByLabel('Overview').getByRole('link',{name:'Watch the walkthrough',exact:true})).toBeFocused();
  await page.screenshot({path:'test-results/seene-landing-mobile.png'});
 });
 

@@ -46,7 +46,7 @@ const FIELD_ORDER: Array<{ key: keyof Camera; label: string; suffix?: string }> 
   { key: "rotateY", label: "Rotate Y", suffix: "°" },
   { key: "perspective", label: "Perspective" },
   { key: "focus", label: "Focus" },
-  { key: "fStop", label: "ƒ /", suffix: "" },
+  { key: "fStop", label: "Aperture ƒ", suffix: "" },
 ];
 
 function lerp(from: number, to: number, ratio: number): number {
@@ -77,6 +77,58 @@ function PlayIcon({ playing }: { playing: boolean }) {
   return playing
     ? <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1" /><rect x="14" y="5" width="4" height="14" rx="1" /></svg>
     : <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true" fill="currentColor"><path d="M8 5.5v13l11-6.5z" /></svg>;
+}
+
+function InterpolatedCard({ mode, time, preset, edits, orbit }: {
+  mode: "scene" | "scroll";
+  time: number;
+  preset: string;
+  edits: Partial<Camera>;
+  orbit: { x: number; y: number };
+}) {
+  const camera = useMemo<Camera>(() => {
+    const presetValues = PRESETS.find(item => item.id === preset)?.camera ?? {};
+    return { ...interpolate(time), ...presetValues, ...edits };
+  }, [time, preset, edits]);
+  const transform = `perspective(${Math.round(camera.perspective)}px) translate3d(${Math.round(camera.x)}px, ${Math.round(camera.y)}px, ${Math.round(camera.z)}px) rotateX(${(camera.rotateX + orbit.y).toFixed(2)}deg) rotateY(${(camera.rotateY + orbit.x).toFixed(2)}deg)`;
+  const blur = Math.max(0, (8 - camera.fStop) * 1.6);
+  return (
+    <div className="seene-demo-mini-stage" data-mode={mode}>
+      <div className="seene-demo-depth" />
+      <div className="seene-demo-blur" style={{ backdropFilter: `blur(${blur.toFixed(1)}px)`, WebkitBackdropFilter: `blur(${blur.toFixed(1)}px)` }} />
+      {mode === "scene" ? (
+        <div className="seene-demo-card" style={{ transform }}>
+          <div className="seene-demo-card-head">
+            <span className="seene-demo-file">HeroComponent.tsx</span>
+            <span className="seene-demo-chip">ƒ/{camera.fStop.toFixed(1)}</span>
+          </div>
+          <h3>Interactive Product Showcase</h3>
+          <p>Move the pointer to orbit the camera. Scrub the timeline to play the motion track.</p>
+          <div className="seene-demo-card-actions">
+            <span className="seene-demo-cta">Get Started</span>
+            <span className="seene-demo-cta-quiet">Documentation</span>
+          </div>
+        </div>
+      ) : (
+                    <div className="seene-demo-mini-page">
+          {[
+            { title: "Hero", body: "Primary message" },
+            { title: "Features", body: "Three-up grid" },
+            { title: "Pricing", body: "Plans and CTA" },
+            { title: "Footer", body: "Links and credits" },
+          ].map((section, index) => {
+            const active = Math.min(3, Math.round((time / DURATION) * 3));
+            return (
+              <div key={section.title} className="seene-demo-mini-section" data-active={index === active ? "true" : undefined}>
+                <strong>{section.title}</strong>
+                <span>{section.body}</span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
 }
 
 /** A real, driveable miniature of the studio: the same timeline, sequence, presets and
@@ -117,6 +169,8 @@ export function StudioPreviewDemo() {
     const presetValues = PRESETS.find(item => item.id === preset)?.camera ?? {};
     return { ...interpolate(time), ...presetValues, ...edits };
   }, [time, preset, edits]);
+  const transform = `perspective(${Math.round(camera.perspective)}px) translate3d(${Math.round(camera.x)}px, ${Math.round(camera.y)}px, ${Math.round(camera.z)}px) rotateX(${(camera.rotateX + orbit.y).toFixed(2)}deg) rotateY(${(camera.rotateY + orbit.x).toFixed(2)}deg)`;
+  const blur = Math.max(0, (8 - camera.fStop) * 1.6);
 
   const storyStops = FOUNDER_STORY_SCREENS.length;
   const activeStep = mode === "scene"
@@ -174,9 +228,6 @@ export function StudioPreviewDemo() {
       y: ((event.clientY - rect.top) / rect.height - 0.5) * -12,
     });
   };
-
-  const transform = `perspective(${Math.round(camera.perspective)}px) translate3d(${Math.round(camera.x)}px, ${Math.round(camera.y)}px, ${Math.round(camera.z)}px) rotateX(${(camera.rotateX + orbit.y).toFixed(2)}deg) rotateY(${(camera.rotateY + orbit.x).toFixed(2)}deg)`;
-  const blur = Math.max(0, (8 - camera.fStop) * 1.6);
 
   return (
     <div id="demo" data-testid="studio-demo" className="seene-demo scroll-mt-20 mx-auto mt-12 max-w-5xl">
@@ -296,17 +347,15 @@ export function StudioPreviewDemo() {
             </div>
             <div className="seene-demo-track" aria-hidden="true">
               {(mode === "scene" ? MOTION : FOUNDER_STORY_SCREENS).map((item, index, all) => (
-                <button
+                <span
                   key={item.label}
-                  type="button"
-                  tabIndex={-1}
                   className="seene-demo-seg"
                   data-active={activeStep === index ? "true" : undefined}
                   style={{ flex: 1 }}
                   onClick={() => { setPlaying(false); if (mode === "scene") seek((index / all.length) * DURATION); else setStoryIndex(index); }}
                 >
                   {mode === "scene" ? item.label : `Screen ${index + 1}`}
-                </button>
+                </span>
               ))}
               <span className="seene-demo-playhead" style={{ left: `${(time / DURATION) * 100}%` }} />
             </div>
@@ -320,6 +369,19 @@ export function StudioPreviewDemo() {
               aria-label="Timeline position"
               onChange={event => { setPlaying(false); seek(Number(event.target.value)); if (mode === "scroll") setStoryIndex(Math.round((Number(event.target.value) / DURATION) * (storyStops - 1))); }}
             />
+                <div className="seene-demo-comparison" aria-label="Both composition modes">
+              <button type="button" className="seene-demo-comparison-card" aria-pressed={mode === "scene"} aria-label="Compare: focused scene" onClick={() => selectMode("scene")}>
+                <InterpolatedCard mode="scene" time={time} preset={preset} edits={edits} orbit={orbit} />
+                <span className="seene-demo-comparison-label">Focused Scene</span>
+              </button>
+              <button type="button" className="seene-demo-comparison-card" aria-pressed={mode === "scroll"} aria-label="Compare: website walkthrough" onClick={() => selectMode("scroll")}>
+                <InterpolatedCard mode="scroll" time={time} preset="authored" edits={{}} orbit={{ x: 0, y: 0 }} />
+                <span className="seene-demo-comparison-label">Website Walkthrough</span>
+              </button>
+            </div>
+            <p className="seene-demo-hint seene-demo-hint--center">
+              One playhead drives both: a 3D camera on a single component, or a full-page scroll.
+            </p>
           </div>
         </div>
 

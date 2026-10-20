@@ -124,13 +124,13 @@
       "url": "https://github.com/Yonela-Johannes"
     }
   ],
-  "homepage": "https://thatg33k-t33.github.io/Seene/",
+  "homepage": "https://yonela-johannes.github.io/Seene/seene/",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/thatg33k-t33/Seene.git"
+    "url": "git+https://github.com/Yonela-Johannes/Seene.git"
   },
   "bugs": {
-    "url": "https://github.com/thatg33k-t33/Seene/issues"
+    "url": "https://github.com/Yonela-Johannes/Seene/issues"
   },
   "sideEffects": [
     "./dist/cli/seene.js",

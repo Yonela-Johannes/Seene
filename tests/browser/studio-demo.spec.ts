@@ -11,7 +11,7 @@ test("homepage studio demo is driveable: playback, presets, camera edits and wal
   await demo.scrollIntoViewIfNeeded();
   await expect(demo).toBeVisible();
   await expect(demo.locator(".seene-demo-title")).toHaveText("hero.scene.json");
-  await expect(demo.getByRole("button", { name: "Focused Scene" })).toHaveAttribute("aria-pressed", "true");
+  await expect(demo.getByRole("button", { name: "Focused Scene", exact: true })).toHaveAttribute("aria-pressed", "true");
 
   // Playback: the timeline is a real requestAnimationFrame clock, so the readout advances.
   const time = demo.locator(".seene-demo-time");
@@ -35,9 +35,9 @@ test("homepage studio demo is driveable: playback, presets, camera edits and wal
   await expect(demo.getByRole("button", { name: "Authored" })).toHaveAttribute("aria-pressed", "true");
 
   // Website Walkthrough mode renders the real founder-story screens and shares one playhead.
-  await demo.getByRole("button", { name: "Website Walkthrough" }).click();
+  await demo.getByRole("button", { name: "Website Walkthrough", exact: true }).click();
   await expect(demo.locator(".seene-demo-title")).toHaveText("founder-story.walkthrough.json");
-  await expect(demo.getByRole("button", { name: "Website Walkthrough" })).toHaveAttribute("aria-pressed", "true");
+  await expect(demo.getByRole("button", { name: "Website Walkthrough", exact: true })).toHaveAttribute("aria-pressed", "true");
   await expect(time).toHaveText("00:00 / 00:06");
   const screens = demo.locator('[data-testid^="home-demo-story-"]');
   await expect(screens).toHaveCount(5);

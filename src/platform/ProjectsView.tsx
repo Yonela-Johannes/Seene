@@ -10,7 +10,7 @@ import { DiscoveryPanel } from "./DiscoveryPanel";
 import { DirectoryPicker } from "./DirectoryPicker";
 import { Command, Notice, Panel, StatusPill } from "./ui";
 import { FrameSection, Kbd, PlusIcon, SeeneButton } from "./site";
-import { SEENE_BRAND, SEENE_INSTALL_COMMAND } from "../core/branding";
+import { SEENE_BRAND, SEENE_INIT_COMMAND, SEENE_NPM_INSTALL_COMMAND } from "../core/branding";
 
 export function ProjectsView() {
   const projects = useResource("projects", () => platformApi.projects());
@@ -140,7 +140,7 @@ export function ProjectsView() {
                    <div className="space-y-2 rounded-md border border-dashed border-[var(--seene-border)] bg-[var(--seene-surface)] p-8 text-center">
                      <p className="text-sm font-medium">No projects registered yet</p>
                      <p className="text-xs text-[var(--seene-text-muted)]">
-                       Pick a React project below, or run <Command>{SEENE_INSTALL_COMMAND}</Command> in your project first.
+                       Pick a React project below, or run <Command>{SEENE_NPM_INSTALL_COMMAND}</Command> and then <Command>{SEENE_INIT_COMMAND}</Command> in your project first.
                      </p>
                    </div>
                  ) : (

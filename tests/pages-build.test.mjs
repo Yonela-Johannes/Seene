@@ -6,7 +6,9 @@ import { fileURLToPath } from "node:url";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const output = path.join(root, "dist-pages");
-const base = "/Seene/";
+const base = process.env.SEENE_PAGES_BASE ?? "/Seene/seene/";
+// User content without a trailing slash (`/Seene/seene`); the base itself always ends in `/`.
+const baseRoot = base.endsWith("/") ? base.slice(0, -1) : base;
 const origin = "https://pages.invalid";
 
 function resolveOutputResource(source, from, description) {
@@ -88,7 +90,7 @@ test("GitHub Pages output contains the base-prefixed homepage and walkthrough re
   }
 
   const bundle = graph.join("\n");
-  assert.ok(bundle.includes("/Seene/tests/preview/walkthrough-fixture.html?seene-mode=scroll"), "homepage demo link must preserve the query under the Pages base");
+  assert.ok(bundle.includes(`${base}tests/preview/walkthrough-fixture.html?seene-mode=scroll`), "homepage demo link must preserve the query under the Pages base");
   for (const title of [
     "Every project deserved to be seen.",
     "Press record. Start scrolling.",
@@ -97,5 +99,5 @@ test("GitHub Pages output contains the base-prefixed homepage and walkthrough re
     "So I built Seene.",
     "Experience Seene",
   ]) assert.ok(bundle.includes(title), `walkthrough bundle is missing ${title}`);
-  assert.ok(bundle.includes("/Seene/#install"), "walkthrough CTA must remain under the Pages base");
+  assert.ok(bundle.includes(`${baseRoot}/#install`), "walkthrough CTA must remain under the Pages base");
 });

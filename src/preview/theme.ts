@@ -2,6 +2,9 @@ import {studioTheme} from './studio-theme';
 
 export const previewTheme = `
 ${studioTheme}
+/* The studio is mounted into an arbitrary host page. Do not rely on the host's CSS reset: a
+   padded, absolutely positioned element (the Export panel) must never overflow the viewport. */
+[data-seene-preview] *,[data-seene-preview] *::before,[data-seene-preview] *::after{box-sizing:border-box}
 [data-seene-preview]{position:fixed;inset:0;height:100dvh;overflow:hidden;background:transparent;color:#fff;min-height:0;width:100%;box-sizing:border-box;isolation:isolate}
 .seene-chrome{font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;box-sizing:border-box;color:#fff}
 .seene-viewport{position:absolute;inset:0;background:var(--seene-scene-backdrop, #000);overflow:hidden;display:flex;align-items:center;justify-content:center}
@@ -95,7 +98,7 @@ ${studioTheme}
 .seene-control.seene-tiny{min-height:20px;padding:0;width:22px;font-size:11px;line-height:1}
 .seene-control.seene-danger{border-color:#7f1d1d;color:#fca5a5}
 .seene-studio-main{flex:1;display:flex;flex-direction:column;min-width:0;min-height:0}
-.seene-studio-viewport{position:relative;flex:1;min-height:0;overflow:hidden;background:var(--seene-scene-backdrop,#000)}
+.seene-studio-viewport{position:relative;flex:1;min-height:0;overflow:hidden;isolation:isolate;background:var(--seene-scene-backdrop,#000)}
 .seene-studio-viewport .seene-canvas{position:absolute;inset:0;width:100%;height:100%;background:var(--seene-scene-backdrop,#000)}
 .seene-walkthrough-stage{position:relative;width:100%;height:100%}
 .seene-walkthrough-scroll{position:relative;width:100%;height:100%;overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;scroll-behavior:auto}
@@ -168,6 +171,8 @@ ${studioTheme}
 .seene-studio-modes,.seene-inspector-tabs{display:flex;gap:4px;padding:3px;border:1px solid #27272a;border-radius:999px;background:#0b0b0d}
 .seene-inspector-tabs .seene-control{flex:1;min-height:28px;padding:4px 10px;border-color:transparent;background:transparent;color:#a1a1aa;font-size:11px}
 .seene-inspector-tabs .seene-control[aria-selected="true"]{background:#6366f1;color:#fff}
+.seene-radio-label{display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;color:#e4e4e7}
+.seene-radio-label input{accent-color:#6366f1}
 .seene-scene-studio .seene-inspector-panel.seene-inspector-panel--docked{padding:20px}
 .seene-scene-studio .seene-inspector-panel [data-inspector-tab].hidden{display:none!important}
 .seene-scene-studio .seene-inspector-panel [data-inspector-tab].seene-field-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
@@ -264,4 +269,33 @@ ${studioTheme}
 .seene-scene-studio.seene-walkthrough-mode .seene-inspector-panel--docked{position:absolute;top:0;right:0;bottom:0;flex:none;width:380px;max-width:100%;z-index:40;box-shadow:-8px 0 24px rgba(0,0,0,.5)}
 .seene-scene-studio.seene-walkthrough-mode .seene-bottom-blur{display:none}
 .seene-inspector-anchor{display:contents}
+
+/* Project credits: one floating chip, bottom-right of the scene viewport, in Scene and Scroll. The
+   chip is a <p>; without this reset its text node (the brand span's whitespace) wraps as a
+   flex item and collapses the chip to the icon's width. */
+.seene-studio-attribution{white-space:nowrap}
+/* Scroll mode hides presets, but the picker stays in the accessibility tree (disabled buttons) and
+   only collapses to zero height, so it never forces an empty strip above the timeline. */
+/* Scroll mode hides the preset picker visually, but it must keep its disabled buttons visible to
+   assistive tech (Scroll-mode presets are announced as unavailable). The rail sits in a 1px box
+   clipped to zero area and its wrapper collapses to zero height, so the hidden rail never forces
+   an empty strip above the timeline. No visibility/display override: those remove the buttons. */
+.seene-scene-studio.seene-walkthrough-mode .seene-studio-bottom>.seene-studio-stack--inline{height:0;min-height:0;margin:0;padding:0}
+.seene-scene-studio.seene-walkthrough-mode .seene-studio-bottom>.seene-studio-stack--inline .seene-presentations{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap;margin:0;padding:0}
+.seene-studio-attribution{
+  position:absolute;right:14px;bottom:14px;z-index:4;margin:0;padding:6px 12px;
+  display:flex;align-items:center;justify-content:flex-end;
+  border:1px solid #ffffff1f;border-radius:999px;
+  background:#0b0b0dcc;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
+  box-shadow:0 6px 20px #00000066;pointer-events:auto;max-width:calc(100% - 28px)
+}
+.seene-studio-attribution .seene-attribution{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#c7c7d1;font-size:11px}
+@container (max-width:420px){.seene-studio-attribution{right:10px;bottom:10px;padding:5px 9px}.seene-studio-attribution .seene-attribution{font-size:10px}}
+/* The Scroll inspector mirrors the Scene workspace column instead of covering the stage. */
+.seene-walkthrough-studio .seene-studio-body{position:relative}
+.seene-walkthrough-studio .seene-inspector-panel{
+  position:relative;inset:auto;display:flex;flex-direction:column;height:auto;
+  flex:0 0 360px;width:360px;max-width:min(360px,42vw);overflow-y:auto;margin:0;border-radius:0
+}
+@media(max-width:820px){.seene-walkthrough-studio .seene-inspector-panel{position:absolute;top:0;right:0;bottom:0;z-index:40}}
 `;

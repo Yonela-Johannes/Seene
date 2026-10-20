@@ -1,6 +1,4 @@
 name: Deploy landing page to GitHub Pages
-# The public site is static and independent of the npm package publish workflow.
-# It builds with vite.pages.config.ts and deploys the dist-pages/ output.
 on:
   push:
     branches: [main]
@@ -20,7 +18,6 @@ permissions:
   contents: read
   pages: write
   id-token: write
-# Never let two site deployments overlap, and let a running deploy finish.
 concurrency:
   group: pages
   cancel-in-progress: false
@@ -39,6 +36,8 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile --ignore-scripts
       - name: Build and verify the static landing page
+        env:
+          SEENE_PAGES_BASE: /Seene/seene/
         run: pnpm run test:pages
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3

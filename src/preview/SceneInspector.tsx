@@ -316,7 +316,7 @@ export function SceneInspector({
 
             <div className="seene-inspector-tabs" role="tablist" aria-label="Inspector sections">
               {([["camera", "Camera"], ["motion", "Motion"], ["scene", "Scene"]] as const).map(([id, label]) => (
-                <button key={id} type="button" role="tab" aria-selected={tab === id} onClick={() => setTab(id)} className="seene-control seene-small">
+                <button key={id} type="button" className="seene-control seene-small" role="tab" aria-selected={tab === id} onClick={() => setTab(id)}>
                   {label}
                 </button>
               ))}
@@ -561,8 +561,8 @@ export function SceneInspector({
             {/* Backdrop */}
             <div className="space-y-2.5 pt-2 border-t border-zinc-800">
               <h4 className="text-xs font-medium uppercase tracking-wider text-zinc-400">Backdrop</h4>
-              <div className="seene-backdrop-row">
-                <label className="flex items-center gap-1.5 cursor-pointer">
+                <div className="seene-backdrop-row">
+                <label className="seene-radio-label">
                   <input
                     type="radio"
                     name="seene-backdrop"
@@ -573,7 +573,7 @@ export function SceneInspector({
                   />
                   <span>Site BG</span>
                 </label>
-                <label className="flex items-center gap-1.5 cursor-pointer">
+                <label className="seene-radio-label">
                   <input
                     type="radio"
                     name="seene-backdrop"
@@ -584,7 +584,7 @@ export function SceneInspector({
                   />
                   <span>Transparent</span>
                 </label>
-                <label className="flex items-center gap-1.5 cursor-pointer">
+                <label className="seene-radio-label">
                   <input
                     type="radio"
                     name="seene-backdrop"
@@ -718,10 +718,16 @@ export function SceneInspector({
                 data-testid="seene-inspector-save"
                 onClick={handleSave}
                 disabled={!onSaveDefinition}
-                className="w-full rounded-xl border border-indigo-500/30 bg-indigo-600 px-3 py-2 text-xs font-medium text-white hover:bg-indigo-500 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-md"
+                title={onSaveDefinition ? undefined : "This preview is not connected to a scene file, so there is nothing to save."}
+                className="w-full rounded-xl border border-zinc-800 bg-zinc-900 px-3 py-2 text-xs font-medium text-zinc-200 hover:bg-zinc-800 hover:text-white transition-all disabled:opacity-60 disabled:cursor-not-allowed"
               >
-                Save Scene Settings
+                {onSaveDefinition ? "Save Scene Settings" : "Preview only - nothing to save"}
               </button>
+              {!onSaveDefinition ? (
+                <p className="text-[11px] leading-relaxed text-zinc-500">
+                  Changes apply to this preview immediately. Save is available when the studio is opened from a project scene file.
+                </p>
+              ) : null}
             </div>
           </div>
         </aside>

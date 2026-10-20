@@ -1,7 +1,18 @@
 # Changelog
-
 ## Unreleased
-
+- Repository moved to <https://github.com/Yonela-Johannes/Seene>; the published site is
+  <https://yonela-johannes.github.io/Seene/seene/>. Every generated link, badge, canonical URL,
+  npm `repository`/`homepage`/`bugs` field and the GitHub Pages base now point at the new home.
+- Studio: a scene framed inside a fit-to-viewport pane is no longer pushed out of frame or blurred
+  by default (the camera matrix used to rotate about the pane origin and inherit the overflowing
+  pane size, which put every pixel at maximum defocus).
+- Studio: the docked Inspector no longer clips its header, its radio labels are readable, and
+  composition-mode buttons follow their selected state. Scenes without a save endpoint get an
+  explicit explanation instead of a silently disabled save button.
+- Studio: the project credits now sit at the bottom-right of the scene viewport as a floating
+  pill in both Scene and Scroll modes, including the walkthrough workspace.
+- Homepage: balanced capability grid, working demo and studio links, clearer install steps, and
+  more accurate recipe/component examples.
 - Aligned homepage examples and feature descriptions with the current scene creation, Website Walkthrough, Vite plugin and export contracts.
 - Clarified that generated Website Walkthrough scaffolds do not automatically assign section timing or connect every section to the Scene timeline.
 - Corrected the homepage sample recipe ID, motion shape and component-relative import.

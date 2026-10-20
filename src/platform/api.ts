@@ -75,7 +75,7 @@ export type Route =
 export const HOME_ROUTE = "#/";
 export const PROJECTS_ROUTE = "#/projects";
 export const CREATE_ROUTE = "#/create";
-export const WALKTHROUGH_DEMO_URL = `${import.meta.env.BASE_URL}tests/preview/walkthrough-fixture.html?seene-mode=scroll`;
+export const WALKTHROUGH_DEMO_URL = `${import.meta.env.BASE_URL ?? "/"}tests/preview/walkthrough-fixture.html?seene-mode=scroll`;
 export function studioHref(project: string, scene?: string): string {
   const base = `#/projects/${encodeURIComponent(project)}`;
   return scene ? `${base}?scene=${encodeURIComponent(scene)}` : base;

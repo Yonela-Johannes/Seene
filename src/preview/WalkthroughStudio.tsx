@@ -45,6 +45,7 @@ import { previewTheme } from "./theme";
 import { WalkthroughStage } from "./WalkthroughStage";
 import { WalkthroughInspector } from "./WalkthroughInspector";
 import { WalkthroughTimeline } from "./WalkthroughTimeline";
+import { StudioAttribution } from "./StudioAttribution";
 
 export type WalkthroughStudioProps = {
   definition: PreviewDefinition;
@@ -528,7 +529,7 @@ export function WalkthroughStudio({
           </aside>
         ) : null}
 
-        <section className="seene-studio-main">
+        <div className="seene-studio-main">
           <div className="seene-studio-viewport seene-viewport" ref={setViewport} aria-label="Walkthrough preview">
             <div className="seene-canvas" data-seene-capture="scene" data-seene-valid={session.valid ? "true" : "false"}>
               <WalkthroughStage
@@ -542,6 +543,7 @@ export function WalkthroughStudio({
               </WalkthroughStage>
             </div>
             <CaptureBridge durationMs={session.durationMs} seek={(ms) => session.seek(ms)} />
+            <StudioAttribution project={walkthrough.title || title} />
           </div>
           <WalkthroughTimeline
             steps={schedule.steps}
@@ -571,7 +573,7 @@ export function WalkthroughStudio({
               if (next) selectNode(next.nodeId);
             }}
           />
-        </section>
+        </div>
 
         {inspector ? (
           <WalkthroughInspector
