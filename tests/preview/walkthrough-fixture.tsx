@@ -55,9 +55,10 @@ function useStoryScroll(): { progress: number; started: boolean } {
 }
 
 function Page({ started }: { started: boolean }) {
+  const lastIndex = FOUNDER_STORY_SCREENS.length - 1;
   return (
     <Surface id="host" style={{ width: "100%", height: "auto", minHeight: "100vh" }}>
-      <main className="demo-founder-story-page" data-testid="walkthrough-page" style={{ height: "500vh" }}>
+      <main className="demo-founder-story-page" data-testid="walkthrough-page" style={{ height: `${FOUNDER_STORY_SCREENS.length * 100}vh` }}>
         {FOUNDER_STORY_SCREENS.map((screen, index) => (
           <section
             key={screen.label}
@@ -70,7 +71,7 @@ function Page({ started }: { started: boolean }) {
             <FrameSection label={screen.label} edge="both" rails={DEFAULT_RAIL}>
               <div className="demo-founder-story-content">
                 <p className="demo-founder-story-kicker">{screen.label}</p>
-                <h1 className="demo-founder-story-title">{screen.title}</h1>
+                <h2 className="demo-founder-story-title">{screen.title}</h2>
                 <p className="demo-founder-story-copy">{screen.body}</p>
                 <div className="demo-founder-story-steps" aria-hidden="true">
                   {FOUNDER_STORY_SCREENS.map((step, stepIndex) => (
@@ -89,7 +90,7 @@ function Page({ started }: { started: boolean }) {
                     <i aria-hidden="true">↓</i> Scroll to continue
                   </p>
                 ) : null}
-                {index === FOUNDER_STORY_SCREENS.length - 1 ? (
+                {index === lastIndex ? (
                   <>
                     <a className="demo-founder-story-cta" href={`${import.meta.env.BASE_URL}#install`}>
                       Experience Seene <span aria-hidden="true" style={{ marginLeft: 8 }}>→</span>

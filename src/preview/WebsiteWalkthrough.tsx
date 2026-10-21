@@ -382,9 +382,8 @@ export function WebsiteWalkthrough(props: WebsiteWalkthroughProps): ReactNode {
     }
   }, [seekTimeValue, durationValue, sectionBoundaries, maxScrollDistance, holdAtTopMs, holdAtBottomMs, startOffset, endOffset, easing, resolveOffset]);
 
-  // Synchronize manual user scrolling to timeline time
   const handleViewportScroll = useCallback(() => {
-    if (!enableTimeline || !viewportRef.current || isPlayingValue) return;
+    if ((!enableTimeline && seekTime === undefined) || !viewportRef.current || isPlayingValue) return;
     const currentScroll = viewportRef.current.scrollTop;
     const totalDuration = durationValue || 5000;
     const range = maxScrollDistanceRef.current || 1;
@@ -410,7 +409,7 @@ export function WebsiteWalkthrough(props: WebsiteWalkthroughProps): ReactNode {
         onSeek?.(bestTime);
       }
     }
-  }, [enableTimeline, durationValue, isPlayingValue, seekTimeValue, seekTime, onSeek, holdAtTopMs, holdAtBottomMs, startOffset, endOffset, easing, resolveOffset]);
+  }, [enableTimeline, seekTime, durationValue, isPlayingValue, seekTimeValue, onSeek, holdAtTopMs, holdAtBottomMs, startOffset, endOffset, easing, resolveOffset]);
 
   const handlePlayPause = useCallback(() => {
     if (!enableTimeline) return;

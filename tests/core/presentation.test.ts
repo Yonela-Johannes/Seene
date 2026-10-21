@@ -86,7 +86,17 @@ describe("authored treatments", () => {
         const state = evaluateMotion(applied.motion, timeMs);
         const camera = { ...applied.scene.camera, ...state.camera };
         const focusDistance = state.focus.distance ?? focusSettings.distance!;
-        const distance = Math.abs(focusDistance - subjectFocusDistance(camera));
+        // The subject is not static: an entrance cascade displaces it in z during
+        // the move, and each treatment's focus track is authored to follow that
+        // live depth (see the parallax treatment note). Measure the actual
+        // camera-space depth the renderer computes, not the rest depth.
+        const surfaceZ = applied.motion!.tracks.reduce((z, track) => {
+          if (track.target.kind !== "surface" || track.property !== "z") return z;
+          const value = (state.surfaces as Record<string, Record<string, number>>)[track.target.id]?.[track.property];
+          return typeof value === "number" && track.target.id === "surface" ? value : z;
+        }, 0);
+        const subjectDepth = subjectFocusDistance(camera) - surfaceZ;
+        const distance = Math.abs(focusDistance - subjectDepth);
         const blur = uniformFocusBlur(
           { depth: 0, distance, span: 100, maxBlur: focusSettings.maxBlur, fStop: focusSettings.fStop, focalLength: focusSettings.focalLength, scale: 1 },
           100,

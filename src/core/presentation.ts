@@ -188,7 +188,7 @@ const detailFocus: Presentation = {
     cameraTrack("perspective", [[0, 1800], [5000, 1200]]),
     cameraTrack("z", [[0, -250], [5000, -50]]),
     cameraTrack("rotateY", [[0, -3], [5000, -3]]),
-    focusTrack("distance", [[0, 1510], [1200, 1513], [5000, 1150]]),
+    focusTrack("distance", [[0, 1510], [625, 1525], [1250, 1509], [1875, 1440], [2500, 1350], [3125, 1260], [3750, 1191], [4375, 1156], [5000, 1150]]),
     focusTrack("fStop", [[0, 1.8], [5000, 2.8]]),
     focusTrack("focalLength", [[0, 85], [5000, 100]]),
   ],
@@ -262,8 +262,10 @@ const showcase: Presentation = {
   durationMs: 7000,
   tracks: [
     cameraTrack("z", [[0, -260], [7000, 0]]),
-    // The surface starts distant (1340) and settles on the lens as z reaches 0.
-    focusTrack("distance", [[0, 1270], [2000, 1378], [7000, 1600]]),
+    // Keyed to the live subject depth (perspective + z - entrance depth) so the
+    // hero stays sharp through the pull-back; the surface starts distant and
+    // settles on the lens as z reaches 0.
+    focusTrack("distance", [[0, 1270], [1000, 1311], [2000, 1378], [3000, 1436], [4000, 1504], [5000, 1562], [6000, 1594], [7000, 1600]]),
   ],
   entrance: { depth: 70, depthStep: 10, staggerMs: 150, entranceMs: 2000 },
 };

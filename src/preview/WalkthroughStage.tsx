@@ -114,8 +114,8 @@ export function WalkthroughStage({ definition, document, frame, children, onIssu
 
   return (
     <Scene
-      camera={definition.scene.camera}
-      focus={definition.scene.focus}
+      camera={{ ...definition.scene.camera, x: 0, y: 0, z: 0, rotateX: 0, rotateY: 0, rotateZ: 0 }}
+      focus={{ ...definition.scene.focus, maxBlur: 0 }}
       motion={definition.motion}
       recipeNodes={definition.scene.nodes}
       timeMs={frame.timeMs}

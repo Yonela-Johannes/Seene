@@ -201,6 +201,12 @@ export function SceneInspector({
   const updateWalkthroughDuration = (seconds: number) => {
     if (!onChange) return;
     const durationMs = Math.max(100, Math.round(seconds * 1000));
+    const clampKeyframes = (track: { keyframes: Array<{ timeMs: number; value: number }> }) => {
+      const kept = track.keyframes.filter(frame => frame.timeMs <= durationMs);
+      if (kept.length > 0) return kept;
+      const last = track.keyframes.reduce((a, b) => (b.timeMs > a.timeMs ? b : a));
+      return [{ ...last, timeMs: durationMs }];
+    };
     onChange({
       ...definition,
       motion: {
@@ -208,7 +214,7 @@ export function SceneInspector({
         speed: 1,
         tracks: (definition.motion?.tracks ?? []).map(track => ({
           ...track,
-          keyframes: track.keyframes.filter(frame => frame.timeMs <= durationMs),
+          keyframes: clampKeyframes(track),
         })),
       },
       walkthroughSettings: {
@@ -499,6 +505,7 @@ export function SceneInspector({
                   </div>
                   <input
                     type="range"
+                    aria-label="Perspective"
                     min="100"
                     max="5000"
                     step="50"
@@ -515,11 +522,18 @@ export function SceneInspector({
                   </div>
                   <input
                     type="range"
+                    aria-label="Focal Length"
+                    // focalLength must stay below the focus distance (schema rule);
+                    // crossing it invalidated the definition and broke playback.
                     min="10"
                     max="300"
                     step="5"
-                    value={focus.focalLength ?? 50}
-                    onChange={(e) => updateFocus("focalLength", parseFloat(e.target.value))}
+                    value={Math.max(10, Math.min(focus.focalLength ?? 50, Math.max(10, (focus.distance ?? 1400) - 5)))}
+                    onChange={(e) => {
+                      const focal = parseFloat(e.target.value);
+                      const distance = focus.distance ?? 1400;
+                      updateFocus("focalLength", Math.min(focal, distance - 1));
+                    }}
                     className="w-full h-1.5 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-indigo-500"
                   />
                 </label>
@@ -531,6 +545,7 @@ export function SceneInspector({
                   </div>
                   <input
                     type="range"
+                    aria-label="F-Stop / Aperture"
                     min="0.7"
                     max="22"
                     step="0.5"
@@ -547,10 +562,14 @@ export function SceneInspector({
                   </div>
                   <input
                     type="range"
-                    min="0"
+                    aria-label="Focus Distance"
+                    // The schema requires distance > focalLength; sliding below that
+                    // produced an invalid definition which permanently disabled
+                    // playback until reload.
+                    min={Math.max(1, (focus.focalLength ?? 50) + 1)}
                     max="3000"
                     step="50"
-                    value={focus.distance ?? 1400}
+                    value={Math.max(Math.max(1, (focus.focalLength ?? 50) + 1), focus.distance ?? 1400)}
                     onChange={(e) => updateFocus("distance", parseFloat(e.target.value))}
                     className="w-full h-1.5 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-indigo-500"
                   />
@@ -636,7 +655,7 @@ export function SceneInspector({
               </div>
             </div>
 
-            {compositionMode === "walkthrough" ? (
+            {true ? (
               <div className={tab === "motion" ? "space-y-3 pt-2 border-t border-zinc-800" : "hidden"} data-inspector-tab="motion">
                 <h4 className="text-xs font-medium uppercase tracking-wider text-zinc-400">Walkthrough</h4>
                 <label className="block space-y-1 text-xs text-zinc-400">
