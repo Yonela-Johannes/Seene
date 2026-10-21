@@ -67,13 +67,9 @@ function easeProgress(progress: number, easing: "linear" | "ease-in-out"): numbe
 }
 
 function layoutTop(element: HTMLElement, container: HTMLElement): number {
-  let top = 0;
-  let current: HTMLElement | null = element;
-  while (current && current !== container) {
-    top += current.offsetTop;
-    current = current.offsetParent as HTMLElement | null;
-  }
-  return top;
+  const containerRect = container.getBoundingClientRect();
+  const elementRect = element.getBoundingClientRect();
+  return Math.max(0, elementRect.top - containerRect.top + container.scrollTop);
 }
 
 export function WebsiteWalkthrough(props: WebsiteWalkthroughProps): ReactNode {
@@ -175,10 +171,10 @@ export function WebsiteWalkthrough(props: WebsiteWalkthroughProps): ReactNode {
       
       discovered.forEach((section) => {
         const element = section.element;
-        const startPosition = element.offsetTop;
-        const endPosition = startPosition + element.offsetHeight;
+        const startPosition = layoutTop(element, container);
         const height = element.offsetHeight;
-        
+        const endPosition = startPosition + height;
+
         measured.push({
           ...section,
           startPosition,

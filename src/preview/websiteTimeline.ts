@@ -194,23 +194,57 @@ export function calculateSectionBoundaries(
   discoveredSections: DiscoveredSection[], 
   options: TimelineOptions
 ): SectionBoundary[] {
+  if (discoveredSections.length === 0) return [];
+
+  // Calculate explicit duration vs unallocated time and heights
+  let explicitDuration = 0;
+  let unallocatedHeight = 0;
+  let unallocatedCount = 0;
+
+  for (const section of discoveredSections) {
+    if (section.duration && section.duration > 0) {
+      explicitDuration += (section.pause || 0) + section.duration;
+    } else {
+      explicitDuration += (section.pause || 0);
+      const h = section.height > 0 ? section.height : 100;
+      unallocatedHeight += h;
+      unallocatedCount++;
+    }
+  }
+
+  const targetTotalDuration = options.duration && options.duration > 0
+    ? options.duration
+    : Math.max(5000, explicitDuration || 10000);
+  const remainingTime = Math.max(0, targetTotalDuration - explicitDuration);
+
   const boundaries: SectionBoundary[] = [];
   let currentTime = 0;
 
   for (let i = 0; i < discoveredSections.length; i++) {
     const section = discoveredSections[i];
 
-    // Add pause before section (except for first section)
     if (i > 0 && section.pause) {
       currentTime += section.pause;
+    }
+
+    let allocatedDuration = section.duration;
+    if (!allocatedDuration || allocatedDuration <= 0) {
+      if (options.useHeightWeightedTiming !== false && unallocatedHeight > 0) {
+        const h = section.height > 0 ? section.height : 100;
+        allocatedDuration = Math.round((h / unallocatedHeight) * remainingTime);
+      } else if (unallocatedCount > 0) {
+        allocatedDuration = Math.round(remainingTime / unallocatedCount);
+      } else {
+        allocatedDuration = 2000;
+      }
     }
 
     const boundary: SectionBoundary = {
       id: section.id,
       label: section.label,
       startTime: currentTime,
-      endTime: currentTime + (section.duration || 0),
-      duration: section.duration,
+      endTime: currentTime + allocatedDuration,
+      duration: allocatedDuration,
       pause: section.pause,
       scrollOffset: section.scrollOffset,
       startPosition: section.startPosition,
@@ -221,14 +255,13 @@ export function calculateSectionBoundaries(
     currentTime = boundary.endTime;
   }
 
-  // Ensure total duration matches options.duration if provided
-  if (options.duration && boundaries.length > 0) {
+  // Adjust last boundary endTime if total time slightly differs due to rounding
+  if (options.duration && options.duration > 0 && boundaries.length > 0) {
     const lastBoundary = boundaries[boundaries.length - 1];
-    if (Math.abs(currentTime - options.duration) > 1) {
-      const lastBoundaryDuration = lastBoundary.endTime - lastBoundary.startTime;
-      const adjustedDuration = lastBoundaryDuration + options.duration - currentTime;
-      lastBoundary.duration = Math.max(0, adjustedDuration);
-      lastBoundary.endTime = lastBoundary.startTime + lastBoundary.duration;
+    if (lastBoundary.endTime !== options.duration) {
+      const diff = options.duration - lastBoundary.endTime;
+      lastBoundary.endTime = options.duration;
+      lastBoundary.duration = Math.max(0, (lastBoundary.duration || 0) + diff);
     }
   }
 

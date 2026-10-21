@@ -220,6 +220,14 @@ const WORKFLOW = [
 ];
 
 export function LandingView() {
+  const [urlInput, setUrlInput] = useState("");
+
+  const handleUrlSubmit = (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!urlInput.trim()) return;
+    window.location.hash = `#/create?kind=walkthrough&url=${encodeURIComponent(urlInput.trim())}`;
+  };
+
   return (
     <>
       {/* Hero Section */}
@@ -246,13 +254,36 @@ export function LandingView() {
           </h1>
 
           <p className="seene-hero-rise mx-auto mt-6 max-w-2xl text-pretty text-base sm:text-lg leading-relaxed text-[var(--seene-text-muted)]">
-            Seene is a cinematic presentation studio for real React
-            applications. Keep your components, providers and styles, then layer
-            on camera movement, depth of field, motion timelines and local video
-            export.
+            Seene turns websites and web applications into polished, guided product walkthroughs. Start with a website URL or integrate directly into your React codebase.
           </p>
 
-          <div className="mx-auto mt-8 max-w-2xl space-y-2">
+          {/* Website URL Walkthrough Entry Form */}
+          <div className="mx-auto mt-8 max-w-xl rounded-2xl border border-[var(--seene-border)] bg-[var(--seene-surface)] p-4 shadow-md text-left">
+            <p className="text-xs font-semibold uppercase tracking-wider text-[var(--seene-text-muted)] mb-2">
+              Start with any website link
+            </p>
+            <form className="flex flex-col gap-2 sm:flex-row sm:items-center" onSubmit={handleUrlSubmit}>
+              <label className="sr-only" htmlFor="hero-url-input">Website URL</label>
+              <input
+                id="hero-url-input"
+                type="text"
+                className="w-full rounded-xl border border-[var(--seene-border)] bg-[var(--seene-bg)] px-3.5 py-2.5 font-mono text-sm text-[var(--seene-text)] placeholder:text-[var(--seene-text-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--seene-accent)]"
+                placeholder="https://example.com or http://localhost:3000"
+                value={urlInput}
+                onChange={e => setUrlInput(e.target.value)}
+                spellCheck={false}
+                autoComplete="off"
+              />
+              <button type="submit" className="seene-btn seene-btn-primary seene-btn-cta shrink-0 whitespace-nowrap">
+                Start walkthrough →
+              </button>
+            </form>
+            <p className="mt-2 font-mono text-[11px] text-[var(--seene-text-muted)]">
+              No npm package installation required. Supports live websites, staging links, and local dev servers.
+            </p>
+          </div>
+
+          <div className="mx-auto mt-6 max-w-2xl space-y-2">
             <CommandLine value={SEENE_NPM_INSTALL_COMMAND} />
             <CommandLine value={SEENE_INIT_COMMAND} />
             <p className="font-mono text-xs text-[var(--seene-text-muted)]">

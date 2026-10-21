@@ -66,11 +66,19 @@ const KIND_COPY: Record<CompositionKind, { title: string; body: string; icon: Re
   },
 };
 
-export function CreateView({ initialKind, initialProject }: { initialKind?: CompositionKind; initialProject?: string }) {
+export function CreateView({
+  initialKind,
+  initialProject,
+  initialUrl,
+}: {
+  initialKind?: CompositionKind;
+  initialProject?: string;
+  initialUrl?: string;
+}) {
   const projects = useResource("projects", () => platformApi.projects());
-  const [kind, setKind] = useState<CompositionKind | undefined>(initialKind);
+  const [kind, setKind] = useState<CompositionKind | undefined>(initialKind ?? (initialUrl ? "walkthrough" : undefined));
   const [source, setSource] = useState<SourceChoice | undefined>(undefined);
-  const [step, setStep] = useState<number>(initialKind ? (initialProject ? 3 : 2) : 1);
+  const [step, setStep] = useState<number>(initialKind || initialUrl ? (initialProject ? 3 : 2) : 1);
   const [picking, setPicking] = useState(false);
 
   // Manual source entry
@@ -81,7 +89,7 @@ export function CreateView({ initialKind, initialProject }: { initialKind?: Comp
   const [registering, setRegistering] = useState(false);
 
   // Website URL source entry
-  const [websiteUrl, setWebsiteUrl] = useState("");
+  const [websiteUrl, setWebsiteUrl] = useState(initialUrl ?? "");
   const [websiteInspecting, setWebsiteInspecting] = useState(false);
   const [websiteInspection, setWebsiteInspection] = useState<WebsiteInspection | undefined>(undefined);
   const [websiteInspectError, setWebsiteInspectError] = useState("");
@@ -108,6 +116,12 @@ export function CreateView({ initialKind, initialProject }: { initialKind?: Comp
       setWebsiteInspecting(false);
     }
   };
+
+  useEffect(() => {
+    if (initialUrl && !websiteInspection && !websiteInspecting) {
+      void inspectWebsite(initialUrl);
+    }
+  }, [initialUrl]);
 
   // Targets
   const [query, setQuery] = useState("");

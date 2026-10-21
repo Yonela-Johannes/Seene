@@ -35,7 +35,7 @@ export function Platform() {
       <main>
         {route.view === "home" && <LandingView />}
         {route.view === "projects" && <ProjectsView />}
-        {route.view === "create" && <CreateView initialKind={route.kind} initialProject={route.project} />}
+        {route.view === "create" && <CreateView initialKind={route.kind} initialProject={route.project} initialUrl={route.url} />}
         {route.view === "studio" && <StudioView project={route.project} initialScene={route.scene} />}
         {route.view === "settings" && <SettingsView project={route.project} />}
         {route.view === "present" && <PresentationView project={route.project} scene={route.scene} />}

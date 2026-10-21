@@ -59,7 +59,7 @@ export interface SemanticSectionDiscoveryResult {
  */
 export function discoverExplicitSections(container: HTMLElement): ExplicitSectionDiscoveryResult {
   const sectionElements = Array.from(
-    container.querySelectorAll<HTMLElement>("[data-seene-section]")
+    container.querySelectorAll<HTMLElement>("[data-section-id], [data-seene-section], [data-website-section-id], [data-walkthrough-target]")
   );
 
   const seenIds = new Set<string>();
@@ -67,12 +67,24 @@ export function discoverExplicitSections(container: HTMLElement): ExplicitSectio
   const sections: DiscoveredSection[] = [];
 
   sectionElements.forEach((element) => {
-    const id = element.dataset.seeneSectionId || element.dataset.seeneSection;
+    const id =
+      element.dataset.sectionId ||
+      element.dataset.seeneSectionId ||
+      element.dataset.seeneSection ||
+      element.dataset.websiteSectionId ||
+      element.dataset.walkthroughTarget ||
+      element.id;
     if (!id) {
       return;
     }
 
-    const label = element.dataset.seeneSectionLabel || element.dataset.seeneSectionTitle || id;
+    const label =
+      element.dataset.sectionLabel ||
+      element.dataset.seeneSectionLabel ||
+      element.dataset.seeneSectionTitle ||
+      element.getAttribute("aria-label") ||
+      element.querySelector("h1, h2, h3, h4")?.textContent?.trim() ||
+      id;
     const duration = element.dataset.seeneSectionDuration 
       ? parseInt(element.dataset.seeneSectionDuration, 10) 
       : undefined;

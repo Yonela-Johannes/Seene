@@ -82,7 +82,7 @@ export type CompositionKind = "scene" | "walkthrough";
 export type Route =
   | { view: "home" }
   | { view: "projects" }
-  | { view: "create"; kind?: CompositionKind; project?: string }
+  | { view: "create"; kind?: CompositionKind; project?: string; url?: string }
   | { view: "studio"; project: string; scene?: string }
   | { view: "settings"; project: string }
   | { view: "present"; project: string; scene: string };
@@ -97,10 +97,11 @@ export function studioHref(project: string, scene?: string): string {
 }
 export function settingsHref(project: string): string { return `${studioHref(project)}/settings`; }
 export function presentHref(project: string, scene: string): string { return `#/present/${encodeURIComponent(project)}/${encodeURIComponent(scene)}`; }
-export function createHref(kind?: CompositionKind, project?: string): string {
+export function createHref(kind?: CompositionKind, project?: string, url?: string): string {
   const params = new URLSearchParams();
   if (kind) params.set("kind", kind);
   if (project) params.set("project", project);
+  if (url) params.set("url", url);
   const query = params.toString();
   return query ? `${CREATE_ROUTE}?${query}` : CREATE_ROUTE;
 }
@@ -119,7 +120,13 @@ export function readRoute(hash: string): Route {
     const kindParam = params.get("kind");
     const kind = kindParam === "scene" || kindParam === "walkthrough" ? kindParam : undefined;
     const project = params.get("project") ?? parts[1];
-    return { view: "create", ...(kind ? { kind } : {}), ...(project ? { project: decodeURIComponent(project) } : {}) };
+    const url = params.get("url") ?? undefined;
+    return {
+      view: "create",
+      ...(kind ? { kind } : {}),
+      ...(project ? { project: decodeURIComponent(project) } : {}),
+      ...(url ? { url: decodeURIComponent(url) } : {}),
+    };
   }
   if (head === "projects") {
     if (typeof parts[1] === "string" && parts[1]) {
