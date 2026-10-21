@@ -19,3 +19,5 @@ export * from "./walkthrough";
 export * from "./platform";
 
 export * from "./branding";
+export * from "./url";
+export * from "./websiteInspector";

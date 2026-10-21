@@ -349,6 +349,43 @@ export function WalkthroughStudio({
     });
   }, [contentFiles, browserSearch]);
 
+  const handleExportConfig = useCallback(() => {
+    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(walkthrough, null, 2));
+    const downloadAnchor = document.createElement("a");
+    downloadAnchor.setAttribute("href", dataStr);
+    downloadAnchor.setAttribute("download", `${walkthrough.title || "walkthrough"}.scene.json`);
+    document.body.appendChild(downloadAnchor);
+    downloadAnchor.click();
+    downloadAnchor.remove();
+  }, [walkthrough]);
+
+  const handleImportConfig = useCallback((jsonText: string) => {
+    try {
+      const parsed = JSON.parse(jsonText);
+      const validation = validateWalkthrough(parsed);
+      if (validation.valid && validation.document) {
+        pushDefinition(validation.document);
+        setNotice("Imported walkthrough configuration successfully.");
+      } else {
+        setNotice(validation.issues[0]?.message || "Invalid walkthrough document JSON.");
+      }
+    } catch {
+      setNotice("Could not parse JSON configuration file.");
+    }
+  }, [pushDefinition]);
+
+  // Close modals on Escape key press
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        if (browserOpen) setBrowserOpen(false);
+        if (confirmRemove) setConfirmRemove(null);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [browserOpen, confirmRemove]);
+
   const statusText = !session.valid
     ? "Needs a correction"
     : session.playing
@@ -590,11 +627,13 @@ export function WalkthroughStudio({
               applyResult(connectWalkthroughNodes(walkthrough, selectedId, toId));
             }}
             onResetNode={() => selectedId && applyResult(updateWalkthroughNode(walkthrough, selectedId, createWalkthroughNode(selected?.type ?? "show", { id: selectedId })))}
+            onExportConfig={handleExportConfig}
+            onImportConfig={handleImportConfig}
           />
         ) : null}
       </div>
 
-      {browserOpen
+      {browserOpen && typeof document !== "undefined"
         ? createPortal(
             <div className="seene-studio-modal" role="dialog" aria-modal="true" aria-label="Add walkthrough step">
               <div className="seene-studio-modal-panel">
@@ -674,11 +713,11 @@ export function WalkthroughStudio({
                 )}
               </div>
             </div>,
-            viewport ?? document.body,
+            document.body,
           )
         : null}
 
-      {confirmRemove
+      {confirmRemove && typeof document !== "undefined"
         ? createPortal(
             <div className="seene-studio-modal" role="dialog" aria-modal="true" aria-label="Remove step">
               <div className="seene-studio-modal-panel seene-studio-confirm">
@@ -701,7 +740,7 @@ export function WalkthroughStudio({
                 </div>
               </div>
             </div>,
-            viewport ?? document.body,
+            document.body,
           )
         : null}
     </main>

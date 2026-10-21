@@ -186,7 +186,7 @@ export function checkArchitecture(input, { compilerOptions = {} } = {}) {
           || ts.isImportSpecifier(parent) || ts.isExportSpecifier(parent);
         const forbidden = !['services','exportServices','viteIntegration'].includes(layer) && (
           (nodeGlobals.has(node.text) && !(layer === 'cli' && node.text === 'process'))
-          || (!browserLayers.has(layer) && domGlobals.has(node.text) && !(layer === 'commands' && node.text === 'URL'))
+          || (!browserLayers.has(layer) && domGlobals.has(node.text) && !((layer === 'commands' || layer === 'core') && node.text === 'URL'))
         );
         if (!propertyName && forbidden) add(file, node, 'runtime-global', `${layer} cannot read host runtime global ${node.text}.`);
         if (!propertyName && node.text === 'require' && !(ts.isCallExpression(parent) && parent.expression === node)) {

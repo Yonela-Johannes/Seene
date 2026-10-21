@@ -32,6 +32,8 @@ export type WalkthroughInspectorProps = {
   onUpdateGlobals: (patch: Partial<WalkthroughGlobals>) => void;
   onConnect: (toId: string) => void;
   onResetNode: () => void;
+  onExportConfig?: () => void;
+  onImportConfig?: (jsonText: string) => void;
 };
 
 function Section({ title, children, hint }: { title: string; children: ReactNode; hint?: string }) {
@@ -146,6 +148,8 @@ export function WalkthroughInspector({
   onUpdateGlobals,
   onConnect,
   onResetNode,
+  onExportConfig,
+  onImportConfig,
 }: WalkthroughInspectorProps): ReactNode {
   const settings = document.settings;
   const otherNodes = document.nodes.filter(candidate => candidate.id !== node?.id);
@@ -247,6 +251,36 @@ export function WalkthroughInspector({
             <p className="seene-inspector-hint" role="status">
               {copyState === "error" ? "Select and copy the command above manually." : "Progress prints in your project terminal; the capture is capped at 120 seconds."}
             </p>
+          </Section>
+          <Section title="Configuration JSON" hint="Download or import the walkthrough specification document locally.">
+            <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+              {onExportConfig && (
+                <button type="button" className="seene-control seene-small" onClick={onExportConfig}>
+                  Download JSON config
+                </button>
+              )}
+              {onImportConfig && (
+                <label className="seene-control seene-small" style={{ cursor: "pointer", textAlign: "center", display: "inline-block" }}>
+                  Import JSON config
+                  <input
+                    type="file"
+                    accept=".json,.scene.json"
+                    style={{ display: "none" }}
+                    onChange={event => {
+                      const file = event.target.files?.[0];
+                      if (!file) return;
+                      const reader = new FileReader();
+                      reader.onload = e => {
+                        const text = e.target?.result;
+                        if (typeof text === "string") onImportConfig(text);
+                      };
+                      reader.readAsText(file);
+                      event.target.value = "";
+                    }}
+                  />
+                </label>
+              )}
+            </div>
           </Section>
         </>
       ) : !node ? (

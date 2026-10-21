@@ -89,8 +89,8 @@ test('walkthrough scroll maps frame 0, midpoint and end on a flat sharp canvas',
   'I wanted a tool I could install in a project, configure, and reuse whenever I needed a consistent presentation.',
   'Seene turns website presentations into a more deliberate, controlled, and repeatable process.',
  ];
- expect(await page.locator('[data-testid^="walkthrough-section-"] h1').allTextContents()).toEqual(storyTitles);
- expect(await page.locator('[data-testid^="walkthrough-section-"] h1 + p').allTextContents()).toEqual(storyBodies);
+ expect(await page.locator('[data-testid^="walkthrough-section-"] .demo-founder-story-title').allTextContents()).toEqual(storyTitles);
+ expect(await page.locator('[data-testid^="walkthrough-section-"] .demo-founder-story-copy').allTextContents()).toEqual(storyBodies);
  await expect(page.getByRole('button',{name:'Scroll',exact:true})).toHaveAttribute('aria-pressed','true');
  await expect(page.getByRole('button',{name:'Scene',exact:true})).toHaveAttribute('aria-pressed','false');
  await expect(page.getByRole('button',{name:'Overview',exact:true})).toBeDisabled();

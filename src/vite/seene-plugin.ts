@@ -4,11 +4,13 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import type { Plugin } from "vite";
 import { SceneRecipeSchema, SceneUpdateSchema } from "../core/recipes";
 import { sceneComponentSource, validateHostComponent } from "../core/platform";
+import { validateWebsiteUrl, inspectWebsiteHtml } from "../core";
 import { PlatformFault, writeSceneSourcePair, removeSceneSourcePair, discoverApplicationContent, updateSceneRecipe, componentImportSpecifier } from "./scene-files";
 export { writeSceneSourcePair, removeSceneSourcePair, duplicateSceneSourcePair, syncCatalog } from "./scene-files";
 
 const route = "/__seene/create-scene";
 const contentRoute = "/__seene/content";
+const inspectUrlRoute = "/__seene/inspect-url";
 const maxBodyBytes = 256_000;
 
 function send(response: ServerResponse, status: number, value: Record<string, unknown>): void {
@@ -41,6 +43,71 @@ export function seeneCreateScenePlugin(): Plugin {
         const requestUrl = request.url?.split("?")[0];
         const isCreateRoute = requestUrl === route || requestUrl === route.replace(/\/create-scene$/, "/scene");
         const isContentRoute = requestUrl === contentRoute || requestUrl === route.replace(/\/create-scene$/, "/content");
+        const isInspectUrlRoute = requestUrl === inspectUrlRoute || requestUrl === route.replace(/\/create-scene$/, "/inspect-url");
+
+        if ((request.method === "GET" || request.method === "POST") && isInspectUrlRoute) {
+          void (async () => {
+            let targetUrl: string | undefined;
+            if (request.method === "GET") {
+              const fullUrl = new URL(request.url ?? "", "http://127.0.0.1");
+              targetUrl = fullUrl.searchParams.get("url") ?? undefined;
+            } else {
+              const text = await collect(request);
+              try {
+                const payload = text ? JSON.parse(text) : undefined;
+                targetUrl = payload?.url;
+              } catch {}
+            }
+
+            if (!targetUrl) {
+              send(response, 400, { error: "Missing website URL parameter." });
+              return;
+            }
+
+            const val = validateWebsiteUrl(targetUrl);
+            if (!val.valid) {
+              send(response, 400, { error: val.error ?? "Invalid website URL." });
+              return;
+            }
+
+            const controller = new AbortController();
+            const timeout = setTimeout(() => controller.abort(), 8000);
+            try {
+              const res = await fetch(val.normalized!, {
+                signal: controller.signal,
+                headers: { "User-Agent": "Seene/0.1.6 (+https://github.com/Yonela-Johannes/Seene)" },
+                redirect: "follow",
+              });
+              clearTimeout(timeout);
+              const text = await res.text();
+              const headersObj: Record<string, string> = {};
+              res.headers.forEach((v, k) => { headersObj[k] = v; });
+              const inspection = inspectWebsiteHtml(val.normalized!, text, headersObj);
+              send(response, 200, { success: true, inspection });
+            } catch (error) {
+              clearTimeout(timeout);
+              send(response, 200, {
+                success: true,
+                inspection: {
+                  url: val.normalized!,
+                  title: val.hostname || "Website",
+                  sections: [
+                    { id: "hero", label: "Hero Banner", selector: "header, main" },
+                    { id: "features", label: "Features Section", selector: "section" },
+                    { id: "overview", label: "Product Overview", selector: "article, main" },
+                    { id: "footer", label: "Footer", selector: "footer" },
+                  ],
+                  pages: [{ url: val.normalized!, title: "Home", path: "/" }],
+                  interactiveElements: [],
+                  status: "error",
+                  canIframe: false,
+                  fallbackReason: error instanceof Error ? error.message : "Could not inspect website URL directly.",
+                },
+              });
+            }
+          })();
+          return;
+        }
 
         if (request.method === "GET" && isContentRoute) {
           void (async () => {

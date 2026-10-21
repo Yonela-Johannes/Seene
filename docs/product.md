@@ -6,7 +6,11 @@ Seene is a local scene studio for presenting real React DOM interfaces with came
 
 Initialize a React 18.2/19 project with Node.js 22.12 or later. Standard Vite and Next.js App/Pages Router projects receive generated development integrations. Other React DOM projects receive a wrapper that must be mounted by the developer. The host project continues to own its server, routes, providers, styles and production app.
 
-Scenes are source pairs under `src/seene/scenes`: a validated `.scene.json` recipe and one matching `.tsx` or `.jsx` component. The local catalog discovers these pairs. The Studio can discover project-local components, create a single scene or an ordered Walkthrough, edit definitions, preview playback and request scene file changes through the host's development API. Creating a Walkthrough writes a versioned walkthrough document into the recipe and tags the generated scaffold sections with stable Seene IDs so nodes can target real components.
+Seene supports two primary entry workflows:
+1. **Website URL → Walkthrough:** Enter any website URL or local development server link (e.g. `https://example.com` or `http://localhost:3000`). Seene inspects the site, extracts semantic sections, routes, and interactive buttons, then builds a guided demonstration walkthrough document.
+2. **React application → Walkthrough:** Integrate Seene into an existing React application using the Vite plugin, Next API handler, CLI, or manual React wrapper.
+
+Scenes are source pairs under `src/seene/scenes`: a validated `.scene.json` recipe and one matching `.tsx` or `.jsx` component. The local catalog discovers these pairs. The Studio can discover project-local components or website targets, create a single scene or an ordered Walkthrough, edit definitions, preview playback and request scene file changes through the host's development API. Creating a Walkthrough writes a versioned walkthrough document into the recipe and tags scaffold sections with stable Seene IDs so nodes can target real components or page regions.
 
 Vite discovery and preview work through the generated development glob. Creating, updating and deleting scene files through Vite Studio additionally requires `seeneCreateScenePlugin()` in the host's existing Vite plugins. Next initialization generates its local API route. Manual React DOM hosts must mount the generated wrapper and cannot use file-changing Studio actions without a host endpoint.
 

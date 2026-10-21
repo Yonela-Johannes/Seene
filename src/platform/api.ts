@@ -3,6 +3,7 @@ import {
   PLATFORM_API_PREFIX, SEENE_PROTOCOL_VERSION, isAllowedDevOrigin, type PlatformBrowseResponse, type PlatformCatalog,
   type PlatformContent, type PlatformProject, type PlatformScanResponse, type PlatformSourcesResponse, type PlatformStatus,
 } from "../core/platform";
+import { validateWebsiteUrl, inspectWebsiteHtml, type WebsiteInspection } from "../core";
 
 export type ProjectsResponse = { home: string; projects: PlatformProject[] };
 export type CatalogResponse = { project: PlatformProject; catalog: PlatformCatalog };
@@ -37,6 +38,20 @@ export const platformApi = {
     return request<ContentResponse>(`${PLATFORM_API_PREFIX}/projects/content?${params.toString()}`);
   },
   inspectSource: (target: string) => request<SourceInspectResponse>(`${PLATFORM_API_PREFIX}/projects/sources/inspect`, body({ path: target })),
+  inspectWebsiteUrl: async (targetUrl: string): Promise<WebsiteInspection> => {
+    const val = validateWebsiteUrl(targetUrl);
+    if (!val.valid) throw new Error(val.error || "Invalid website URL.");
+    const url = val.normalized!;
+    try {
+      const res = await request<{ success: boolean; inspection: WebsiteInspection }>(
+        `/__seene/inspect-url?url=${encodeURIComponent(url)}`
+      );
+      if (res.inspection) return res.inspection;
+    } catch {
+      // Fallback if endpoint is unavailable
+    }
+    return inspectWebsiteHtml(url, "<html><head><title>" + (val.hostname || "Website") + "</title></head><body></body></html>");
+  },
   browseSource: (target?: string) =>
     request<BrowseResponse>(`${PLATFORM_API_PREFIX}/projects/sources/browse${target ? `?path=${encodeURIComponent(target)}` : ""}`),
   discoverProjects: (roots?: string[]) => {

@@ -3,6 +3,7 @@ import {
   SCENE_PRESENTATION_HEIGHT, SCENE_PRESENTATION_WIDTH, sceneIdFromTitle,
   type PlatformContentFile, type PlatformProject, type PlatformSource,
 } from "../core/platform";
+import { validateWebsiteUrl, createWalkthroughFromWebsite, type WebsiteInspection } from "../core";
 import type { ContentResponse } from "./api";
 import { PROJECTS_ROUTE, platformApi, studioHref, type CompositionKind } from "./api";
 import { useDebounced, useResource } from "./data";
@@ -11,13 +12,27 @@ import { DirectoryPicker } from "./DirectoryPicker";
 import { Notice, Panel, buttonPrimary, buttonQuiet, fieldClass } from "./ui";
 import { SearchIcon, SeeneButton } from "./site";
 
-type Selection = { file: string; export?: string; title: string };
+type Selection = {
+  file: string;
+  export?: string;
+  title: string;
+  sectionId?: string;
+  selector?: string;
+  kind?: "component" | "section" | "page" | "element";
+};
 type Filter = "all" | "page" | "section" | "component";
 type SourceChoice = Pick<PlatformSource, "path" | "name" | "connected" | "sceneCount" | "registered"> & {
   adapter?: PlatformSource["adapter"];
 };
 
-const selectionKey = (selection: Selection): string => (selection.export ? `${selection.file}#${selection.export}` : selection.file);
+const selectionKey = (selection: Selection): string =>
+  selection.sectionId
+    ? `section:${selection.sectionId}`
+    : selection.selector
+      ? `selector:${selection.selector}`
+      : selection.export
+        ? `${selection.file}#${selection.export}`
+        : selection.file;
 
 function titleFor(file: PlatformContentFile, exported?: string): string {
   if (exported && exported !== "default") return exported.replace(/([a-z0-9])([A-Z])/g, "$1 $2");
@@ -64,6 +79,35 @@ export function CreateView({ initialKind, initialProject }: { initialKind?: Comp
   const [inspected, setInspected] = useState<PlatformSource | undefined>(undefined);
   const [inspectError, setInspectError] = useState("");
   const [registering, setRegistering] = useState(false);
+
+  // Website URL source entry
+  const [websiteUrl, setWebsiteUrl] = useState("");
+  const [websiteInspecting, setWebsiteInspecting] = useState(false);
+  const [websiteInspection, setWebsiteInspection] = useState<WebsiteInspection | undefined>(undefined);
+  const [websiteInspectError, setWebsiteInspectError] = useState("");
+
+  const inspectWebsite = async (rawUrl: string) => {
+    const val = validateWebsiteUrl(rawUrl);
+    if (!val.valid) {
+      setWebsiteInspectError(val.error || "Please enter a valid website URL.");
+      return;
+    }
+    setWebsiteInspecting(true);
+    setWebsiteInspectError("");
+    try {
+      const result = await platformApi.inspectWebsiteUrl(val.normalized!);
+      setWebsiteInspection(result);
+      setWebsiteUrl(result.url);
+      if (!title) {
+        setTitle(result.title || "Website Walkthrough");
+        setId(sceneIdFromTitle(result.title || "website-walkthrough"));
+      }
+    } catch (err) {
+      setWebsiteInspectError(err instanceof Error ? err.message : "Failed to inspect website URL.");
+    } finally {
+      setWebsiteInspecting(false);
+    }
+  };
 
   // Targets
   const [query, setQuery] = useState("");
@@ -178,6 +222,20 @@ export function CreateView({ initialKind, initialProject }: { initialKind?: Comp
     setCreating(true);
     setCreateError("");
     try {
+      if (source.path.startsWith("http://") || source.path.startsWith("https://")) {
+        createWalkthroughFromWebsite({
+          url: source.path,
+          title: finalTitle,
+          description: description.trim() || undefined,
+          sections: selected.map(item => ({
+            id: item.sectionId || sceneIdFromTitle(item.title),
+            label: item.title,
+            selector: item.selector,
+          })),
+        });
+        window.location.hash = studioHref(source.path, finalId);
+        return;
+      }
       const result = await platformApi.createScene({
         path: source.path,
         id: finalId,
@@ -264,6 +322,60 @@ export function CreateView({ initialKind, initialProject }: { initialKind?: Comp
 
       {effectiveStep === 2 && (
         <div className="grid gap-6 lg:grid-cols-2">
+          <div className="lg:col-span-2">
+            <Panel title="Website URL" description="Enter any website URL or local development server (e.g. https://example.com, http://localhost:3000).">
+              <form className="flex flex-col gap-2 sm:flex-row" onSubmit={event => { event.preventDefault(); void inspectWebsite(websiteUrl); }}>
+                <label className="sr-only" htmlFor="website-url">Website URL</label>
+                <input
+                  id="website-url"
+                  className={fieldClass}
+                  value={websiteUrl}
+                  onChange={event => setWebsiteUrl(event.target.value)}
+                  placeholder="https://example.com or http://localhost:3000"
+                  spellCheck={false}
+                  autoComplete="off"
+                />
+                <button type="submit" className={buttonPrimary} disabled={websiteInspecting || !websiteUrl.trim()}>
+                  {websiteInspecting ? "Inspecting…" : "Inspect website"}
+                </button>
+              </form>
+              {websiteInspectError && <div className="mt-3"><Notice>{websiteInspectError}</Notice></div>}
+              {websiteInspection && (
+                <div className="mt-4 space-y-3 rounded-md border border-[var(--seene-border)] bg-[var(--seene-surface-2)] p-4">
+                  <div className="flex items-center justify-between">
+                    <strong className="text-sm font-semibold text-[var(--seene-text)]">{websiteInspection.title}</strong>
+                    <span className={`text-xs px-2.5 py-0.5 rounded-full font-mono ${websiteInspection.canIframe ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30" : "bg-amber-500/20 text-amber-300 border border-amber-500/30"}`}>
+                      {websiteInspection.canIframe ? "Iframe Ready" : "Inspection Fallback"}
+                    </span>
+                  </div>
+                  <p className="truncate font-mono text-xs text-[var(--seene-text-muted)]">{websiteInspection.url}</p>
+                  <p className="text-xs text-[var(--seene-text-muted)]">
+                    Discovered {websiteInspection.sections.length} section{websiteInspection.sections.length === 1 ? "" : "s"}, {websiteInspection.pages.length} route{websiteInspection.pages.length === 1 ? "" : "s"} and {websiteInspection.interactiveElements.length} button{websiteInspection.interactiveElements.length === 1 ? "" : "s"}.
+                  </p>
+                  {websiteInspection.fallbackReason && (
+                    <Notice tone="info">{websiteInspection.fallbackReason}</Notice>
+                  )}
+                  <button
+                    type="button"
+                    className={buttonPrimary}
+                    onClick={() => {
+                      setSource({
+                        path: websiteInspection.url,
+                        name: websiteInspection.title || new URL(websiteInspection.url).hostname,
+                        connected: true,
+                        sceneCount: 0,
+                        registered: false,
+                      });
+                      setStep(3);
+                    }}
+                  >
+                    Continue with this website
+                  </button>
+                </div>
+              )}
+            </Panel>
+          </div>
+
           <Panel title="Your projects" description="Applications already registered with Seene.">
             {projects.loading && !projects.data && <p className="text-sm text-[var(--seene-text-muted)]">Reading projects…</p>}
             {projects.error && <Notice>{projects.error}</Notice>}
@@ -339,97 +451,164 @@ export function CreateView({ initialKind, initialProject }: { initialKind?: Comp
 
       {effectiveStep === 3 && source && (
         <div className="grid gap-6 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
-          <Panel
-            title="Available content"
-            description="Discovered from the project's real routes, sections and components."
-            actions={<SeeneButton variant="secondary" size="nav" onClick={() => content.reload()}>Refresh</SeeneButton>}
-          >
-            <div className="mb-3 flex flex-wrap items-center gap-2">
-              <span className="flex items-center gap-2 rounded-sm border border-[var(--seene-border)] bg-[var(--seene-surface)] px-3 py-1.5">
-                <SearchIcon />
-                <input
-                  aria-label="Search components"
-                  className="w-48 bg-transparent text-sm text-[var(--seene-text)] outline-none placeholder:text-[var(--seene-text-muted)]"
-                  value={query}
-                  onChange={event => setQuery(event.target.value)}
-                  placeholder="Search components…"
-                />
-              </span>
-              {(["all", "page", "section", "component"] as Filter[]).map(value => (
-                <button
-                  key={value}
-                  type="button"
-                  aria-pressed={filter === value}
-                  className={filter === value ? "seene-btn seene-btn-primary seene-btn-nav" : "seene-btn seene-btn-ghost seene-btn-nav"}
-                  onClick={() => setFilter(value)}
-                >
-                  {value === "all" ? "All" : `${value}s`}
-                </button>
-              ))}
-            </div>
+          {source.path.startsWith("http://") || source.path.startsWith("https://") ? (
+            <Panel
+              title="Discovered website targets"
+              description={`Extracted from ${source.name} (${source.path})`}
+            >
+              <div className="max-h-[52vh] space-y-4 overflow-y-auto pr-1">
+                {websiteInspection?.sections && websiteInspection.sections.length > 0 && (
+                  <div>
+                    <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--seene-text-muted)]">Page Sections</p>
+                    <ul className="space-y-1">
+                      {websiteInspection.sections.map(sec => {
+                        const sel: Selection = {
+                          file: source.path,
+                          title: sec.label,
+                          sectionId: sec.id,
+                          selector: sec.selector,
+                          kind: "section",
+                        };
+                        const key = selectionKey(sel);
+                        const active = selected.some(item => selectionKey(item) === key);
+                        return (
+                          <li key={key}>
+                            <label className={`flex cursor-pointer items-start gap-3 rounded-sm border px-3 py-2 ${active ? "border-[var(--seene-accent)] bg-[var(--seene-accent-soft)]" : "border-transparent hover:bg-[var(--seene-surface-2)]"}`}>
+                              <input type="checkbox" className="mt-1" checked={active} onChange={() => toggle(sel)} />
+                              <span className="min-w-0 flex-1">
+                                <span className="block truncate text-sm text-[var(--seene-text)]">{sec.label}</span>
+                                <span className="block truncate font-mono text-xs text-[var(--seene-text-muted)]">{sec.selector || `#${sec.id}`}</span>
+                              </span>
+                            </label>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </div>
+                )}
+                {websiteInspection?.interactiveElements && websiteInspection.interactiveElements.length > 0 && (
+                  <div>
+                    <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--seene-text-muted)]">Interactive Elements</p>
+                    <ul className="space-y-1">
+                      {websiteInspection.interactiveElements.map(elem => {
+                        const sel: Selection = {
+                          file: source.path,
+                          title: elem.label,
+                          selector: elem.selector,
+                          kind: "element",
+                        };
+                        const key = selectionKey(sel);
+                        const active = selected.some(item => selectionKey(item) === key);
+                        return (
+                          <li key={key}>
+                            <label className={`flex cursor-pointer items-start gap-3 rounded-sm border px-3 py-2 ${active ? "border-[var(--seene-accent)] bg-[var(--seene-accent-soft)]" : "border-transparent hover:bg-[var(--seene-surface-2)]"}`}>
+                              <input type="checkbox" className="mt-1" checked={active} onChange={() => toggle(sel)} />
+                              <span className="min-w-0 flex-1">
+                                <span className="block truncate text-sm text-[var(--seene-text)]">{elem.label}</span>
+                                <span className="block truncate font-mono text-xs text-[var(--seene-text-muted)]">{elem.kind} · {elem.selector}</span>
+                              </span>
+                            </label>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            </Panel>
+          ) : (
+            <Panel
+              title="Available content"
+              description="Discovered from the project's real routes, sections and components."
+              actions={<SeeneButton variant="secondary" size="nav" onClick={() => content.reload()}>Refresh</SeeneButton>}
+            >
+              <div className="mb-3 flex flex-wrap items-center gap-2">
+                <span className="flex items-center gap-2 rounded-sm border border-[var(--seene-border)] bg-[var(--seene-surface)] px-3 py-1.5">
+                  <SearchIcon />
+                  <input
+                    aria-label="Search components"
+                    className="w-48 bg-transparent text-sm text-[var(--seene-text)] outline-none placeholder:text-[var(--seene-text-muted)]"
+                    value={query}
+                    onChange={event => setQuery(event.target.value)}
+                    placeholder="Search components…"
+                  />
+                </span>
+                {(["all", "page", "section", "component"] as Filter[]).map(value => (
+                  <button
+                    key={value}
+                    type="button"
+                    aria-pressed={filter === value}
+                    className={filter === value ? "seene-btn seene-btn-primary seene-btn-nav" : "seene-btn seene-btn-ghost seene-btn-nav"}
+                    onClick={() => setFilter(value)}
+                  >
+                    {value === "all" ? "All" : `${value}s`}
+                  </button>
+                ))}
+              </div>
 
-            {content.loading && <p className="text-sm text-[var(--seene-text-muted)]">Scanning {source.name}…</p>}
-            {content.error && <Notice>{content.error}</Notice>}
-            {!content.loading && files.length === 0 && (
-              <p className="text-sm text-[var(--seene-text-muted)]">
-                {query ? `No components match “${query}”.` : "No components were found. Make sure the project has a src, app, pages or components folder."}
-              </p>
-            )}
+              {content.loading && <p className="text-sm text-[var(--seene-text-muted)]">Scanning {source.name}…</p>}
+              {content.error && <Notice>{content.error}</Notice>}
+              {!content.loading && files.length === 0 && (
+                <p className="text-sm text-[var(--seene-text-muted)]">
+                  {query ? `No components match “${query}”.` : "No components were found. Make sure the project has a src, app, pages or components folder."}
+                </p>
+              )}
 
-            <div className="max-h-[52vh] space-y-4 overflow-y-auto pr-1">
-              {grouped.map(([group, list]) => (
-                <div key={group}>
-                  <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--seene-text-muted)]">{group}s</p>
-                  <ul className="space-y-1">
-                    {list.flatMap(file => {
-                      const route = file.route;
-                      const rows: Array<{ selection: Selection; label: string; sub: string; disabled?: boolean; issue?: string; route?: string }> = [];
-                      if (file.previewable === false) {
-                        rows.push({ selection: { file: file.path, title: titleFor(file) }, label: titleFor(file), sub: file.path, disabled: true, ...(file.issue ? { issue: file.issue } : {}), ...(route ? { route } : {}) });
-                      } else {
-                        if (file.default) rows.push({ selection: { file: file.path, title: titleFor(file) }, label: titleFor(file), sub: file.path, ...(route ? { route } : {}) });
-                        if (!file.default) {
-                          for (const exported of file.exports) {
-                            rows.push({ selection: { file: file.path, export: exported, title: titleFor(file, exported) }, label: titleFor(file, exported), sub: `${file.path} · ${exported}`, ...(route ? { route } : {}) });
+              <div className="max-h-[52vh] space-y-4 overflow-y-auto pr-1">
+                {grouped.map(([group, list]) => (
+                  <div key={group}>
+                    <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--seene-text-muted)]">{group}s</p>
+                    <ul className="space-y-1">
+                      {list.flatMap(file => {
+                        const route = file.route;
+                        const rows: Array<{ selection: Selection; label: string; sub: string; disabled?: boolean; issue?: string; route?: string }> = [];
+                        if (file.previewable === false) {
+                          rows.push({ selection: { file: file.path, title: titleFor(file) }, label: titleFor(file), sub: file.path, disabled: true, ...(file.issue ? { issue: file.issue } : {}), ...(route ? { route } : {}) });
+                        } else {
+                          if (file.default) rows.push({ selection: { file: file.path, title: titleFor(file) }, label: titleFor(file), sub: file.path, ...(route ? { route } : {}) });
+                          if (!file.default) {
+                            for (const exported of file.exports) {
+                              rows.push({ selection: { file: file.path, export: exported, title: titleFor(file, exported) }, label: titleFor(file, exported), sub: `${file.path} · ${exported}`, ...(route ? { route } : {}) });
+                            }
                           }
                         }
-                      }
-                      return rows;
-                    }).map(row => {
-                      const key = selectionKey(row.selection);
-                      const active = selected.some(item => selectionKey(item) === key);
-                      return (
-                        <li key={key}>
-                          <label className={`flex cursor-pointer items-start gap-3 rounded-sm border px-3 py-2 ${row.disabled ? "cursor-not-allowed opacity-60" : active ? "border-[var(--seene-accent)] bg-[var(--seene-accent-soft)]" : "border-transparent hover:bg-[var(--seene-surface-2)]"}`}>
-                            <input
-                              type="checkbox"
-                              className="mt-1"
-                              checked={active}
-                              disabled={row.disabled}
-                              onChange={() => toggle(row.selection)}
-                            />
-                            <span className="min-w-0 flex-1">
-                              <span className="block truncate text-sm text-[var(--seene-text)]">{row.label}</span>
-                              <span className="block truncate font-mono text-xs text-[var(--seene-text-muted)]">{row.sub}</span>
-                              {row.issue && <span className="mt-0.5 block text-xs text-[var(--seene-text-muted)]">{row.issue}</span>}
-                            </span>
-                            {row.route && <span className="shrink-0 rounded-sm border border-[var(--seene-border)] px-1.5 py-0.5 font-mono text-[10px] text-[var(--seene-text-muted)]">{row.route}</span>}
-                          </label>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                </div>
-              ))}
-            </div>
-          </Panel>
+                        return rows;
+                      }).map(row => {
+                        const key = selectionKey(row.selection);
+                        const active = selected.some(item => selectionKey(item) === key);
+                        return (
+                          <li key={key}>
+                            <label className={`flex cursor-pointer items-start gap-3 rounded-sm border px-3 py-2 ${row.disabled ? "cursor-not-allowed opacity-60" : active ? "border-[var(--seene-accent)] bg-[var(--seene-accent-soft)]" : "border-transparent hover:bg-[var(--seene-surface-2)]"}`}>
+                              <input
+                                type="checkbox"
+                                className="mt-1"
+                                checked={active}
+                                disabled={row.disabled}
+                                onChange={() => toggle(row.selection)}
+                              />
+                              <span className="min-w-0 flex-1">
+                                <span className="block truncate text-sm text-[var(--seene-text)]">{row.label}</span>
+                                <span className="block truncate font-mono text-xs text-[var(--seene-text-muted)]">{row.sub}</span>
+                                {row.issue && <span className="mt-0.5 block text-xs text-[var(--seene-text-muted)]">{row.issue}</span>}
+                              </span>
+                              {row.route && <span className="shrink-0 rounded-sm border border-[var(--seene-border)] px-1.5 py-0.5 font-mono text-[10px] text-[var(--seene-text-muted)]">{row.route}</span>}
+                            </label>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </div>
+                ))}
+              </div>
+            </Panel>
+          )}
 
           <Panel
             title={kind === "walkthrough" ? "Sequence" : "Selection"}
             description={kind === "walkthrough" ? "Ordered top to bottom. This becomes the playback order." : "The content this scene presents."}
           >
             {selected.length === 0 ? (
-              <p className="text-sm text-[var(--seene-text-muted)]">Nothing selected yet. Choose components on the left.</p>
+              <p className="text-sm text-[var(--seene-text-muted)]">Nothing selected yet. Choose items on the left.</p>
             ) : (
               <ol className="space-y-2">
                 {selected.map((item, index) => (
@@ -437,7 +616,9 @@ export function CreateView({ initialKind, initialProject }: { initialKind?: Comp
                     <span className="font-mono text-xs text-[var(--seene-text-muted)]">{String(index + 1).padStart(2, "0")}</span>
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-sm text-[var(--seene-text)]">{item.title}</span>
-                      <span className="block truncate font-mono text-xs text-[var(--seene-text-muted)]">{item.export ? `${item.file} · ${item.export}` : item.file}</span>
+                      <span className="block truncate font-mono text-xs text-[var(--seene-text-muted)]">
+                        {item.sectionId ? `#${item.sectionId}` : item.selector ? item.selector : item.export ? `${item.file} · ${item.export}` : item.file}
+                      </span>
                     </span>
                     {kind === "walkthrough" && (
                       <>

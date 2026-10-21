@@ -471,7 +471,7 @@ export function ScenePreview({
   // Contain fit: never exceed the workspace pane, so the frame stays centred and
   // fully visible when panels open/close or the window resizes.
   const scale = size.width && size.height && definition && !isViewportSizing
-    ? Math.min(size.width / definition.width, size.height / definition.height)
+    ? Math.max(size.width / definition.width, size.height / definition.height)
     : 1;
   const motion = useMemo<{ segments: Array<TimelineSegment & { nodeId: string }>; durationMs: number }>(() => definition ? motionSegments(definition) : { segments: [], durationMs: 0 }, [definition]);
   const [sidebar, setSidebar] = useState(true);

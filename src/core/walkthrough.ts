@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { CameraSchema, FocusSchema, type Camera, type Focus, type SceneIssue } from "./scene";
 import { EasingTypeSchema, MotionSchema, evaluateMotion, type MotionDefinition } from "./motion";
+import { validateWebsiteUrl, sanitizeUrlForDisplay } from "./url";
 
 export const WALKTHROUGH_DOCUMENT_VERSION = 1;
 export const WALKTHROUGH_MAX_DURATION_MS = 120_000;
@@ -439,6 +440,73 @@ export function createWalkthroughFromSections(input: {
     version: WALKTHROUGH_DOCUMENT_VERSION,
     title: input.title,
     ...(input.description ? { description: input.description } : {}),
+    settings: input.settings ?? {},
+    nodes,
+  });
+}
+
+export function createWalkthroughFromWebsite(input: {
+  url: string;
+  title?: string;
+  description?: string;
+  sections?: Array<{ id: string; label: string; selector?: string }>;
+  pages?: Array<{ url: string; title: string }>;
+  settings?: WalkthroughGlobalsInput;
+}): WalkthroughDocument {
+  const urlValidation = validateWebsiteUrl(input.url);
+  const websiteUrl = urlValidation.normalized ?? input.url;
+  const docTitle = input.title ?? sanitizeUrlForDisplay(websiteUrl);
+
+  const nodes: WalkthroughNodeInput[] = [
+    createWalkthroughNode("start", { id: "start", title: "Open website" }),
+  ];
+
+  const sections = input.sections ?? [];
+  if (sections.length > 0) {
+    sections.forEach((sec, idx) => {
+      nodes.push(
+        createWalkthroughNode("show", {
+          id: `section-${idx + 1}`,
+          title: sec.label,
+          target: {
+            kind: "section",
+            sectionId: sec.id,
+            selector: sec.selector,
+            label: sec.label,
+          },
+        })
+      );
+    });
+  } else {
+    nodes.push(
+      createWalkthroughNode("show", {
+        id: "show-hero",
+        title: "Landing & Hero",
+        target: { kind: "section", sectionId: "hero", label: "Hero section" },
+      }),
+      createWalkthroughNode("scroll", {
+        id: "scroll-features",
+        title: "Main Features",
+        target: { kind: "section", sectionId: "features", label: "Features section" },
+      }),
+      createWalkthroughNode("show", {
+        id: "show-overview",
+        title: "Product Overview",
+        target: { kind: "section", sectionId: "overview", label: "Product overview" },
+      })
+    );
+  }
+
+  nodes.push(createWalkthroughNode("end", { id: "end", title: "Product demonstration complete" }));
+
+  nodes.forEach((node, index) => {
+    node.next = index < nodes.length - 1 ? nodes[index + 1].id : undefined;
+  });
+
+  return WalkthroughDocumentSchema.parse({
+    version: WALKTHROUGH_DOCUMENT_VERSION,
+    title: docTitle,
+    description: input.description ?? `Website walkthrough for ${websiteUrl}`,
     settings: input.settings ?? {},
     nodes,
   });
