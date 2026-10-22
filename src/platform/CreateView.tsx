@@ -1,11 +1,11 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   SCENE_PRESENTATION_HEIGHT, SCENE_PRESENTATION_WIDTH, sceneIdFromTitle,
   type PlatformContentFile, type PlatformProject, type PlatformSource,
 } from "../core/platform";
-import { validateWebsiteUrl, createWalkthroughFromWebsite, type WebsiteInspection } from "../core";
+import { validateWebsiteUrl, type WebsiteInspection } from "../core";
 import type { ContentResponse } from "./api";
-import { PROJECTS_ROUTE, platformApi, studioHref, type CompositionKind } from "./api";
+import { PROJECTS_ROUTE, platformApi, studioHref, websiteStudioHref, type CompositionKind } from "./api";
 import { useDebounced, useResource } from "./data";
 import { DiscoveryPanel } from "./DiscoveryPanel";
 import { DirectoryPicker } from "./DirectoryPicker";
@@ -19,6 +19,7 @@ type Selection = {
   sectionId?: string;
   selector?: string;
   kind?: "component" | "section" | "page" | "element";
+  action?: "show" | "click" | "focus";
 };
 type Filter = "all" | "page" | "section" | "component";
 type SourceChoice = Pick<PlatformSource, "path" | "name" | "connected" | "sceneCount" | "registered"> & {
@@ -93,6 +94,7 @@ export function CreateView({
   const [websiteInspecting, setWebsiteInspecting] = useState(false);
   const [websiteInspection, setWebsiteInspection] = useState<WebsiteInspection | undefined>(undefined);
   const [websiteInspectError, setWebsiteInspectError] = useState("");
+  const autoInspectedUrl = useRef<string | undefined>(undefined);
 
   const inspectWebsite = async (rawUrl: string) => {
     const val = validateWebsiteUrl(rawUrl);
@@ -103,7 +105,8 @@ export function CreateView({
     setWebsiteInspecting(true);
     setWebsiteInspectError("");
     try {
-      const result = await platformApi.inspectWebsiteUrl(val.normalized!);
+      const result = await platformApi.inspectWebsiteUrl(val.normalized!, { browser: true });
+      if (websiteInspection && websiteInspection.url !== result.url) setSelected([]);
       setWebsiteInspection(result);
       setWebsiteUrl(result.url);
       if (!title) {
@@ -118,9 +121,9 @@ export function CreateView({
   };
 
   useEffect(() => {
-    if (initialUrl && !websiteInspection && !websiteInspecting) {
-      void inspectWebsite(initialUrl);
-    }
+    if (!initialUrl || autoInspectedUrl.current === initialUrl) return;
+    autoInspectedUrl.current = initialUrl;
+    void inspectWebsite(initialUrl);
   }, [initialUrl]);
 
   // Targets
@@ -168,7 +171,10 @@ export function CreateView({
   }, [files]);
 
   const effectiveStep = !kind ? 1 : !source ? 2 : step;
-  const canContinueTargets = selected.length > 0;
+  const isWebsiteSource = Boolean(source && /^https?:\/\//i.test(source.path));
+  // A site can be imported even when discovery found nothing. Refusing to continue would
+  // strand the user, so an inspected site with zero targets is allowed to open the Studio.
+  const canContinueTargets = selected.length > 0 || (isWebsiteSource && websiteInspection !== undefined);
 
   useEffect(() => {
     if (effectiveStep !== 4 || title.trim()) return;
@@ -237,17 +243,32 @@ export function CreateView({
     setCreateError("");
     try {
       if (source.path.startsWith("http://") || source.path.startsWith("https://")) {
-        createWalkthroughFromWebsite({
+        type ImportTarget = NonNullable<Parameters<typeof platformApi.importWebsite>[0]["targets"]>[number];
+        const targets: ImportTarget[] = [];
+        for (const item of selected) {
+          if (item.kind === "page" && item.selector) {
+            targets.push({ kind: "page", url: item.selector, title: item.title });
+          } else if (item.kind === "element" && item.selector) {
+            targets.push({ kind: "element", selector: item.selector, label: item.title, ...(item.action ? { action: item.action } : {}) });
+          } else if (item.kind === "section" || item.sectionId) {
+            targets.push({
+              kind: "section",
+              id: item.sectionId || sceneIdFromTitle(item.title),
+              label: item.title,
+              ...(item.selector ? { selector: item.selector } : {}),
+            });
+          }
+        }
+        const result = await platformApi.importWebsite({
           url: source.path,
           title: finalTitle,
-          description: description.trim() || undefined,
-          sections: selected.map(item => ({
-            id: item.sectionId || sceneIdFromTitle(item.title),
-            label: item.title,
-            selector: item.selector,
-          })),
+          ...(description.trim() ? { description: description.trim() } : {}),
+          targets,
+          // Match the browser pass used to inspect targets so the server validates the same
+          // discovery instead of silently dropping targets that only exist after rendering.
+          browser: true,
         });
-        window.location.hash = studioHref(source.path, finalId);
+        window.location.hash = websiteStudioHref(result.project.url);
         return;
       }
       const result = await platformApi.createScene({
@@ -380,6 +401,10 @@ export function CreateView({
                         sceneCount: 0,
                         registered: false,
                       });
+                      if (!title.trim()) {
+                        setTitle(websiteInspection.title || "Website walkthrough");
+                        setId(sceneIdFromTitle(websiteInspection.title || "website-walkthrough"));
+                      }
                       setStep(3);
                     }}
                   >
@@ -471,6 +496,34 @@ export function CreateView({
               description={`Extracted from ${source.name} (${source.path})`}
             >
               <div className="max-h-[52vh] space-y-4 overflow-y-auto pr-1">
+                {websiteInspection?.pages && websiteInspection.pages.length > 0 && (
+                  <div>
+                    <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--seene-text-muted)]">Pages</p>
+                    <ul className="space-y-1">
+                      {websiteInspection.pages.map(page => {
+                        const sel: Selection = {
+                          file: source.path,
+                          title: page.title || page.path,
+                          selector: page.url,
+                          kind: "page",
+                        };
+                        const key = selectionKey(sel);
+                        const active = selected.some(item => selectionKey(item) === key);
+                        return (
+                          <li key={key}>
+                            <label className={`flex cursor-pointer items-start gap-3 rounded-sm border px-3 py-2 ${active ? "border-[var(--seene-accent)] bg-[var(--seene-accent-soft)]" : "border-transparent hover:bg-[var(--seene-surface-2)]"}`}>
+                              <input type="checkbox" className="mt-1" checked={active} onChange={() => toggle(sel)} />
+                              <span className="min-w-0 flex-1">
+                                <span className="block truncate text-sm text-[var(--seene-text)]">{page.title || page.path}</span>
+                                <span className="block truncate font-mono text-xs text-[var(--seene-text-muted)]">{page.url}</span>
+                              </span>
+                            </label>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </div>
+                )}
                 {websiteInspection?.sections && websiteInspection.sections.length > 0 && (
                   <div>
                     <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--seene-text-muted)]">Page Sections</p>
@@ -510,6 +563,7 @@ export function CreateView({
                           title: elem.label,
                           selector: elem.selector,
                           kind: "element",
+                          action: elem.kind === "button" || elem.kind === "link" ? "click" : "focus",
                         };
                         const key = selectionKey(sel);
                         const active = selected.some(item => selectionKey(item) === key);
@@ -527,6 +581,11 @@ export function CreateView({
                       })}
                     </ul>
                   </div>
+                )}
+                {(!websiteInspection || (websiteInspection.sections.length === 0 && websiteInspection.interactiveElements.length === 0 && websiteInspection.pages.length <= 1)) && (
+                  <Notice tone="info">
+                    No sections were discovered automatically. You can still create the walkthrough and add page, scroll and interaction steps in the Studio.
+                  </Notice>
                 )}
               </div>
             </Panel>

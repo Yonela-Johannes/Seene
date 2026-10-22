@@ -65,7 +65,7 @@ describe("scroll mapping", () => {
     });
     const scroller = stubScroller({ hero: 0, features: 400 });
     const anchors = measureWalkthroughAnchors(scroller, document_);
-    expect(anchors.map(anchor => anchor.key)).toEqual(["section|hero|||", "section|features|||"]);
+    expect(anchors.map(anchor => anchor.key)).toEqual(["section|hero||||", "section|features||||"]);
     expect(anchors.map(anchor => anchor.offsetTop)).toEqual([0, 400]);
 
     // Start-aligned: the second anchor drives the scroller to its top.

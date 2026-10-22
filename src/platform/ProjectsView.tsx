@@ -4,7 +4,7 @@
  * WHERE: Platform renders it at #/projects.
  */
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { createHref, HOME_ROUTE, platformApi, settingsHref, studioHref } from "./api";
+import { createHref, HOME_ROUTE, platformApi, settingsHref, studioHref, websiteStudioHref } from "./api";
 import { useResource } from "./data";
 import { DiscoveryPanel } from "./DiscoveryPanel";
 import { DirectoryPicker } from "./DirectoryPicker";
@@ -14,10 +14,13 @@ import { SEENE_BRAND, SEENE_INIT_COMMAND, SEENE_NPM_INSTALL_COMMAND } from "../c
 
 export function ProjectsView() {
   const projects = useResource("projects", () => platformApi.projects());
+  const websites = useResource("websites", () => platformApi.websites());
   const [target, setTarget] = useState("");
   const [error, setError] = useState("");
+  const [websiteError, setWebsiteError] = useState("");
   const [busy, setBusy] = useState(false);
   const [confirmRemove, setConfirmRemove] = useState("");
+  const [confirmRemoveWebsite, setConfirmRemoveWebsite] = useState("");
   const [picking, setPicking] = useState(false);
   const pathInput = useRef<HTMLInputElement>(null);
 
@@ -64,7 +67,19 @@ export function ProjectsView() {
     }
   };
 
+  const removeWebsite = async (url: string) => {
+    setWebsiteError("");
+    setConfirmRemoveWebsite("");
+    try {
+      await platformApi.removeWebsite(url);
+      websites.reload();
+    } catch (failure) {
+      setWebsiteError(failure instanceof Error ? failure.message : "The website walkthrough could not be removed.");
+    }
+  };
+
   const list = projects.data?.projects ?? [];
+  const websiteList = websites.data?.projects ?? [];
   // A static host has no platform API. Say so plainly instead of rendering an
   // empty console that looks broken.
   const unavailable = !projects.loading && projects.data === undefined;
@@ -184,6 +199,55 @@ export function ProjectsView() {
                      ))}
                    </div>
                  )}
+            </section>
+
+            <section className="space-y-4" aria-labelledby="website-walkthroughs-heading">
+              <div className="flex items-center justify-between">
+                <h2 id="website-walkthroughs-heading" className="text-xl font-medium tracking-tight">Website walkthroughs</h2>
+                <span className="font-mono text-xs text-[var(--seene-text-muted)]">{websiteList.length} saved</span>
+              </div>
+              <p className="text-xs text-[var(--seene-text-muted)]">
+                Websites imported by URL are stored locally and need no npm package in the target site.
+              </p>
+              {websiteError && <Notice>{websiteError}</Notice>}
+              {websites.loading && !websites.data && <p className="text-sm text-[var(--seene-text-muted)]">Loading website walkthroughs…</p>}
+              {websites.error && <Notice>{websites.error}</Notice>}
+              {!websites.loading && websiteList.length === 0 && (
+                <div className="space-y-2 rounded-md border border-dashed border-[var(--seene-border)] bg-[var(--seene-surface)] p-8 text-center">
+                  <p className="text-sm font-medium">No website walkthroughs yet</p>
+                  <p className="text-xs text-[var(--seene-text-muted)]">
+                    Paste a website URL on the <a className="underline" href={HOME_ROUTE}>overview page</a> to import one.
+                  </p>
+                </div>
+              )}
+              {websiteList.length > 0 && (
+                <div className="grid gap-4 sm:grid-cols-2">
+                  {websiteList.map(site => (
+                    <article key={site.id} data-website-url={site.url} className="flex min-w-0 flex-col justify-between gap-4 rounded-md border border-[var(--seene-border)] bg-[var(--seene-surface)] p-6 shadow-sm hover:shadow-md transition-shadow">
+                      <div className="space-y-2">
+                        <h3 className="truncate text-lg font-medium text-[var(--seene-text)]">{site.title}</h3>
+                        <p className="truncate font-mono text-xs text-[var(--seene-text-muted)]" title={site.url}>{site.url}</p>
+                        {site.description && <p className="text-xs text-[var(--seene-text-muted)]">{site.description}</p>}
+                        <p className="text-xs text-[var(--seene-text-muted)]">
+                          {site.stepCount} step{site.stepCount === 1 ? "" : "s"} · {site.sectionCount} section{site.sectionCount === 1 ? "" : "s"} · {site.pageCount} page{site.pageCount === 1 ? "" : "s"}
+                        </p>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2 border-t border-[var(--seene-border)] pt-2">
+                        <a className="seene-btn seene-btn-primary seene-btn-nav" href={websiteStudioHref(site.url)}>Open studio</a>
+                        <a className="seene-btn seene-btn-secondary seene-btn-nav" href={site.url} target="_blank" rel="noreferrer noopener">Open site</a>
+                        {confirmRemoveWebsite === site.url ? (
+                          <>
+                            <button type="button" className="seene-btn seene-btn-secondary seene-btn-nav" onClick={() => void removeWebsite(site.url)}>Confirm remove</button>
+                            <button type="button" className="seene-btn seene-btn-secondary seene-btn-nav" onClick={() => setConfirmRemoveWebsite("")}>Cancel</button>
+                          </>
+                        ) : (
+                          <button type="button" className="seene-btn seene-btn-secondary seene-btn-nav" onClick={() => setConfirmRemoveWebsite(site.url)}>Remove</button>
+                        )}
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              )}
             </section>
 
             {!unavailable && <DiscoveryPanel onRegistered={projects.reload} />}

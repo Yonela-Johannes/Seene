@@ -4,14 +4,13 @@ import { SettingsView } from "./SettingsView";
 import { StudioView } from "./StudioView";
 import { CreateView } from "./CreateView";
 import { PresentationView } from "./PresentationView";
+import { WebsiteStudioView } from "./WebsiteStudioView";
 import { CREATE_ROUTE, PROJECTS_ROUTE } from "./api";
 import { useHashRoute } from "./data";
 import { SiteHeader, useSiteShortcuts } from "./site";
 import { useEffect, useState } from "react";
 import { SEENE_INSTALL_COMMAND } from "../core/branding";
 
-/** The command menu offers real navigation and the install command.
- * There is no account, so nothing here signs a user in or out. */
 const COMMANDS = [
   { label: "Go to overview", href: "#/" },
   { label: "Open the local studio", href: PROJECTS_ROUTE },
@@ -37,6 +36,7 @@ export function Platform() {
         {route.view === "projects" && <ProjectsView />}
         {route.view === "create" && <CreateView initialKind={route.kind} initialProject={route.project} initialUrl={route.url} />}
         {route.view === "studio" && <StudioView project={route.project} initialScene={route.scene} />}
+        {route.view === "website" && <WebsiteStudioView url={route.url} initialScene={route.step} />}
         {route.view === "settings" && <SettingsView project={route.project} />}
         {route.view === "present" && <PresentationView project={route.project} scene={route.scene} />}
       </main>

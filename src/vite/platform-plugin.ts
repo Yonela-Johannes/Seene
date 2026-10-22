@@ -17,6 +17,14 @@ import {
 } from "../core/platform";
 import { SCENE_RECIPE_DIRECTORY } from "../core/recipes";
 import {
+  WebsiteImportRequestSchema, WebsiteInspectRequestSchema, WebsiteProjectResponseSchema,
+  WebsiteProjectsResponseSchema, WebsiteUpdateRequestSchema, summarizeWebsiteProject, updateWebsiteProject,
+} from "../core";
+import {
+  WebsiteInspectError, inspectWebsiteUrl, readWebsiteProject, readWebsiteProjects,
+  removeWebsiteProject, saveImportedWebsite, writeWebsiteProject,
+} from "./website-projects";
+import {
   PlatformFault, browseSourceDirectories, componentImportSpecifier, defaultProjectContainers, discoverApplicationContent, discoverLocalProjects, duplicateSceneSourcePair,
   inspectSource, invalidateApplicationScan, readSceneCatalog, removeSceneSourcePair, resolveProjectTarget, writeSceneSourcePair,
 } from "./scene-files";
@@ -38,6 +46,8 @@ function fail(response: ServerResponse, status: number, error: string): void {
   send(response, status, PlatformErrorSchema.parse({ error }));
 }
 function statusFor(error: unknown): number {
+  if (error instanceof WebsiteInspectError)
+    return error.code === "invalid-url" || error.code === "blocked" ? 400 : error.code === "http-error" ? 502 : 502;
   const code = error instanceof Error && "code" in error ? String((error as { code: unknown }).code) : "";
   return code === "denied-path" || code === "invalid-input" ? 400 : code === "not-found" ? 404 : code === "conflict" ? 409 : 500;
 }
@@ -165,6 +175,69 @@ function createHandler(options: { platformRoot?: string }) {
           if (!entry) throw new PlatformFault("not-found", "Add this project to Seene before working with its scenes.");
           return entry;
         };
+        if (route.startsWith("/websites")) {
+          if (!isLoopbackHost(request.headers.host))
+            throw new PlatformFault("denied-path", "Website import is limited to this machine.");
+
+          if (route === "/websites") {
+            if (request.method === "GET") {
+              const projects = await readWebsiteProjects(home.directory);
+              return void send(response, 200, WebsiteProjectsResponseSchema.parse({
+                projects: projects.map(summarizeWebsiteProject).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)),
+              }));
+            }
+            if (request.method === "POST") {
+              const input = parse<{ url: string; title?: string; description?: string; sections?: Array<{ id: string; label: string; selector?: string }>; pages?: Array<{ url: string; title: string }>; targets?: Array<{ kind: "section"; id: string; label: string; selector?: string } | { kind: "page"; url: string; title: string } | { kind: "element"; selector: string; label: string; action?: "show" | "click" | "focus" }>; browser?: boolean }>(WebsiteImportRequestSchema, await body(request));
+              const inspection = await inspectWebsiteUrl(input.url, { ...(input.browser === undefined ? {} : { browser: input.browser }) });
+              const project = await saveImportedWebsite(home.directory, {
+                inspection,
+                ...(input.title ? { title: input.title } : {}),
+                ...(input.description ? { description: input.description } : {}),
+                ...(input.sections ? { sections: input.sections } : {}),
+                ...(input.pages ? { pages: input.pages } : {}),
+                ...(input.targets ? { targets: input.targets } : {}),
+              });
+              return void send(response, 200, WebsiteProjectResponseSchema.parse({ project }));
+            }
+          }
+
+          if (route === "/websites/inspect" && request.method === "POST") {
+            const input = parse<{ url: string; browser?: boolean }>(WebsiteInspectRequestSchema, await body(request));
+            const inspection = await inspectWebsiteUrl(input.url, { ...(input.browser === undefined ? {} : { browser: input.browser }) });
+            return void send(response, 200, { inspection });
+          }
+
+          if (route === "/websites/project") {
+            const target = requestUrl.searchParams.get("url");
+            if (request.method === "GET") {
+              if (!target) throw new PlatformFault("invalid-input", "Provide the website URL.");
+              const project = await readWebsiteProject(home.directory, target);
+              if (!project) throw new PlatformFault("not-found", "That website project is not saved yet. Import it first.");
+              return void send(response, 200, WebsiteProjectResponseSchema.parse({ project }));
+            }
+            if (request.method === "PUT") {
+              const input = parse<{ url: string; title?: string; description?: string | null; walkthrough?: unknown; refreshInspection?: boolean }>(WebsiteUpdateRequestSchema, await body(request));
+              const existing = await readWebsiteProject(home.directory, input.url);
+              if (!existing) throw new PlatformFault("not-found", "That website project is not saved yet. Import it first.");
+              const inspection = input.refreshInspection ? await inspectWebsiteUrl(existing.url, { browser: true }) : existing.inspection;
+              const project = updateWebsiteProject(existing, {
+                ...(input.title ? { title: input.title } : {}),
+                ...(input.description !== undefined ? { description: input.description } : {}),
+                ...(input.walkthrough ? { walkthrough: input.walkthrough as never } : {}),
+                inspection,
+              });
+              await writeWebsiteProject(home.directory, project);
+              return void send(response, 200, WebsiteProjectResponseSchema.parse({ project }));
+            }
+            if (request.method === "DELETE") {
+              if (!target) throw new PlatformFault("invalid-input", "Provide the website URL.");
+              const removed = await removeWebsiteProject(home.directory, target);
+              if (!removed) throw new PlatformFault("not-found", "That website project is not saved.");
+              return void send(response, 200, WebsiteProjectsResponseSchema.parse({ projects: (await readWebsiteProjects(home.directory)).map(summarizeWebsiteProject) }));
+            }
+          }
+          throw new PlatformFault("not-found", "Unknown website request.");
+        }
         if (route === "/projects") {
           if (request.method === "GET") return void send(response, 200, PlatformProjectsSchema.parse({ home: home.directory, projects: await listProjects(entries) }));
           if (request.method === "POST") {

@@ -125,6 +125,28 @@ test('walkthrough scroll maps frame 0, midpoint and end on a flat sharp canvas',
  await page.screenshot({path:'test-results/walkthrough-frame-end.png'});
 });
 
+test('playing the walkthrough advances scroll without React update loops',async({page})=>{
+ const errors:string[]=[];
+ page.on('console',message=>{if(message.type()==='error')errors.push(message.text())});
+ page.on('pageerror',error=>errors.push(error.message));
+ await page.goto('/tests/preview/walkthrough-fixture.html?seene-mode=scroll');
+ const viewport=page.locator('.website-walkthrough-viewport');
+ await expect.poll(()=>viewport.evaluate(element=>(element as HTMLElement).scrollHeight-(element as HTMLElement).clientHeight)).toBe(4000);
+ await page.getByRole('button',{name:'Play'}).click();
+ const samples:number[]=[];
+ for(let index=0;index<6;index+=1){
+  await page.waitForTimeout(400);
+  samples.push(await viewport.evaluate(element=>(element as HTMLElement).scrollTop));
+ }
+ await expect(page.getByRole('button',{name:'Pause'})).toBeVisible();
+ expect(samples.at(-1)).toBeGreaterThan(samples[0]!);
+ expect(errors).toEqual([]);
+ await page.getByRole('button',{name:'Pause'}).click();
+ await page.getByRole('button',{name:'Restart'}).click();
+ await expect.poll(()=>viewport.evaluate(element=>(element as HTMLElement).scrollTop)).toBe(0);
+ expect(errors).toEqual([]);
+});
+
 test('walkthrough mode, presets, Inspector, timeline and Export controls stay synchronized',async({page})=>{
  await page.goto('/tests/preview/walkthrough-fixture.html?seene-mode=scroll');
  await page.evaluate(() => localStorage.clear());

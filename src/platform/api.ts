@@ -3,7 +3,13 @@ import {
   PLATFORM_API_PREFIX, SEENE_PROTOCOL_VERSION, isAllowedDevOrigin, type PlatformBrowseResponse, type PlatformCatalog,
   type PlatformContent, type PlatformProject, type PlatformScanResponse, type PlatformSourcesResponse, type PlatformStatus,
 } from "../core/platform";
-import { validateWebsiteUrl, inspectWebsiteHtml, type WebsiteInspection } from "../core";
+import {
+  validateWebsiteUrl,
+  type WebsiteInspection,
+  type WebsiteProject,
+  type WebsiteProjectSummary,
+  type WalkthroughDocument,
+} from "../core";
 
 export type ProjectsResponse = { home: string; projects: PlatformProject[] };
 export type CatalogResponse = { project: PlatformProject; catalog: PlatformCatalog };
@@ -12,6 +18,9 @@ export type SceneResponse = { project: PlatformProject; scene: PlatformCatalog["
 export type SourceInspectResponse = PlatformSourcesResponse;
 export type BrowseResponse = PlatformBrowseResponse;
 export type ScanResponse = PlatformScanResponse;
+export type WebsiteProjectsResponse = { projects: WebsiteProjectSummary[] };
+export type WebsiteProjectResponse = { project: WebsiteProject };
+export type WebsiteInspectResponse = { inspection: WebsiteInspection };
 
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
   let response: Response;
@@ -38,20 +47,40 @@ export const platformApi = {
     return request<ContentResponse>(`${PLATFORM_API_PREFIX}/projects/content?${params.toString()}`);
   },
   inspectSource: (target: string) => request<SourceInspectResponse>(`${PLATFORM_API_PREFIX}/projects/sources/inspect`, body({ path: target })),
-  inspectWebsiteUrl: async (targetUrl: string): Promise<WebsiteInspection> => {
+  websites: () => request<WebsiteProjectsResponse>(`${PLATFORM_API_PREFIX}/websites`),
+  inspectWebsiteUrl: async (targetUrl: string, options?: { browser?: boolean }): Promise<WebsiteInspection> => {
     const val = validateWebsiteUrl(targetUrl);
     if (!val.valid) throw new Error(val.error || "Invalid website URL.");
-    const url = val.normalized!;
-    try {
-      const res = await request<{ success: boolean; inspection: WebsiteInspection }>(
-        `/__seene/inspect-url?url=${encodeURIComponent(url)}`
-      );
-      if (res.inspection) return res.inspection;
-    } catch {
-      // Fallback if endpoint is unavailable
-    }
-    return inspectWebsiteHtml(url, "<html><head><title>" + (val.hostname || "Website") + "</title></head><body></body></html>");
+    const response = await request<WebsiteInspectResponse>(
+      `${PLATFORM_API_PREFIX}/websites/inspect`,
+      body({ url: val.normalized!, ...(options?.browser === undefined ? {} : { browser: options.browser }) }),
+    );
+    return response.inspection;
   },
+  importWebsite: (input: {
+    url: string;
+    title?: string;
+    description?: string;
+    sections?: Array<{ id: string; label: string; selector?: string }>;
+    pages?: Array<{ url: string; title: string }>;
+    targets?: Array<
+      | { kind: "section"; id: string; label: string; selector?: string }
+      | { kind: "page"; url: string; title: string }
+      | { kind: "element"; selector: string; label: string; action?: "show" | "click" | "focus" }
+    >;
+    browser?: boolean;
+  }) => request<WebsiteProjectResponse>(`${PLATFORM_API_PREFIX}/websites`, body(input)),
+  website: (targetUrl: string) =>
+    request<WebsiteProjectResponse>(`${PLATFORM_API_PREFIX}/websites/project?url=${encodeURIComponent(targetUrl)}`),
+  updateWebsite: (input: {
+    url: string;
+    title?: string;
+    description?: string | null;
+    walkthrough?: WalkthroughDocument;
+    refreshInspection?: boolean;
+  }) => request<WebsiteProjectResponse>(`${PLATFORM_API_PREFIX}/websites/project`, { ...body(input), method: "PUT" }),
+  removeWebsite: (targetUrl: string) =>
+    request<WebsiteProjectsResponse>(`${PLATFORM_API_PREFIX}/websites/project?url=${encodeURIComponent(targetUrl)}`, { method: "DELETE" }),
   browseSource: (target?: string) =>
     request<BrowseResponse>(`${PLATFORM_API_PREFIX}/projects/sources/browse${target ? `?path=${encodeURIComponent(target)}` : ""}`),
   discoverProjects: (roots?: string[]) => {
@@ -84,6 +113,7 @@ export type Route =
   | { view: "projects" }
   | { view: "create"; kind?: CompositionKind; project?: string; url?: string }
   | { view: "studio"; project: string; scene?: string }
+  | { view: "website"; url: string; step?: string }
   | { view: "settings"; project: string }
   | { view: "present"; project: string; scene: string };
 
@@ -97,6 +127,10 @@ export function studioHref(project: string, scene?: string): string {
 }
 export function settingsHref(project: string): string { return `${studioHref(project)}/settings`; }
 export function presentHref(project: string, scene: string): string { return `#/present/${encodeURIComponent(project)}/${encodeURIComponent(scene)}`; }
+export function websiteStudioHref(url: string, step?: string): string {
+  const base = `#/websites/${encodeURIComponent(url)}`;
+  return step ? `${base}?step=${encodeURIComponent(step)}` : base;
+}
 export function createHref(kind?: CompositionKind, project?: string, url?: string): string {
   const params = new URLSearchParams();
   if (kind) params.set("kind", kind);
@@ -136,6 +170,12 @@ export function readRoute(hash: string): Route {
       return { view: "studio", project, ...(scene ? { scene: decodeURIComponent(scene) } : {}) };
     }
     return { view: "projects" };
+  }
+  if (head === "websites" && parts[1]) {
+    let url = parts[1];
+    try { url = decodeURIComponent(parts[1]); } catch { /* keep the raw segment */ }
+    const step = params.get("step");
+    return { view: "website", url, ...(step ? { step } : {}) };
   }
   if (head === "present" && parts[1] && parts[2]) return { view: "present", project: decodeURIComponent(parts[1]), scene: decodeURIComponent(parts[2]) };
   // Any removed or unknown route falls back to the public home rather than an error screen.

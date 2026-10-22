@@ -62,6 +62,23 @@ describe("isSameOriginRoute", () => {
   });
 });
 
+describe("validateWebsiteUrl security", () => {
+  it("rejects cloud metadata, link-local hosts and credentials", () => {
+    expect(validateWebsiteUrl("http://169.254.169.254/latest/meta-data").valid).toBe(false);
+    expect(validateWebsiteUrl("http://169.254.170.2/v2/credentials").valid).toBe(false);
+    expect(validateWebsiteUrl("http://metadata.google.internal/").valid).toBe(false);
+    expect(validateWebsiteUrl("http://[fe80::1]/").valid).toBe(false);
+    expect(validateWebsiteUrl("http://[fd00:ec2::254]/latest/meta-data").valid).toBe(false);
+    expect(validateWebsiteUrl("http://100.100.100.200/latest/meta-data").valid).toBe(false);
+    expect(validateWebsiteUrl("https://user:secret@example.com/").valid).toBe(false);
+  });
+
+  it("normalizes equivalent URLs to the same project URL", () => {
+    expect(validateWebsiteUrl("example.com").normalized).toBe(validateWebsiteUrl("https://example.com/").normalized);
+    expect(validateWebsiteUrl(" localhost:3000/app ").normalized).toBe("http://localhost:3000/app");
+  });
+});
+
 describe("sanitizeUrlForDisplay", () => {
   it("formats URLs cleanly for display", () => {
     expect(sanitizeUrlForDisplay("https://example.com/features/item")).toBe("example.com/features/item");

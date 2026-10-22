@@ -2,7 +2,7 @@
 import { render, screen, fireEvent, waitFor, cleanup } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CreateView } from "../../src/platform/CreateView";
-import { createHref, readRoute, studioHref } from "../../src/platform/api";
+import { createHref, readRoute, studioHref, websiteStudioHref } from "../../src/platform/api";
 
 type Route = { match: RegExp; method?: string; body: unknown; status?: number };
 
@@ -52,6 +52,10 @@ describe("create routes", () => {
     expect(readRoute("#/create?project=%2Fapps%2Fdemo")).toEqual({ view: "create", project: "/apps/demo" });
     expect(readRoute(studioHref("/apps/demo", "hero"))).toEqual({ view: "studio", project: "/apps/demo", scene: "hero" });
     expect(readRoute("#/projects/%2Fapps%2Fdemo")).toEqual({ view: "studio", project: "/apps/demo" });
+    expect(websiteStudioHref("https://example.com/pricing?plan=pro", "page-2"))
+      .toBe("#/websites/https%3A%2F%2Fexample.com%2Fpricing%3Fplan%3Dpro?step=page-2");
+    expect(readRoute(websiteStudioHref("https://example.com/pricing?plan=pro", "page-2")))
+      .toEqual({ view: "website", url: "https://example.com/pricing?plan=pro", step: "page-2" });
   });
 });
 
@@ -111,5 +115,116 @@ describe("unified creation flow", () => {
     expect(await screen.findByText(/That folder does not exist/)).toBeTruthy();
     // No "Register and continue" action is offered for a folder Seene cannot use.
     expect(screen.queryByRole("button", { name: /Register and continue/ })).toBeNull();
+  });
+});
+
+const WEBSITE_INSPECTION = {
+  url: "https://example.com/",
+  title: "Example Studio",
+  sections: [
+    { id: "hero", label: "Hero", selector: "#hero" },
+    { id: "features", label: "Features", selector: "#features" },
+  ],
+  pages: [
+    { url: "https://example.com/", title: "Home", path: "/" },
+    { url: "https://example.com/pricing", title: "Pricing", path: "/pricing" },
+  ],
+  interactiveElements: [
+    { id: "signup", label: "Sign up", kind: "link", selector: "a.signup", href: "https://example.com/pricing" },
+  ],
+  status: "ok",
+  canIframe: true,
+  inspectedWith: "browser",
+};
+
+describe("website URL import", () => {
+  it("inspects a URL, keeps the user's target order and opens the website studio", async () => {
+    installFetch([
+      { match: /\/websites\/inspect$/, method: "POST", body: { inspection: WEBSITE_INSPECTION } },
+      { match: /\/websites$/, method: "POST", body: {
+        project: {
+          version: 1, id: "example-com", url: "https://example.com/", title: "Example Studio",
+          inspection: WEBSITE_INSPECTION,
+          walkthrough: { version: 1, title: "Example Studio", settings: {}, nodes: [] },
+          createdAt: "2026-01-01T00:00:00.000Z", updatedAt: "2026-01-01T00:00:00.000Z",
+        },
+      } },
+      { match: /\/projects\/sources\/discover/, body: { home: "/home/x/.seene", roots: [], projects: [], scanned: 0, truncated: false } },
+      { match: /\/projects$/, body: { home: "/home/x/.seene", projects: [] } },
+    ]);
+
+    render(<CreateView initialUrl="https://example.com" />);
+
+    const card = await screen.findByText("Example Studio");
+    expect(card).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Continue with this website" }));
+
+    // Select the section before the page. The import must preserve this order instead of
+    // grouping all pages ahead of all sections.
+    fireEvent.click(await screen.findByRole("checkbox", { name: /Hero/ }));
+    fireEvent.click(screen.getByRole("checkbox", { name: /Pricing/ }));
+
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Create walkthrough" }));
+
+    await waitFor(() => expect(window.location.hash).toBe(websiteStudioHref("https://example.com/")));
+    const imported = calls.find(call => call.method === "POST" && /\/websites$/.test(call.url));
+    expect(imported?.body).toMatchObject({
+      url: "https://example.com/",
+      title: "Example Studio",
+      targets: [
+        { kind: "section", id: "hero", label: "Hero", selector: "#hero" },
+        { kind: "page", url: "https://example.com/pricing", title: "Pricing" },
+      ],
+    });
+  });
+
+  it("lets an inspected site with no discoveries continue so steps can be added in the Studio", async () => {
+    const bare = {
+      ...WEBSITE_INSPECTION,
+      sections: [],
+      interactiveElements: [],
+      pages: [{ url: "https://example.com/", title: "Home", path: "/" }],
+    };
+    installFetch([
+      { match: /\/websites\/inspect$/, method: "POST", body: { inspection: bare } },
+      { match: /\/websites$/, method: "POST", body: {
+        project: {
+          version: 1, id: "example-com", url: "https://example.com/", title: "Example Studio",
+          inspection: bare,
+          walkthrough: { version: 1, title: "Example Studio", settings: {}, nodes: [] },
+          createdAt: "2026-01-01T00:00:00.000Z", updatedAt: "2026-01-01T00:00:00.000Z",
+        },
+      } },
+      { match: /\/projects\/sources\/discover/, body: { home: "/home/x/.seene", roots: [], projects: [], scanned: 0, truncated: false } },
+      { match: /\/projects$/, body: { home: "/home/x/.seene", projects: [] } },
+    ]);
+
+    render(<CreateView initialUrl="https://example.com" />);
+    await screen.findByText("Example Studio");
+    fireEvent.click(screen.getByRole("button", { name: "Continue with this website" }));
+
+    // The empty-state notice is shown, and Continue stays enabled.
+    expect(await screen.findByText(/No sections were discovered automatically/)).toBeTruthy();
+    const continueButton = screen.getByRole("button", { name: "Continue" }) as HTMLButtonElement;
+    expect(continueButton.disabled).toBe(false);
+    fireEvent.click(continueButton);
+    fireEvent.click(await screen.findByRole("button", { name: "Create walkthrough" }));
+
+    await waitFor(() => expect(window.location.hash).toBe(websiteStudioHref("https://example.com/")));
+    const imported = calls.find(call => call.method === "POST" && /\/websites$/.test(call.url));
+    expect((imported?.body as { targets?: unknown[] }).targets).toEqual([]);
+  });
+
+  it("shows inspection failures instead of inventing a site", async () => {
+    installFetch([
+      { match: /\/websites\/inspect$/, method: "POST", status: 502, body: { error: "The website answered with HTTP 500." } },
+      { match: /\/projects\/sources\/discover/, body: { home: "/home/x/.seene", roots: [], projects: [], scanned: 0, truncated: false } },
+      { match: /\/projects$/, body: { home: "/home/x/.seene", projects: [] } },
+    ]);
+
+    render(<CreateView initialUrl="https://example.com" />);
+    expect(await screen.findByText(/The website answered with HTTP 500/)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Continue with this website" })).toBeNull();
   });
 });

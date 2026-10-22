@@ -21,6 +21,19 @@ const DISALLOWED_PROTOCOLS = new Set([
   "vscode:",
 ]);
 
+export function isBlockedWebsiteHost(hostname: string): boolean {
+  const lower = hostname.toLowerCase().replace(/^\[|\]$/g, "");
+  if (lower === "metadata.google.internal" || lower === "metadata") return true;
+  if (lower === "::") return true;
+  if (lower === "fd00:ec2::254" || lower.startsWith("100.100.100.200")) return true;
+  if (lower.startsWith("169.254.")) return true;
+  // IPv4-mapped IPv6 forms are reported by the URL parser in hexadecimal.
+  if (lower.startsWith("::ffff:169.254.") || lower.startsWith("::ffff:a9fe:")) return true;
+  if (lower.startsWith("fe80:")) return true;
+  if (lower.endsWith(".internal") && lower !== "localhost.internal") return true;
+  return false;
+}
+
 export function isLocalhostHostname(hostname: string): boolean {
   const lower = hostname.toLowerCase();
   return (
@@ -66,6 +79,16 @@ export function validateWebsiteUrl(input: string): UrlValidationResult {
         url: raw,
         error: `Only http:// and https:// URLs are supported (received ${parsed.protocol}).`,
       };
+    }
+
+    if (isBlockedWebsiteHost(parsed.hostname)) {
+      return { valid: false, url: raw, error: "That host is reserved for internal services and cannot be inspected." };
+    }
+    if (parsed.username || parsed.password) {
+      return { valid: false, url: raw, error: "Remove credentials from the URL. Seene never stores website passwords." };
+    }
+    if (parsed.protocol === "http:" && !isLocalhostHostname(parsed.hostname) && parsed.hostname === "0.0.0.0") {
+      return { valid: false, url: raw, error: "Use localhost or 127.0.0.1 instead of 0.0.0.0." };
     }
 
     const isLocal = isLocalhostHostname(parsed.hostname);

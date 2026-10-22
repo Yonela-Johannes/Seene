@@ -8,6 +8,7 @@ import {
 import { FrameSection, Kbd } from "./site";
 import { StudioPreviewDemo } from "./StudioPreviewDemo";
 import { createHref, PROJECTS_ROUTE, WALKTHROUGH_DEMO_URL } from "./api";
+import { validateWebsiteUrl } from "../core/url";
 
 function Glyph({ children }: { children: ReactNode }) {
   return (
@@ -29,18 +30,8 @@ function Glyph({ children }: { children: ReactNode }) {
 
 const CAPABILITIES = [
   {
-    title: "Focused scenes",
-    body: "Frame one real component or a group of sections on a virtual canvas with a camera, perspective and a chosen aspect ratio.",
-    icon: (
-      <Glyph>
-        <rect x="3" y="4" width="18" height="16" rx="2" />
-        <path d="M3 9h18M9 4l-2 5M15 4l-2 5" />
-      </Glyph>
-    ),
-  },
-  {
-    title: "Website walkthroughs",
-    body: "Chain components, pages, scrolls and interactions into one ordered sequence that drives the live site as a single timeline.",
+    title: "Website URL Walkthroughs",
+    body: "Paste any website URL or local dev server link. Seene extracts page sections and interactions into a guided walkthrough without requiring npm packages.",
     icon: (
       <Glyph>
         <path d="M4 5h16M4 12h16M4 19h9" />
@@ -49,8 +40,18 @@ const CAPABILITIES = [
     ),
   },
   {
-    title: "Camera, focus and depth",
-    body: "Move the camera in 3D and tune f-stop, focal length and focus distance to get real depth of field on your own markup.",
+    title: "Focused Component Scenes",
+    body: "Frame real React components or groups of sections on a virtual canvas with camera perspective, focus depth, and custom aspect ratios.",
+    icon: (
+      <Glyph>
+        <rect x="3" y="4" width="18" height="16" rx="2" />
+        <path d="M3 9h18M9 4l-2 5M15 4l-2 5" />
+      </Glyph>
+    ),
+  },
+  {
+    title: "Camera, Focus and Depth",
+    body: "Move the camera in 3D and tune f-stop, focal length, and focus distance to get real optical depth of field on live HTML.",
     icon: (
       <Glyph>
         <circle cx="12" cy="12" r="3.5" />
@@ -59,8 +60,8 @@ const CAPABILITIES = [
     ),
   },
   {
-    title: "Seekable motion timeline",
-    body: "Keyframe camera, focus and surface properties on one millisecond timeline, then seek, step and replay it deterministically.",
+    title: "Seekable Motion Timeline",
+    body: "Keyframe camera, focus, and surface properties on a millisecond timeline, then scrub, step, and replay deterministically.",
     icon: (
       <Glyph>
         <circle cx="12" cy="13" r="8" />
@@ -69,8 +70,8 @@ const CAPABILITIES = [
     ),
   },
   {
-    title: "Your existing React UI",
-    body: "Scene previews render inside your app, with its providers, router, data, fonts and responsive styles still in charge.",
+    title: "Your Existing React UI",
+    body: "Scene previews render inside your app with its own router, providers, data, fonts, and responsive styles active.",
     icon: (
       <Glyph>
         <circle cx="12" cy="12" r="2" />
@@ -81,8 +82,8 @@ const CAPABILITIES = [
     ),
   },
   {
-    title: "Local MP4 export",
-    body: "Capture the rendered sequence with Chromium and encode one continuous MP4 on your machine at 30, 60 or 120 fps.",
+    title: "Local MP4 & JSON Export",
+    body: "React projects can capture the rendered sequence with local Chromium and FFmpeg into an MP4, while every walkthrough exports a portable JSON specification.",
     icon: (
       <Glyph>
         <path d="M12 3v10m0 0 3.5-3.5M12 13 8.5 9.5" />
@@ -202,30 +203,36 @@ function InteractiveDemoCard() {
 
 const WORKFLOW = [
   {
-    title: "Choose what to create",
-    body: "Start a Scene for one composition, or a Walkthrough for a connected sequence of sections.",
+    title: "Start with a Website Link or React App",
+    body: "Enter a live website URL directly (no npm package required), or open an existing React application project.",
   },
   {
-    title: "Point Seene at your application",
-    body: "Register the project folder or browse to it. Seene finds the framework, routes and components.",
+    title: "Inspect & Discover Targets",
+    body: "Seene extracts semantic page sections, same-origin routes, buttons, and React components automatically.",
   },
   {
-    title: "Pick real components",
-    body: "Search the pages, sections and components it discovered and choose the ones to present.",
+    title: "Arrange Walkthrough Steps",
+    body: "Order page scrolls, component displays, element focus, highlights, and button click interactions.",
   },
   {
-    title: "Compose, preview and export",
-    body: "Fine-tune camera, focus and motion on the timeline, then export one continuous MP4.",
+    title: "Preview & Export",
+    body: "Preview steps on the shared timeline, then export JSON. Connected React projects can also render an MP4 with local Chromium and FFmpeg.",
   },
 ];
 
 export function LandingView() {
   const [urlInput, setUrlInput] = useState("");
+  const [urlError, setUrlError] = useState("");
 
   const handleUrlSubmit = (event: React.FormEvent) => {
     event.preventDefault();
-    if (!urlInput.trim()) return;
-    window.location.hash = `#/create?kind=walkthrough&url=${encodeURIComponent(urlInput.trim())}`;
+    const validation = validateWebsiteUrl(urlInput);
+    if (!validation.valid) {
+      setUrlError(validation.error ?? "Enter a valid website URL.");
+      return;
+    }
+    setUrlError("");
+    window.location.hash = createHref("walkthrough", undefined, validation.normalized!);
   };
 
   return (
@@ -260,7 +267,7 @@ export function LandingView() {
           {/* Website URL Walkthrough Entry Form */}
           <div className="mx-auto mt-8 max-w-xl rounded-2xl border border-[var(--seene-border)] bg-[var(--seene-surface)] p-4 shadow-md text-left">
             <p className="text-xs font-semibold uppercase tracking-wider text-[var(--seene-text-muted)] mb-2">
-              Start with any website link
+              Start with a website URL
             </p>
             <form className="flex flex-col gap-2 sm:flex-row sm:items-center" onSubmit={handleUrlSubmit}>
               <label className="sr-only" htmlFor="hero-url-input">Website URL</label>
@@ -275,15 +282,32 @@ export function LandingView() {
                 autoComplete="off"
               />
               <button type="submit" className="seene-btn seene-btn-primary seene-btn-cta shrink-0 whitespace-nowrap">
-                Start walkthrough →
+                Start with a website URL →
               </button>
             </form>
             <p className="mt-2 font-mono text-[11px] text-[var(--seene-text-muted)]">
               No npm package installation required. Supports live websites, staging links, and local dev servers.
             </p>
+            {urlError ? <p role="alert" className="mt-2 text-xs text-red-500">{urlError}</p> : null}
+          </div>
+
+          <div className="mx-auto mt-8 grid max-w-3xl gap-3 text-left sm:grid-cols-2">
+            <div className="rounded-xl border border-[var(--seene-border)] bg-[var(--seene-surface)] p-4">
+              <p className="font-mono text-[11px] uppercase tracking-wider text-[var(--seene-accent)]">Path 01 · Website URL</p>
+              <p className="mt-1 text-sm text-[var(--seene-text-muted)]">
+                Paste a public or local URL. Seene inspects the served page and opens the same walkthrough Studio in your browser. Install nothing in the target site.
+              </p>
+            </div>
+            <div className="rounded-xl border border-[var(--seene-border)] bg-[var(--seene-surface)] p-4">
+              <p className="font-mono text-[11px] uppercase tracking-wider text-[var(--seene-accent)]">Path 02 · React app</p>
+              <p className="mt-1 text-sm text-[var(--seene-text-muted)]">
+                Install the package and run init. The Studio then reads your real routes and components for component scenes, camera motion and video capture.
+              </p>
+            </div>
           </div>
 
           <div className="mx-auto mt-6 max-w-2xl space-y-2">
+            <p className="text-center font-mono text-[11px] uppercase tracking-wider text-[var(--seene-text-muted)]">Or connect a React application</p>
             <CommandLine value={SEENE_NPM_INSTALL_COMMAND} />
             <CommandLine value={SEENE_INIT_COMMAND} />
             <p className="font-mono text-xs text-[var(--seene-text-muted)]">

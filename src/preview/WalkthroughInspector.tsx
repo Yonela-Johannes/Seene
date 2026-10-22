@@ -1,10 +1,3 @@
-/**
- * SOURCE OF TRUTH: WalkthroughInspector.
- * WHAT: edit project-wide walkthrough settings and the selected node's configuration, showing
- * only the controls relevant to the node type.
- * WHY: one settings system with global defaults and per-node overrides.
- * WHERE: consumed by WalkthroughStudio.
- */
 import { useState, type ReactNode } from "react";
 import {
   WALKTHROUGH_CAMERA_PROPERTIES,
@@ -16,7 +9,7 @@ import {
   type WalkthroughTarget,
 } from "../core";
 
-const TARGET_TYPES: WalkthroughNodeType[] = ["show", "scroll", "focus", "highlight", "click"];
+const TARGET_TYPES: WalkthroughNodeType[] = ["show", "scroll", "focus", "highlight", "click", "navigate"];
 const TRANSITION_TYPES = ["cut", "crossfade", "camera", "focus"] as const;
 const HIGHLIGHT_STYLES = ["outline", "glow", "dim", "spotlight"] as const;
 const EASINGS = ["cinematic", "easeInOut", "easeIn", "easeOut", "linear"] as const;
@@ -317,7 +310,7 @@ export function WalkthroughInspector({
               <SelectField
                 label="Kind"
                 value={node.target?.kind ?? (node.type === "click" ? "element" : "section")}
-                options={["component", "section", "element"] as const}
+                options={["component", "section", "element", "page"] as const}
                 onChange={value => onUpdateNode({ target: { ...(node.target ?? {}), kind: value } as WalkthroughTarget })}
               />
               <TextField label="Section ID" value={node.target?.sectionId ?? ""} onChange={value => onUpdateNode({ target: { ...(node.target ?? { kind: "section" }), sectionId: value || undefined } as WalkthroughTarget })} placeholder="hero" />
@@ -325,6 +318,7 @@ export function WalkthroughInspector({
               <TextField label="File" value={node.target?.file ?? ""} onChange={value => onUpdateNode({ target: { ...(node.target ?? { kind: "component" }), file: value || undefined } as WalkthroughTarget })} placeholder="src/sections/Hero.tsx" />
               <TextField label="Export" value={node.target?.export ?? ""} onChange={value => onUpdateNode({ target: { ...(node.target ?? { kind: "component" }), export: value || undefined } as WalkthroughTarget })} placeholder="Hero" />
               <TextField label="Label" value={node.target?.label ?? ""} onChange={value => onUpdateNode({ target: { ...(node.target ?? { kind: "section" }), label: value || undefined } as WalkthroughTarget })} />
+              <TextField label="Page URL" value={node.target?.url ?? ""} onChange={value => onUpdateNode({ target: { ...(node.target ?? { kind: "page" }), url: value || undefined } as WalkthroughTarget })} placeholder="https://example.com/features" />
             </Section>
           ) : null}
 

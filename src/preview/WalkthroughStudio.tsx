@@ -65,7 +65,7 @@ export type StudioSection = { file: string; export?: string; title?: string };
 
 type ContentFile = { path: string; default: boolean; exports: string[]; kind?: "page" | "section" | "component"; title?: string; route?: string; previewable?: boolean; issue?: string };
 
-const ADDABLE_TYPES: WalkthroughNodeType[] = ["show", "scroll", "focus", "highlight", "click", "wait", "camera", "transition", "caption"];
+const ADDABLE_TYPES: WalkthroughNodeType[] = ["show", "scroll", "focus", "highlight", "click", "navigate", "wait", "camera", "transition", "caption"];
 
 function timeLabel(ms: number): string {
   const value = Math.max(0, Math.round(ms));

@@ -24,13 +24,14 @@ describe("createWalkthroughFromWebsite", () => {
     expect(review.valid).toBe(true);
   });
 
-  it("handles missing sections by providing default walkthrough steps", () => {
+  it("does not invent sections when discovery found none", () => {
     const doc = createWalkthroughFromWebsite({
       url: "http://localhost:3000/app",
     });
 
     expect(doc.title).toBe("localhost:3000/app");
-    expect(doc.nodes.length).toBe(5); // start, show-hero, scroll-features, show-overview, end
+    expect(doc.nodes.map(node => node.type)).toEqual(["start", "end"]);
+    expect(doc.nodes.some(node => node.target?.sectionId === "hero")).toBe(false);
     const review = validateWalkthrough(doc);
     expect(review.valid).toBe(true);
   });

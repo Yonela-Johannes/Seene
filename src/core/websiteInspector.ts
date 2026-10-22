@@ -20,6 +20,13 @@ export const InspectedElementSchema = z.strictObject({
 });
 export type InspectedElement = z.infer<typeof InspectedElementSchema>;
 
+export class WebsiteInspectError extends Error {
+  constructor(message: string, readonly code: "invalid-url" | "blocked" | "unreachable" | "http-error" = "unreachable") {
+    super(message);
+    this.name = "WebsiteInspectError";
+  }
+}
+
 export const InspectedPageRouteSchema = z.strictObject({
   url: z.string(),
   title: z.string(),
@@ -37,6 +44,9 @@ export const WebsiteInspectionSchema = z.strictObject({
   status: z.enum(["ok", "iframe-blocked", "cors-restricted", "error"]).default("ok"),
   canIframe: z.boolean().default(true),
   fallbackReason: z.string().optional(),
+  previewImage: z.string().max(4_000_000).optional(),
+  scrollHeight: z.number().nonnegative().optional(),
+  inspectedWith: z.enum(["static", "browser"]).default("static"),
 });
 export type WebsiteInspection = z.infer<typeof WebsiteInspectionSchema>;
 
@@ -167,15 +177,8 @@ export function inspectWebsiteHtml(
     if (sections.length >= 24) break;
   }
 
-  // Fallback default sections if none discovered
-  if (sections.length === 0) {
-    sections.push(
-      { id: "hero", label: "Hero Banner", selector: "#hero, header, main" },
-      { id: "features", label: "Key Features", selector: "#features, section" },
-      { id: "content", label: "Main Content", selector: "main, article" },
-      { id: "footer", label: "Footer Overview", selector: "footer" },
-    );
-  }
+  // Never invent sections for a site we could not read. The UI exposes the empty state and
+  // lets the author add steps manually or retry with browser inspection.
 
   // Extract same-origin links for page route discovery
   const linkRegex = /<a[^>]+href=["']([^"']+)["'][^>]*>(.*?)<\/a>/gis;
@@ -296,5 +299,6 @@ export function inspectContainerElement(container: HTMLElement, targetUrl: strin
     interactiveElements,
     status: "ok",
     canIframe: true,
+    inspectedWith: "browser",
   });
 }

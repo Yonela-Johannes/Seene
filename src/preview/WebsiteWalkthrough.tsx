@@ -66,10 +66,63 @@ function easeProgress(progress: number, easing: "linear" | "ease-in-out"): numbe
     : 1 - Math.pow(-2 * progress + 2, 2) / 2;
 }
 
-function layoutTop(element: HTMLElement, container: HTMLElement): number {
+function sameMeasurements(a: DiscoveredSection[], b: DiscoveredSection[]): boolean {
+  if (a === b) return true;
+  if (a.length !== b.length) return false;
+  return a.every((section, index) => {
+    const next = b[index];
+    return (
+      next !== undefined &&
+      section.id === next.id &&
+      section.element === next.element &&
+      section.label === next.label &&
+      section.startPosition === next.startPosition &&
+      section.endPosition === next.endPosition &&
+      section.height === next.height &&
+      section.duration === next.duration &&
+      section.pause === next.pause &&
+      section.scrollOffset === next.scrollOffset
+    );
+  });
+}
+
+function sameBoundaries(a: SectionBoundary[], b: SectionBoundary[]): boolean {
+  if (a === b) return true;
+  if (a.length !== b.length) return false;
+  return a.every((boundary, index) => {
+    const next = b[index];
+    return (
+      next !== undefined &&
+      boundary.id === next.id &&
+      boundary.label === next.label &&
+      boundary.startTime === next.startTime &&
+      boundary.endTime === next.endTime &&
+      boundary.duration === next.duration &&
+      boundary.pause === next.pause &&
+      boundary.scrollOffset === next.scrollOffset &&
+      boundary.startPosition === next.startPosition &&
+      boundary.endPosition === next.endPosition
+    );
+  });
+}
+
+export function measureElementTop(element: HTMLElement, container: HTMLElement): number {
   const containerRect = container.getBoundingClientRect();
   const elementRect = element.getBoundingClientRect();
-  return Math.max(0, elementRect.top - containerRect.top + container.scrollTop);
+  const measured = elementRect.top - containerRect.top + (container.scrollTop || 0);
+  if (measured !== 0 || elementRect.height !== 0 || elementRect.width !== 0) {
+    return Math.max(0, measured);
+  }
+
+  let top = 0;
+  let current: HTMLElement | null = element;
+  while (current && current !== container) {
+    top += current.offsetTop;
+    const parent = current.offsetParent as HTMLElement | null;
+    if (!parent) break;
+    current = parent;
+  }
+  return Math.max(0, top);
 }
 
 export function WebsiteWalkthrough(props: WebsiteWalkthroughProps): ReactNode {
@@ -99,6 +152,7 @@ export function WebsiteWalkthrough(props: WebsiteWalkthroughProps): ReactNode {
   const [maxScrollDistance, setMaxScrollDistance] = useState(0);
   const maxScrollDistanceRef = useRef(0);
   const lastReportedAutoDuration = useRef(0);
+  const appliedScrollTop = useRef<number | null>(null);
   
   // Use external state if provided, otherwise internal
   const seekTimeValue = seekTime !== undefined ? seekTime : internalSeekTime;
@@ -116,7 +170,7 @@ export function WebsiteWalkthrough(props: WebsiteWalkthroughProps): ReactNode {
     if (!viewport) return fallback;
     const section = Array.from(viewport.querySelectorAll<HTMLElement>("[data-section-id]"))
       .find(element => element.dataset.sectionId === offset);
-    return section ? layoutTop(section, viewport) : fallback;
+    return section ? measureElementTop(section, viewport) : fallback;
   }, []);
   
   // Discovered sections state
@@ -132,46 +186,53 @@ export function WebsiteWalkthrough(props: WebsiteWalkthroughProps): ReactNode {
     return undefined;
   }, [explicitSections]);
 
-  // Section discovery and measurement
+  // Section discovery and measurement. Discovery depends on the *presence* of children and on
+  // the explicit definitions, not on their React identity: parents that re-render on scroll
+  // produce a new `children` element every frame. Re-running discovery on every one of those
+  // renders cascaded state updates (section measurements -> boundaries -> scroll sync) until
+  // React reported "Maximum update depth exceeded". DOM changes are handled by the mutation
+  // observer below instead.
+  const hasChildren = children !== undefined && children !== null && children !== false;
   useEffect(() => {
     if (!viewportRef.current) return;
 
     const container = viewportRef.current;
-    
-    // Discover rendered sections from explicit definitions
     let discovered: DiscoveredSection[] = [];
-    
-    if (explicitSections) {
-      const elements = Array.from(container.querySelectorAll<HTMLElement>('[data-section-id]'));
-      discovered = explicitSections.flatMap((section) => {
-        const element = elements.find(candidate => candidate.dataset.sectionId === section.id);
-        if (!element) return [];
-        return [{
-          id: section.id,
-          label: section.label,
-          element,
-          startPosition: 0,
-          endPosition: 0,
-          height: 0,
-          duration: section.duration,
-          pause: section.pause,
-          scrollOffset: section.scrollOffset,
-        }];
-      });
-    } else if (children) {
-      // Discover sections from DOM when children are provided
-      const explicit = discoverExplicitSections(container);
-      const semantic = discoverSemanticSections(container);
-      discovered = [...explicit.sections, ...semantic.sections];
-    }
 
-    // Measure sections and update state
+    const discoverSections = () => {
+      if (explicitSections) {
+        const elements = Array.from(container.querySelectorAll<HTMLElement>('[data-section-id]'));
+        discovered = explicitSections.flatMap((section) => {
+          const element = elements.find(candidate => candidate.dataset.sectionId === section.id);
+          if (!element) return [];
+          return [{
+            id: section.id,
+            label: section.label,
+            element,
+            startPosition: 0,
+            endPosition: 0,
+            height: 0,
+            duration: section.duration,
+            pause: section.pause,
+            scrollOffset: section.scrollOffset,
+          }];
+        });
+      } else if (hasChildren) {
+        // Discover sections from DOM when children are provided
+        const explicit = discoverExplicitSections(container);
+        const semantic = discoverSemanticSections(container);
+        discovered = [...explicit.sections, ...semantic.sections];
+      }
+    };
+
+    // Measure sections and update state. Equality is checked so observers firing during normal
+    // scrolling (with unchanged measurements) do not schedule a new render or timeline pass.
     const measureSections = () => {
       const measured: DiscoveredSection[] = [];
-      
+
       discovered.forEach((section) => {
         const element = section.element;
-        const startPosition = layoutTop(element, container);
+        const startPosition = measureElementTop(element, container);
         const height = element.offsetHeight;
         const endPosition = startPosition + height;
 
@@ -182,40 +243,55 @@ export function WebsiteWalkthrough(props: WebsiteWalkthroughProps): ReactNode {
           height,
         });
       });
-      
-      setDiscoveredSections(measured);
+
+      setDiscoveredSections(previous => sameMeasurements(previous, measured) ? previous : measured);
     };
 
-    // Initial measurement
-    measureSections();
-    
+    let observer: ResizeObserver | null = null;
+    const observeSections = () => {
+      const current = observer;
+      if (!current) return;
+      current.disconnect();
+      current.observe(container);
+      discovered.forEach(section => current.observe(section.element));
+    };
+
     // Setup resize observer for remeasurement
-    const observer = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(measureSections) : null;
-    if (observer && container) {
-      observer.observe(container);
-      discovered.forEach(section => observer.observe(section.element));
-    }
-    
-    // Setup mutation observer for content changes
-    const mutationObserver = typeof MutationObserver !== 'undefined' ? new MutationObserver(measureSections) : null;
-    if (mutationObserver && container) {
+    observer = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(measureSections) : null;
+
+    // Setup mutation observer for content changes. Re-discovering here (rather than relying on a
+    // changed `children` identity) keeps new sections and removed sections in sync.
+    const mutationObserver = typeof MutationObserver !== 'undefined' ? new MutationObserver(() => {
+      discoverSections();
+      observeSections();
+      measureSections();
+    }) : null;
+    if (mutationObserver) {
       mutationObserver.observe(container, {
         childList: true,
         subtree: true,
         attributes: true,
-        attributeFilter: ['data-seene-section']
+        attributeFilter: ['data-seene-section', 'data-section-id', 'data-section-label']
       });
     }
-    
+
+    // Initial measurement
+    discoverSections();
+    observeSections();
+    measureSections();
+
     return () => {
       observer?.disconnect();
       mutationObserver?.disconnect();
     };
-  }, [explicitSections, children]);
+  }, [explicitSections, hasChildren]);
 
   // Calculate section boundaries when discovered sections change
   useEffect(() => {
-    if (discoveredSections.length === 0) return;
+    if (discoveredSections.length === 0) {
+      setSectionBoundaries(previous => previous.length === 0 ? previous : []);
+      return;
+    }
     
     const options: TimelineOptions = {
       duration: durationValue || 0,
@@ -224,7 +300,7 @@ export function WebsiteWalkthrough(props: WebsiteWalkthroughProps): ReactNode {
     };
     
     const boundaries = calculateSectionBoundaries(discoveredSections, options);
-    setSectionBoundaries(boundaries);
+    setSectionBoundaries(previous => sameBoundaries(previous, boundaries) ? previous : boundaries);
     
     if (!durationValue && boundaries.length > 0) {
       const totalDuration = boundaries.reduce((sum, boundary) => sum + (boundary.pause || 0) + (boundary.duration || 0), 0);
@@ -254,45 +330,45 @@ export function WebsiteWalkthrough(props: WebsiteWalkthroughProps): ReactNode {
     };
   }, [enableTimeline, sectionBoundaries, seekTime, seekTimeValue, isPlaying, isPlayingValue, onSeek, onPlayPause]);
 
-  // Playback animation effect
+  const seekTimeRef = useRef(seekTimeValue);
+  seekTimeRef.current = seekTimeValue;
+
   useEffect(() => {
     if (!enableTimeline || !isPlayingValue || sectionBoundaries.length === 0 || durationValue <= 0) return;
-    
-    const startTime = performance.now() - seekTimeValue;
+
+    const startTime = performance.now() - seekTimeRef.current;
+    let frame = 0;
     const animate = (now: number) => {
       const elapsed = now - startTime;
       const next = Math.min(durationValue, elapsed);
-      
-      if (next !== seekTimeValue) {
+
+      if (next !== seekTimeRef.current) {
+        seekTimeRef.current = next;
         setInternalSeekTime(next);
         onSeek?.(next);
       }
-      
+
       if (next < durationValue) {
-        if (typeof requestAnimationFrame !== 'undefined') {
-          requestAnimationFrame(animate);
-        } else {
-          setTimeout(animate, 16);
-        }
+        frame = requestAnimationFrame(animate);
       } else {
         setInternalIsPlaying(false);
         onPlayPause?.(false);
       }
     };
-    
-    const frame = requestAnimationFrame(animate);
-    
+
+    frame = requestAnimationFrame(animate);
+
     return () => {
       cancelAnimationFrame(frame);
     };
-  }, [enableTimeline, isPlayingValue, sectionBoundaries, durationValue, seekTimeValue, onSeek, onPlayPause]);
+  }, [enableTimeline, isPlayingValue, sectionBoundaries, durationValue, onSeek, onPlayPause]);
 
   const syncScrollMetrics = useCallback(() => {
     const viewport = viewportRef.current;
     if (!viewport) return;
     const max = Math.max(0, viewport.scrollHeight - viewport.clientHeight);
     maxScrollDistanceRef.current = max;
-    setMaxScrollDistance(max);
+    setMaxScrollDistance(previous => previous === max ? previous : max);
     if (!combinedSections && max > 0) {
       const autoDuration = Math.max(10000, Math.round(max / 400 * 1000));
       if (autoDuration !== lastReportedAutoDuration.current) {
@@ -340,7 +416,7 @@ export function WebsiteWalkthrough(props: WebsiteWalkthroughProps): ReactNode {
       viewport.removeEventListener("load", scheduleSync, true);
       viewport.removeEventListener("loadedmetadata", scheduleSync, true);
     };
-  }, [syncScrollMetrics, children, explicitSections]);
+  }, [syncScrollMetrics]);
 
   // Synchronize timeline time to viewport scroll position
   useEffect(() => {
@@ -352,6 +428,7 @@ export function WebsiteWalkthrough(props: WebsiteWalkthroughProps): ReactNode {
       const state = evaluateTimelineState(seekTimeValue, options, sectionBoundaries);
       const nextScroll = max > 0 ? Math.min(Math.max(0, state.scrollPosition), max) : state.scrollPosition;
       if (Math.abs(viewportRef.current.scrollTop - nextScroll) > 2) {
+        appliedScrollTop.current = nextScroll;
         viewportRef.current.scrollTop = nextScroll;
       }
       return;
@@ -371,9 +448,11 @@ export function WebsiteWalkthrough(props: WebsiteWalkthroughProps): ReactNode {
       const progress = easeProgress(Math.min(Math.max(rawProgress, 0), 1), easing);
       const nextScroll = start + progress * (end - start);
       if (Math.abs(viewportRef.current.scrollTop - nextScroll) > 2) {
+        appliedScrollTop.current = nextScroll;
         viewportRef.current.scrollTop = nextScroll;
       }
     } else if (durationValue > 0 && viewportRef.current.scrollTop !== 0) {
+      appliedScrollTop.current = 0;
       viewportRef.current.scrollTop = 0;
     }
   }, [seekTimeValue, durationValue, sectionBoundaries, maxScrollDistance, holdAtTopMs, holdAtBottomMs, startOffset, endOffset, easing, resolveOffset]);
@@ -381,6 +460,11 @@ export function WebsiteWalkthrough(props: WebsiteWalkthroughProps): ReactNode {
   const handleViewportScroll = useCallback(() => {
     if ((!enableTimeline && seekTime === undefined) || !viewportRef.current || isPlayingValue) return;
     const currentScroll = viewportRef.current.scrollTop;
+    // Ignore scroll events produced by the timeline -> scroll synchronization effect.
+    if (appliedScrollTop.current !== null && Math.abs(currentScroll - appliedScrollTop.current) <= 2) {
+      appliedScrollTop.current = null;
+      return;
+    }
     const totalDuration = durationValue || 5000;
     const range = maxScrollDistanceRef.current || 1;
     const topHold = Math.max(0, Math.min(holdAtTopMs, totalDuration));

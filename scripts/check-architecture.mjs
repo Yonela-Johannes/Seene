@@ -41,9 +41,10 @@ const layers = {
   projectAdapter: { local: ['core', 'projectAdapter', 'projectErrors'], external: ['typescript', 'zod'] },
   projectErrors: { local: ['projectErrors'], external: [] },
   services: { local: ['core', 'services', 'projectErrors'], external: ['zod', 'typescript'] },
-  viteIntegration: { local: ['core', 'projectAdapter', 'viteIntegration'], external: ['vite', 'zod'] },
+  viteIntegration: { local: ['core', 'projectAdapter', 'viteIntegration', 'browserInspection'], external: ['vite', 'zod'] },
   exportCommands: {local:['core','commands','exportCommands','exportServices','services','projectErrors'], external:['zod']},
   exportServices: {local:['core','exportServices','services','projectErrors'],external:['zod','playwright']},
+  browserInspection: { local: ['core', 'browserInspection'], external: ['zod', 'playwright'] },
   cli: { local: ['core', 'commands', 'exportCommands', 'cli'], external: [] },
 };
 const nodeModules = new Set(builtinModules.map(name => name.replace(/^node:/, '')));
@@ -65,6 +66,7 @@ const layerOf = name => {
   if (/^src\/project\/(?:commands|recipes|discovery)(?:\.[cm]?[jt]s)?$/.test(name)) return 'commands';
   if (/^src\/project\/services(?:\.[cm]?[jt]s$|\/|$)/.test(name)) return 'services';
   if (name.startsWith('src/vite/')) return 'viteIntegration';
+  if (name.startsWith('src/browser/')) return 'browserInspection';
   if (/^src\/export\/commands\.[cm]?[jt]s$/.test(name)) return 'exportCommands';
   if (name.startsWith('src/export/')) return 'exportServices';
   if (name.startsWith('src/project/')) return 'projectAdapter';
@@ -184,7 +186,7 @@ export function checkArchitecture(input, { compilerOptions = {} } = {}) {
         const propertyName = (ts.isPropertyAccessExpression(parent) && parent.name === node)
           || ((ts.isPropertyAssignment(parent) || ts.isMethodDeclaration(parent) || ts.isPropertyDeclaration(parent)) && parent.name === node)
           || ts.isImportSpecifier(parent) || ts.isExportSpecifier(parent);
-        const forbidden = !['services','exportServices','viteIntegration'].includes(layer) && (
+        const forbidden = !['services','exportServices','viteIntegration','browserInspection'].includes(layer) && (
           (nodeGlobals.has(node.text) && !(layer === 'cli' && node.text === 'process'))
           || (!browserLayers.has(layer) && domGlobals.has(node.text) && !((layer === 'commands' || layer === 'core') && node.text === 'URL'))
         );

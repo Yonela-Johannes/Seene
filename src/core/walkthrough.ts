@@ -20,6 +20,7 @@ export const WalkthroughNodeTypeSchema = z.enum([
   "focus",
   "highlight",
   "click",
+  "navigate",
   "wait",
   "camera",
   "transition",
@@ -29,12 +30,13 @@ export const WalkthroughNodeTypeSchema = z.enum([
 export type WalkthroughNodeType = z.infer<typeof WalkthroughNodeTypeSchema>;
 
 export const WalkthroughTargetSchema = z.strictObject({
-  kind: z.enum(["component", "section", "element"]).default("section"),
+  kind: z.enum(["component", "section", "element", "page"]).default("section"),
   sectionId: z.string().trim().min(1).max(160).optional(),
   selector: z.string().trim().min(1).max(240).optional(),
   file: z.string().trim().min(1).max(400).optional(),
   export: z.string().trim().min(1).max(120).optional(),
   label: z.string().trim().min(1).max(160).optional(),
+  url: z.string().trim().min(1).max(2000).optional(),
 });
 export type WalkthroughTarget = z.output<typeof WalkthroughTargetSchema>;
 export type WalkthroughTargetInput = z.input<typeof WalkthroughTargetSchema>;
@@ -168,7 +170,7 @@ export const WalkthroughDocumentSchema = z.strictObject({
 export type WalkthroughDocument = z.output<typeof WalkthroughDocumentSchema>;
 export type WalkthroughDocumentInput = z.input<typeof WalkthroughDocumentSchema>;
 
-const TARGET_REQUIRED: readonly WalkthroughNodeType[] = ["show", "scroll", "focus", "highlight", "click"];
+const TARGET_REQUIRED: readonly WalkthroughNodeType[] = ["show", "scroll", "focus", "highlight", "click", "navigate"];
 const CAMERA_DEFAULTS = CameraSchema.parse({});
 const FOCUS_DEFAULTS = FocusSchema.parse({});
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -189,23 +191,35 @@ function serializable(value: unknown, ancestors = new Set<unknown>()): boolean {
 
 export function walkthroughTargetKey(target: WalkthroughTarget | WalkthroughTargetInput | undefined): string {
   if (!target) return "";
-  return [target.kind ?? "section", target.sectionId ?? "", target.selector ?? "", target.file ?? "", target.export ?? ""].join("|");
+  return [target.kind ?? "section", target.sectionId ?? "", target.selector ?? "", target.file ?? "", target.export ?? "", target.url ?? ""].join("|");
 }
 
 export function hasWalkthroughTarget(target: WalkthroughTarget | WalkthroughTargetInput | undefined): boolean {
   if (!target) return false;
-  return Boolean(target.sectionId || target.selector || target.file);
+  return Boolean(target.sectionId || target.selector || target.file || target.url);
 }
 
 function targetIssues(node: WalkthroughNode, path: string): SceneIssue[] {
   const issues: SceneIssue[] = [];
   if (TARGET_REQUIRED.includes(node.type)) {
-    if (!node.target || !hasWalkthroughTarget(node.target))
+    const target = node.target;
+    if (!target || !hasWalkthroughTarget(target)) {
       issues.push({ path: `${path}.target`, message: `A ${node.type} node needs a component, section or element target.` });
-    else if (node.target.kind === "component" && !node.target.file)
+    } else if (target.kind === "component" && !target.file) {
       issues.push({ path: `${path}.target.file`, message: "A component target needs a source file." });
-    else if (node.target.kind === "element" && !(node.target.selector || node.target.sectionId))
+    } else if (target.kind === "element" && !(target.selector || target.sectionId)) {
       issues.push({ path: `${path}.target`, message: "An element target needs a stable selector or section ID." });
+    } else if (target.kind === "page" && !target.url) {
+      issues.push({ path: `${path}.target.url`, message: "A page target needs an absolute http(s) URL." });
+    } else if (target.kind === "page" && target.url) {
+      try {
+        const parsed = new URL(target.url);
+        if (parsed.protocol !== "http:" && parsed.protocol !== "https:")
+          issues.push({ path: `${path}.target.url`, message: "Page navigation only supports http:// and https:// URLs." });
+      } catch {
+        issues.push({ path: `${path}.target.url`, message: "Page navigation needs a valid absolute URL." });
+      }
+    }
   }
   if (node.type === "caption" && !node.caption)
     issues.push({ path: `${path}.caption`, message: "A caption node needs caption text." });
@@ -341,6 +355,7 @@ const NODE_DEFAULTS: Record<WalkthroughNodeType, { title: string; durationMs: nu
   focus: { title: "Focus element", durationMs: 1400 },
   highlight: { title: "Highlight element", durationMs: 1400 },
   click: { title: "Click element", durationMs: 900 },
+  navigate: { title: "Open page", durationMs: 900 },
   wait: { title: "Wait", durationMs: 1000 },
   camera: { title: "Camera move", durationMs: 1500 },
   transition: { title: "Transition", durationMs: 300 },
@@ -445,12 +460,19 @@ export function createWalkthroughFromSections(input: {
   });
 }
 
+export type WebsiteWalkthroughTarget =
+  | { kind: "section"; id: string; label: string; selector?: string }
+  | { kind: "page"; url: string; title: string }
+  | { kind: "element"; selector: string; label: string; action?: "show" | "click" | "focus" };
+
 export function createWalkthroughFromWebsite(input: {
   url: string;
   title?: string;
   description?: string;
   sections?: Array<{ id: string; label: string; selector?: string }>;
   pages?: Array<{ url: string; title: string }>;
+  /** Ordered targets from a page/section selection. Takes precedence over sections and pages. */
+  targets?: WebsiteWalkthroughTarget[];
   settings?: WalkthroughGlobalsInput;
 }): WalkthroughDocument {
   const urlValidation = validateWebsiteUrl(input.url);
@@ -461,41 +483,52 @@ export function createWalkthroughFromWebsite(input: {
     createWalkthroughNode("start", { id: "start", title: "Open website" }),
   ];
 
+  const pages = input.pages ?? [];
   const sections = input.sections ?? [];
-  if (sections.length > 0) {
-    sections.forEach((sec, idx) => {
+  const targets: WebsiteWalkthroughTarget[] = input.targets ?? [
+    ...pages.map(page => ({ kind: "page" as const, url: page.url, title: page.title })),
+    ...sections.map(section => ({
+      kind: "section" as const,
+      id: section.id,
+      label: section.label,
+      ...(section.selector ? { selector: section.selector } : {}),
+    })),
+  ];
+
+  targets.forEach((target, index) => {
+    if (target.kind === "page") {
       nodes.push(
-        createWalkthroughNode("show", {
-          id: `section-${idx + 1}`,
-          title: sec.label,
-          target: {
-            kind: "section",
-            sectionId: sec.id,
-            selector: sec.selector,
-            label: sec.label,
-          },
-        })
+        createWalkthroughNode("navigate", {
+          id: `page-${index + 1}`,
+          title: target.title,
+          target: { kind: "page", url: target.url, label: target.title },
+        }),
       );
-    });
-  } else {
+      return;
+    }
+    if (target.kind === "element") {
+      nodes.push(
+        createWalkthroughNode(target.action === "click" ? "click" : target.action === "focus" ? "focus" : "show", {
+          id: `element-${index + 1}`,
+          title: target.label,
+          target: { kind: "element", selector: target.selector, label: target.label },
+        }),
+      );
+      return;
+    }
     nodes.push(
       createWalkthroughNode("show", {
-        id: "show-hero",
-        title: "Landing & Hero",
-        target: { kind: "section", sectionId: "hero", label: "Hero section" },
+        id: `section-${index + 1}`,
+        title: target.label,
+        target: {
+          kind: "section",
+          sectionId: target.id,
+          ...(target.selector ? { selector: target.selector } : {}),
+          label: target.label,
+        },
       }),
-      createWalkthroughNode("scroll", {
-        id: "scroll-features",
-        title: "Main Features",
-        target: { kind: "section", sectionId: "features", label: "Features section" },
-      }),
-      createWalkthroughNode("show", {
-        id: "show-overview",
-        title: "Product Overview",
-        target: { kind: "section", sectionId: "overview", label: "Product overview" },
-      })
     );
-  }
+  });
 
   nodes.push(createWalkthroughNode("end", { id: "end", title: "Product demonstration complete" }));
 
